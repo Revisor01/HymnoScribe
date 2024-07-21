@@ -442,8 +442,8 @@ function addToSelected(objekt) {
         newItem.appendChild(pageBreakIcon);
         
         // Entfernen Sie die Standard-Titelzeile und Buttons für Seitenumbrüche
-        titleRow.innerHTML = '<span>Seitenumbruch</span>';
-        buttonsDiv.innerHTML = '';
+        //titleRow.innerHTML = '<span>Seitenumbruch</span>';
+        //buttonsDiv.innerHTML = '';
         buttonsDiv.appendChild(deleteButton);
     } else if (objekt.typ === 'Trenner') {
         // Fügt ein Icon für Trenner hinzu
