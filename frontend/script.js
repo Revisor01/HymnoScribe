@@ -1529,7 +1529,7 @@ const mmToPt = (mm) => mm * 2.83465;
 
 const pageSizes = {
     'a5': { width: mmToPt(148), height: mmToPt(210) },
-    'dl': { width: mmToPt(105), height: mmToPt(210) },
+    'dl': { width: mmToPt(99), height: mmToPt(210) },
     'a4-schmal': { width: mmToPt(105), height: mmToPt(297) }
 };
 
@@ -1623,7 +1623,7 @@ async function generatePDF(format) {
     
     const pageSizes = {
         'a5': { width: mmToPt(148), height: mmToPt(210) },
-        'dl': { width: mmToPt(105), height: mmToPt(210) },
+        'dl': { width: mmToPt(99), height: mmToPt(210) },
         'a4-schmal': { width: mmToPt(105), height: mmToPt(297) }
     };
     
