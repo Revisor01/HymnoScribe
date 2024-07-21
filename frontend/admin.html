@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin-Oberfläche für Gottesdienstobjekte</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <h1>Admin-Oberfläche für Gottesdienstobjekte</h1>
+        <nav>
+            <a href="index.html" class="btn">Zurück zum Liedblatt-Generator</a>
+        </nav>
+    </header>
+    <div id="custom-modal" class="modal">
+        <div class="modal-content">
+            <p id="modal-message"></p>
+            <button id="modal-ok">OK</button>
+            <button id="modal-cancel">Cancel</button>
+        </div>
+    </div>
+    <div class="container">
+        <div class="left-panel">
+            <h2>Bestehende Objekte</h2>
+            <div class="filter-container">
+                <input type="text" id="objektSearch" placeholder="Suche...">
+                <select id="filterTyp">
+                    <option value="all">Alle</option>
+                    <option value="Lied">Lied</option>
+                    <option value="Gebet">Gebet</option>
+                    <option value="Lesung">Lesung</option>
+                    <option value="Psalm">Psalm</option>
+                    <option value="Liturgie">Liturgie</option>
+                    <option value="Sonstiges">Sonstiges</option>
+                </select>
+            </div>
+            <div id="objektListe"></div>
+        </div>
+        <div class="middle-panel">
+            <h2>Objekt hinzufügen/bearbeiten</h2>
+            <form id="objektForm">
+                <input type="hidden" id="objektId">
+                <div class="form-group">
+                    <label for="typ">Typ:</label>
+                    <select id="typ" required>
+                        <option value="Lied">Lied</option>
+                        <option value="Gebet">Gebet</option>
+                        <option value="Lesung">Lesung</option>
+                        <option value="Psalm">Psalm</option>
+                        <option value="Liturgie">Liturgie</option>
+                        <option value="Sonstiges">Sonstiges</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="titel">Titel:</label>
+                    <input type="text" id="titel" required>
+                </div>
+                <div id="liedFelder" style="display:none;">
+                    <div class="form-group">
+                        <label for="showNotes">Noten anzeigen:</label>
+                        <input type="checkbox" id="showNotes">
+                    </div>
+                    <div class="form-group">
+                        <label>Noten-Typ:</label>
+                        <input type="radio" id="notesWithoutText" name="noteType" value="without">
+                        <label for="notesWithoutText">Noten ohne Text</label>
+                        <input type="radio" id="notesWithText" name="noteType" value="with">
+                        <label for="notesWithText">Noten mit Text</label>
+                    </div>
+                    <div class="form-group">
+                        <label for="notenbild">Noten ohne Text:</label>
+                        <input type="file" id="notenbild" accept="image/*">
+                        <img id="currentNotenbild" style="display:none; max-width:100%;">
+                    </div>
+                    <div class="form-group">
+                        <label for="notenbildMitText">Noten mit Text:</label>
+                        <input type="file" id="notenbildMitText" accept="image/*">
+                        <img id="currentNotenbildMitText" style="display:none; max-width:100%;">
+                    </div>
+                    <div class="form-group">
+                        <button type="button" onclick="deleteNotes('without')">Noten ohne Text löschen</button>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="button" onclick="deleteNotes('with')">Noten mit Text löschen</button>
+                    </div>
+                    <div id="strophenContainer"></div>
+                    <button type="button" id="addStrophe">Strophe hinzufügen</button>
+                </div>
+                
+                <div id="prefixField" class="form-group" style="display:none;">
+                    <label for="prefix">Alternatives Prefix:</label>
+                    <input type="text" id="prefix">
+                </div>
+                <div id="editor-container"></div>
+                <button type="submit">Objekt speichern</button>
+                <button type="button" id="resetForm">Formular zurücksetzen</button>
+            </form>
+        </div>
+        <div class="right-panel">
+            <h2>Vorschau</h2>
+            <div id="preview"></div>
+        </div>
+    </div>
+    <footer>
+        <p>© 2024 Pastor Simon Luthe. Alle Rechte vorbehalten.</p>
+    </footer>
+    <script src="admin.js"></script>
+</body>
+</html>

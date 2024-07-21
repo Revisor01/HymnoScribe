@@ -1,0 +1,396 @@
+
+body {
+    font-family: 'Jost', sans-serif;
+    margin: 0;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+header {
+    background-color: #f9f9f9;
+    border-bottom: 1px solid #ccc;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+header h1 {
+    margin: 0;
+    color: #333;
+    font-weight: bold;
+}
+
+.container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.left-panel, .middle-panel, .right-panel {
+    flex: 1;
+    min-width: 300px;
+    border: 1px solid #ccc;
+    padding: 15px;
+    max-height: 1000px;
+    background-color: #f9f9f9;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#selected-items, #liedblatt-content {
+    min-height: 100%;
+}
+
+h1, h2, h3 {
+    margin-top: 0;
+    color: #333;
+}
+
+select, input[type="text"], textarea {
+    width: 100%;
+    padding: 5px;
+    margin-bottom: 10px;
+}
+
+.btn, button {
+    background-color: #1a5f7a;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    margin: 5px 0;
+    border-radius: 4px;
+    font-family: Jost;
+    font-size: 12pt;
+}
+
+.btn:hover, button:hover {
+    background-color: #154c61;
+}
+
+.btn-small {
+    padding: 5px 10px;
+    font-size: 12px;
+}
+
+.delete-strophe {
+    background-color: #d9534f;
+    color: white !important;
+}
+
+.delete-strophe:hover {
+    background-color: #c9302c;
+}
+
+.item, .selected-item, .objekt-item {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
+
+.buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 5px;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+#editor-container, .strophe-editor {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    margin-bottom: 10px;
+    min-height: 200px;
+}
+
+.filter-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+footer {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-top: 1px solid #ccc;
+    text-align: center;
+    color: #666;
+}
+
+.toggle-options {
+    width: 100%;
+    margin-bottom: 5px;
+}
+
+.options-content {
+    padding: 10px;
+    border: 1px solid #ddd;
+    background-color: #fff;
+    margin-top: 10px;
+}
+
+.trenner-option {
+    font-size: 18px;
+    color: #888;
+    cursor: pointer;
+    margin-right: 10px;
+}
+
+.middle-panel.trenner-default-img {
+    background-position: left;
+}
+.trenner-default-img {
+    background-image: url('http://localhost:3000/icons/default.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    width: 100%;
+    height: 24px;
+    display: inline-block;
+    margin: 10px auto; /* Zentriert das Icon horizontal */
+}
+
+.strophe-container {
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.strophe-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.delete-strophe {
+    color: #d9534f;
+}
+
+.ql-editor {
+    min-height: 100px;
+}
+
+.standard-objects, .pool, .session-management {
+    background-color: #f0f0f0;
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.session-management {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 10px;
+    justify-content: space-between;
+}
+
+.session-management > * {
+    flex: 1 1 calc(10% - 10px);
+    min-width: 150px;
+    margin: 0;
+}
+
+@media (max-width: 768px) {
+    .session-management > * {
+        flex-basis: calc(50% - 5px);
+    }
+}
+
+@media (max-width: 480px) {
+    .session-management > * {
+        flex-basis: 100%;
+    }
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
+    text-align: center;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+#sessions-list, #vorlagen-list {
+    margin-top: 20px;
+}
+
+#sessions-list div, #vorlagen-list div {
+    margin-bottom: 10px;
+    padding: 5px;
+    background-color: #f0f0f0;
+    border-radius: 4px;
+}
+
+.selected-item {
+    cursor: move;
+}
+
+.selected-item.dragging {
+    opacity: 0.5;
+}
+
+.title-options {
+    display: flex;
+    flex-direction: column;
+    margin-top: 10px;
+    border: 1px solid #ccc;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.title-option {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.title-option label {
+    margin-left: 5px;
+}
+
+.alternative-title-input {
+    margin-top: 5px;
+    display: none;
+}
+
+.title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+/* Quill Editor Styles for Liedblatt */
+#liedblatt-content {
+    font-family: 'Jost', sans-serif;
+    line-height: 1.0;
+    color: #333;
+}
+
+#liedblatt-content h1, #liedblatt-content h2, #liedblatt-content h3 {
+    color: #000000;
+    margin-top: 10px;
+    margin-bottom: 5px;
+}
+
+#liedblatt-content h1 {
+    font-size: 22;
+}
+
+#liedblatt-content h2 {
+    font-size: 16px;
+}
+
+#liedblatt-content h3 {
+    font-size: 14spx;
+}
+
+#liedblatt-content div {
+    padding-bottom: 0px;
+}
+
+#liedblatt-content p, #liedblatt-content ul, #liedblatt-content ol {
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
+#liedblatt-content li {
+    margin-bottom: 3px;
+}
+
+#liedblatt-content a {
+    color: #1a5f7a;
+    text-decoration: none;
+}
+
+#liedblatt-content a:hover {
+    text-decoration: underline;
+}
+
+#liedblatt-content blockquote {
+    border-left: 4px solid #1a5f7a;
+    padding-left: 15px;
+    color: #7f8c8d;
+    font-style: italic;
+    margin: 15px 0;
+}
+
+#liedblatt-content .ql-align-center {
+    text-align: center;
+}
+
+#liedblatt-content .ql-align-right {
+    text-align: right;
+}
+
+#liedblatt-content .ql-align-justify {
+    text-align: justify;
+}
+
+#liedblatt-content img {
+    max-width: 100%;
+    height: auto;
+    margin: 15px 0;
+}
+
+#liedblatt-content .ql-indent-1 { padding-left: 3em; }
+#liedblatt-content .ql-indent-2 { padding-left: 6em; }
+#liedblatt-content .ql-indent-3 { padding-left: 9em; }
+#liedblatt-content .ql-indent-4 { padding-left: 12em; }
+#liedblatt-content .ql-indent-5 { padding-left: 15em; }
+#liedblatt-content .ql-indent-6 { padding-left: 18em; }
+
+#liedblatt-content .ql-size-small { font-size: 0.75em; }
+#liedblatt-content .ql-size-large { font-size: 1.5em; }
+#liedblatt-content .ql-size-huge { font-size: 2.5em; }
+
+@media (max-width: 768px) {
+    .session-management {
+        flex-direction: column;
+    }
+    
+    .session-management input,
+    .session-management select,
+    .session-management button {
+        width: 100%;
+    }
+}

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;700&family=Montserrat:wght@400;700&family=Roboto:wght@400;700&family=Lato:wght@400;700&family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.js"></script>
+    <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+    <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
+    <title>Gottesdienst-Liedblatt Generator</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+    <body>
+        <header>
+            <h1>Gottesdienst-Liedblatt Generator</h1>
+            <nav>
+                <a href="admin.html" class="btn">Admin-Oberfläche</a>
+                <button class="btn" onclick="showConfigModal()">Globale Einstellungen</button>
+            </nav>
+        </header>
+        <section class="session-management">
+            <input type="text" id="session-name" placeholder="Sitzungsname">
+            <button onclick="saveSession(document.getElementById('session-name').value)">Sitzung speichern</button>
+            <select id="session-select">
+                <option value="">Gespeicherte Sitzung laden...</option>
+            </select>
+            <button onclick="resetSession()">Sitzung zurücksetzen</button>
+            <button onclick="saveCurrentSessionAsVorlage()">Als Vorlage speichern</button>
+            <select id="vorlage-select">
+                <option value="">Vorlage laden...</option>
+            </select>
+            <button onclick="showSessionsAndVorlagen()">Sessions und Vorlagen verwalten</button>
+        </section>
+        <div id="config-modal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeModal('config-modal')">&times;</span>
+                <h2>Liedblatt-Einstellungen</h2>
+                <form id="config-form">
+                    <label for="fontFamily">Schriftart:</label>
+                    <select id="fontFamily">
+                        <option value="Jost">Jost</option>
+                        <option value="Montserrat">Montserrat</option>
+                        <option value="Roboto">Roboto</option>
+                        <option value="Lato">Lato</option>
+                        <option value="Open Sans">Open Sans</option>
+                    </select>
+                    
+                    <label for="fontSize">Schriftgröße:</label>
+                    <input type="number" id="fontSize" min="8" max="24" value="12">
+                    
+                    <label for="textAlign">Textausrichtung:</label>
+                    <select id="textAlign">
+                        <option value="left">Links</option>
+                        <option value="center">Zentriert</option>
+                        <option value="right">Rechts</option>
+                        <option value="justify">Blocksatz</option>
+                    </select>
+                    
+                    <label for="lineHeight">Zeilenabstand:</label>
+                    <input type="number" id="lineHeight" min="1" max="3" step="0.1" value="1.5">
+                    
+                    <div class="form-group">
+                        <label for="churchLogo">Kirchenlogo:</label>
+                        <input type="file" id="churchLogo" accept="image/*">
+                        <button type="button" id="deleteLogo">Logo löschen</button>
+                        <div id="currentLogo"></div>
+                    </div>
+                    <button type="submit">Speichern</button>
+                </form>
+            </div>
+        </div>
+        <!-- Neuer Modal-Dialog für die Verwaltung von Sessions und Vorlagen -->
+        <div id="manage-modal" class="modal" style="display:none;">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>Sessions und Vorlagen verwalten</h2>
+                <div id="sessions-list"></div>
+                <div id="vorlagen-list"></div>
+            </div>
+        </div>
+        <div id="custom-modal" class="modal">
+            <div class="modal-content">
+                <p id="modal-message"></p>
+                <button id="modal-ok">OK</button>
+                <button id="modal-cancel" style="display: none;">Abbrechen</button>
+            </div>
+        </div>
+        <div class="container">
+        <div class="left-panel">
+            
+            <section class="standard-objects">
+                <h2>Standardobjekte</h2>
+                <div class="object-group">
+                    <h3>Trenner</h3>
+                    <div class="trenner-options">
+                        <button class="trenner-btn" onclick="addTrenner('star')"><i class="fas fa-star"></i></button>
+                        <button class="trenner-btn" onclick="addTrenner('cross')"><i class="fas fa-cross"></i></button>
+                        <button class="trenner-btn" onclick="addTrenner('dove')"><i class="fas fa-dove"></i></button>
+                        <button class="trenner-btn" onclick="addTrenner('default')"><img src="http://localhost:3000/icons/default.png" alt="Default" style="width: auto; height: 12px;"></button>
+                    </div>
+                    <div class="object-group">
+                        <h3>Seitenumbruch</h3>
+                        <button onclick="addPageBreak()">Seitenumbruch einfügen</button>
+                    </div>
+                </div>
+                <div class="object-group">
+                    <h3>Freitext</h3>
+                    <div class="freitext-options">
+                        <button class="freitext-btn" onclick="addFreierText('Titel')">Titel</button>
+                        <button class="freitext-btn" onclick="addFreierText('Freitext')">Freitext</button>
+                    </div>
+                </div>
+            </section>
+            <section class="pool">
+                <h2>Pool</h2>
+                <div class="filter-container">
+                    <input type="text" id="poolSearch" placeholder="Suche...">
+                    <select id="filterTyp">
+                        <option value="all">Alle</option>
+                        <option value="Lied">Lieder</option>
+                        <option value="Gebet">Gebete</option>
+                        <option value="Lesung">Lesungen</option>
+                        <option value="Psalm">Psalm</option>
+                        <option value="Liturgie">Liturgie</option>
+                        <option value="Sonstiges">Sonstiges</option>
+                    </select>
+                </div>
+                <div id="pool-items"></div>
+            </section>
+        </div>
+        <div class="middle-panel">
+            <h2>Ausgewählte Elemente</h2>
+            <div id="selected-items"></div>
+        </div>
+        <div class="right-panel">
+            <h2>Liedblatt</h2>
+            <div id="liedblatt-content"></div>
+        </div>
+    </div>
+    <button onclick="document.getElementById('pdf-modal').style.display='block'"style="width: 100%;margin-top: 20px;">PDF erstellen</button>
+        <div id="pdf-modal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeModal('pdf-modal')">&times;</span>
+                <h2>PDF erstellen</h2>
+                <form id="pdf-form">
+                    <label for="pdfFormat">Format:</label>
+                    <select id="pdfFormat">
+                        <option value="a5">A5</option>
+                        <option value="dl">DIN Lang</option>
+                    </select>
+                    <div id="pdf-progress-container" style="display: none;">
+                        <div id="pdf-progress-bar" style="width: 0%; height: 20px; background-color: #4CAF50;"></div>
+                        <div id="pdf-progress-text">0%</div>
+                    </div>
+                    <label>
+                        <input type="checkbox" id="createBooklet"> Als Broschüre erstellen
+                    </label>
+                    <button type="submit">PDF generieren</button>
+
+                </form>
+            </div>
+        </div>
+    <footer>
+        <p>© 2024 Pastor Simon Luthe. Alle Rechte vorbehalten.</p>
+    </footer>
+    <script src="script.js"></script>
+</body>
+</html>
