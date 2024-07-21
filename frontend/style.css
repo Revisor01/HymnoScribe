@@ -44,7 +44,10 @@ h1, h2, h3 {
     margin-top: 0;
     color: #333;
 }
-
+h3 {
+margin-bottom: 0px;
+    margin-top: 20px;
+}
 select, input[type="text"], textarea {
     width: 100%;
     padding: 5px;
