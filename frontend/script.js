@@ -218,6 +218,10 @@ function addToSelected(objekt) {
     const newItem = document.createElement('div');
     newItem.classList.add('selected-item');
     newItem.setAttribute('data-id', objekt.id);
+    // Generiere eine eindeutige ID für dieses Element
+    const uniqueId = `selected-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    newItem.setAttribute('data-unique-id', uniqueId);
+    
     newItem.draggable = true; // Ermöglicht Drag-and-Drop
     newItem.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('text/plain', newItem.dataset.id);
@@ -272,7 +276,11 @@ function addToSelected(objekt) {
     titleSpan.textContent = objekt.titel;
     titleSpan.style.fontWeight = 'bold';
     titleSpan.style.cursor = 'pointer';
-    titleSpan.addEventListener('click', () => scrollToTitle(objekt.titel)); //Scroll Funktion
+    titleSpan.addEventListener('click', () => {
+        const uniqueId = newItem.getAttribute('data-unique-id');
+        console.log("Title clicked, objekt.id:", objekt.id, "uniqueId:", uniqueId);
+        scrollToTitle(objekt.id, uniqueId);
+    });
     titleRow.appendChild(titleSpan);
 //  
 //  const altTitleBtn = document.createElement('button');
@@ -674,27 +682,32 @@ function createLiedOptions(lied) {
     return liedOptions;
 }
 
-function scrollToTitle(title) {
+function scrollToTitle(objektId, uniqueId) {
+    console.log("scrollToTitle called with objektId:", objektId, "uniqueId:", uniqueId);
     const rightPanel = document.querySelector('.right-panel');
-    const titleElements = rightPanel.querySelectorAll('h3');
-    let foundElement = null;
+    const liedblattContent = document.getElementById('liedblatt-content');
     
-    for (let element of titleElements) {
-        if (element.textContent.includes(title)) {
-            foundElement = element;
-            break;
-        }
-    }
+    // Find the element with the matching unique ID
+    const targetElement = liedblattContent.querySelector(`[data-liedblatt-id="${uniqueId}"]`);
     
-    if (foundElement) {
-        const topPos = foundElement.offsetTop - rightPanel.offsetTop;
+    if (targetElement) {
+        // Calculate the scroll position with an offset
+        const offset = 70; // Adjust this value to increase or decrease the space above the target
+        const targetRect = targetElement.getBoundingClientRect();
+        const containerRect = rightPanel.getBoundingClientRect();
+        let topPos = targetRect.top - containerRect.top + rightPanel.scrollTop - offset;
+        
+        // Ensure we don't scroll past the top of the content
+        topPos = Math.max(0, topPos);
+        console.log("Scrolling to position:", topPos);
         rightPanel.scrollTo({
             top: topPos,
             behavior: 'smooth'
         });
+    } else {
+        console.log("Target element not found in liedblatt content");
     }
 }
-
 // dragAndDrop.js
 
 function initializeDragAndDrop() {
@@ -824,13 +837,20 @@ function updateLiedblatt() {
     liedblattContent.innerHTML = "";
     const selectedItems = document.querySelectorAll('.selected-item');
     
-    selectedItems.forEach(selected => {
+    selectedItems.forEach((selected, index) => {  // Fügen Sie 'index' als Parameter hinzu
         const objekt = JSON.parse(selected.getAttribute('data-object'));
         if (!objekt) return;
         
         const content = document.createElement('div');
+        const uniqueId = `liedblatt-item-${index}-${Date.now()}`; 
+        content.setAttribute('data-liedblatt-id', uniqueId);
+        content.setAttribute('data-original-id', objekt.id);
+        selected.setAttribute('data-unique-id', uniqueId);
+        
         const showTitleCheckbox = selected.querySelector('input[id^="showTitle"]');
         const showTitle = showTitleCheckbox ? showTitleCheckbox.checked : true;
+        
+        // Store the unique ID in the selected item for later reference
         
         if (showTitle) {
             const title = document.createElement('h3');
