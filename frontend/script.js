@@ -1529,17 +1529,18 @@ const mmToPt = (mm) => mm * 2.83465;
 
 const pageSizes = {
     'a5': { width: mmToPt(148), height: mmToPt(210) },
-    'dl': { width: mmToPt(105), height: mmToPt(210) }
+    'dl': { width: mmToPt(105), height: mmToPt(210) },
+    'a4-schmal': { width: mmToPt(105), height: mmToPt(297) }
 };
 
 const PX_TO_PT_RATIO = 0.75;
 const pxToPt = (px) => px * PX_TO_PT_RATIO;
 
 const headingStyles = {
-    title: { fontSize: pxToPt(22), bold: true, lineHeight: 1.1, spacingBefore: pxToPt(0), spacingAfter: pxToPt(3) },
-    subtitle: { fontSize: pxToPt(16), lineHeight: 1.1, spacingBefore: pxToPt(0), spacingAfter: pxToPt(3)},
-    heading: { fontSize: pxToPt(14), bold: true, lineHeight: 1.1, spacingBefore: pxToPt(0), spacingAfter: pxToPt(3) },
-    bodyText: { fontSize: pxToPt(12), lineHeight: 1.2, spacingBefore: pxToPt(0), spacingAfter: pxToPt(3) }
+    title: { fontSize: pxToPt(22), bold: true, lineHeight: 1.1, spacingBefore: pxToPt(10), spacingAfter: pxToPt(3) },
+    subtitle: { fontSize: pxToPt(16), lineHeight: 1.1, spacingBefore: pxToPt(10), spacingAfter: pxToPt(10)},
+    heading: { fontSize: pxToPt(14), bold: true, lineHeight: 1.1, spacingBefore: pxToPt(10), spacingAfter: pxToPt(10) },
+    bodyText: { fontSize: pxToPt(12), lineHeight: 1.2, spacingBefore: pxToPt(10), spacingAfter: pxToPt(10) }
 };
 
 async function generatePDF(format) {
@@ -1621,8 +1622,9 @@ async function generatePDF(format) {
     console.log("Global config for PDF generation:", globalConfig);
     
     const pageSizes = {
-        'a5': { width: 420, height: 595 },
-        'dl': { width: 312, height: 624 }
+        'a5': { width: mmToPt(148), height: mmToPt(210) },
+        'dl': { width: mmToPt(105), height: mmToPt(210) },
+        'a4-schmal': { width: mmToPt(105), height: mmToPt(297) }
     };
     
     const { width, height } = pageSizes[format];
@@ -1949,17 +1951,18 @@ async function generatePDF(format) {
                 } else {
                     let fontSize = globalConfig.fontSize;
                     let isHeading = false;
-                    if (element.tagName === 'H1') { fontSize = headingStyles.title.fontSize; isHeading = true; }
-                    if (element.tagName === 'H2') { fontSize = headingStyles.subtitle.fontSize; isHeading = true; }
-                    if (element.tagName === 'H3') { fontSize = headingStyles.heading.fontSize; isHeading = true; }
-                    
+                    if (element.tagName === 'H1') { fontSize = headingStyles.title.fontSize; isHeading = true; headingSpacing = 10; } // Abstand bei Überschriften
+                    if (element.tagName === 'H2') { fontSize = headingStyles.subtitle.fontSize; isHeading = true; headingSpacing = 10; }
+                    if (element.tagName === 'H3') { fontSize = headingStyles.heading.fontSize; isHeading = true; headingSpacing = 10; }
                     const options = {
                         bold: isHeading || window.getComputedStyle(element).fontWeight === 'bold',
                         italic: window.getComputedStyle(element).fontStyle === 'italic',
                         alignment: window.getComputedStyle(element).textAlign || globalConfig.textAlign,
                         indent: parseFloat(window.getComputedStyle(element).paddingLeft) || 0
                     };
-                    
+                    if (isHeading) {
+                        y -= headingSpacing; // Abstand vor Überschriften hinzufügen
+                    }
                     const textHeight = await drawText(element.innerText, margin.left, y, fontSize, contentWidth, options);
                     y -= textHeight + (isHeading ? fontSize * 0.8 : fontSize * 0.2);
                 }
