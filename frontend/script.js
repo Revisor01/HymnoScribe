@@ -1,3 +1,6 @@
+console.log("PDFLib verfügbar:", !!window.PDFLib);
+console.log("PDFLib Version:", PDFLib.VERSION);
+console.log("PDFLib Funktionen:", Object.keys(window.PDFLib).join(", "));
 let alleObjekte = [];
 let quillInstances = {};
 let globalConfig = {
@@ -688,8 +691,19 @@ function createLiedOptions(lied) {
         label.htmlFor = checkbox.id;
         label.textContent = `Strophe ${index + 1}`;
         
+        const pageBreakCheckbox = document.createElement('input');
+        pageBreakCheckbox.type = 'checkbox';
+        pageBreakCheckbox.id = `strophe-pagebreak-${lied.id}-${index}`;
+        pageBreakCheckbox.className = 'strophe-pagebreak';
+        
+        const pageBreakLabel = document.createElement('label');
+        pageBreakLabel.htmlFor = pageBreakCheckbox.id;
+        pageBreakLabel.textContent = 'Seitenumbruch nach Strophe';
+        
         strophenContainer.appendChild(checkbox);
         strophenContainer.appendChild(label);
+        strophenContainer.appendChild(pageBreakCheckbox);
+        strophenContainer.appendChild(pageBreakLabel);
         strophenContainer.appendChild(document.createElement('br'));
     });
     
@@ -924,8 +938,13 @@ function updateLiedblatt() {
             }
             
             if (selectedStrophen.length > 0) {
-                selectedStrophen.forEach(index => {
+                selectedStrophen.forEach((index, i) => {
                     content.innerHTML += `<p>Strophe ${index + 1}: ${strophen[index]}</p>`;
+                    
+                    const pageBreakCheckbox = selected.querySelector(`#strophe-pagebreak-${objekt.id}-${index}`);
+                    if (pageBreakCheckbox && pageBreakCheckbox.checked && i < selectedStrophen.length - 1) {
+                        content.innerHTML += '<div class="page-break"></div>';
+                    }
                 });
             } else {
                 content.innerHTML += '';
@@ -1933,7 +1952,7 @@ async function generatePDF(format) {
         if (item.classList.contains('lied') || item.classList.contains('liturgie')) {
             const title = item.querySelector('h3');
             const notes = item.querySelector('img');
-            const strophen = item.querySelectorAll('p');
+            const strophen = Array.from(item.children).filter(child => child.tagName === 'P');
             
             // Zeichne den Titel
             y -= await drawText(title.textContent, margin.left, y, headingStyles.heading.fontSize, contentWidth, { bold: true, alignment: 'center' });
@@ -1945,12 +1964,29 @@ async function generatePDF(format) {
             }
             
             // Zeichne die Strophen
-            for (const strophe of strophen) {
-                const stropheText = strophe.innerHTML;
-                const textHeight = await drawText(stropheText, margin.left, y, globalConfig.fontSize, contentWidth, { alignment: 'center' });
-                y -= textHeight;
+            for (let j = 0; j < strophen.length; j++) {
+                const strophe = strophen[j];
+                const stropheText = strophe.textContent;
+                
+                if (stropheText.trim() !== '' && !stropheText.includes('Strophe NaN: undefined')) {
+                    const textHeight = await drawText(stropheText, margin.left, y, globalConfig.fontSize, contentWidth, { alignment: 'center' });
+                    y -= textHeight;
+                }
+                
+                const nextElement = strophe.nextElementSibling;
+                if (nextElement && nextElement.classList.contains('page-break')) {
+                    // Zeichne eine gestrichelte Linie für den Seitenumbruch
+                    page.drawLine({
+                        start: { x: margin.left, y: y - 10 },
+                        end: { x: width - margin.right, y: y - 10 },
+                        thickness: 1,
+                        color: rgb(0, 0, 0),
+                        dashArray: [5, 5],
+                    });
+                    
+                    ({ page, y } = addPage());
+                }
             }
-        
             
         //    y -= globalConfig.fontSize; // Zusätzlicher Abstand nach dem Lied/der Liturgie
         } else if (item.querySelector('.fas, .trenner-default-img')) {
@@ -2001,10 +2037,67 @@ async function generatePDF(format) {
     
     console.log("PDF generation complete. Saving...");
     const pdfBytes = await doc.save();
-    console.log("PDF saved. Downloading...");
-    downloadPDF(pdfBytes, `liedblatt_${format}.pdf`);
-    showProgress(100);
-    progressContainer.style.display = 'none';
+    console.log("PDF saved. Checking if brochure is needed...");
+    
+    try {
+        console.log("PDF generation complete. Saving...");
+        let pdfBytes = await doc.save();
+        console.log(`Generated PDF size: ${pdfBytes.length} bytes`);
+        
+        const createBrochureChecked = document.getElementById('createBrochure').checked;
+        if (createBrochureChecked) {
+            console.log("Creating brochure...");
+            showProgress(75);
+            
+            const tempDoc = await PDFDocument.load(pdfBytes);
+            let pageCount = tempDoc.getPageCount();
+            console.log(`Original page count: ${pageCount}`);
+            
+            // Entfernen Sie das Hinzufügen von leeren Seiten hier
+            // Stattdessen lassen Sie die createBrochure Funktion die Seitenanzahl handhaben
+            
+            console.log(`Final page count: ${pageCount}`);
+            pdfBytes = await tempDoc.save();
+            
+            const brochurePdfBytes = await createBrochure(pdfBytes, format);
+            console.log(`Generated brochure PDF size: ${brochurePdfBytes.length} bytes`);
+            console.log("Brochure created. Downloading...");
+            downloadPDF(brochurePdfBytes, `liedblatt_brochure_${format}.pdf`);
+        } else {
+            console.log("Downloading standard PDF...");
+            downloadPDF(pdfBytes, `liedblatt_${format}.pdf`);
+        }
+        
+        showProgress(100);
+    } catch (error) {
+        console.error("Error during PDF generation or brochure creation:", error);
+        await customAlert(`Fehler bei der PDF-Erstellung: ${error.message}`);
+    } finally {
+        progressContainer.style.display = 'none';
+    }
+}
+
+function addMinimalContent(page) {
+    // Füge minimalen Inhalt hinzu (ein kleiner, fast unsichtbarer Punkt)
+    page.drawCircle({
+        x: 1,
+        y: 1,
+        size: 1
+    });
+}
+function findPageBreak(element) {
+    if (element.classList && element.classList.contains('page-break')) {
+        return element;
+    }
+    
+    for (let i = 0; i < element.children.length; i++) {
+        const pageBreak = findPageBreak(element.children[i]);
+        if (pageBreak) {
+            return pageBreak;
+        }
+    }
+    
+    return null;
 }
 
 async function fetchAndEmbedFont(doc, fontName) {
@@ -2075,6 +2168,234 @@ document.getElementById('pdf-form').addEventListener('submit', (event) => {
     const format = document.getElementById('pdfFormat').value;
     generatePDF(format);
 });
+
+async function createBrochure(inputPdfBytes, format) {
+    const { PDFDocument, PageSizes } = PDFLib;
+    console.log("PDF-Lib verfügbar:", !!PDFLib);
+    
+    if (!inputPdfBytes || inputPdfBytes.length === 0) {
+        throw new Error('Ungültige PDF-Daten: Die Eingabe-PDF ist leer oder undefiniert.');
+    }
+    
+    let inputPdf;
+    try {
+        inputPdf = await PDFDocument.load(inputPdfBytes);
+    } catch (error) {
+        console.error('Fehler beim Laden des Eingabe-PDFs:', error);
+        throw new Error('Das Eingabe-PDF konnte nicht geladen werden. Möglicherweise ist es beschädigt.');
+    }
+    
+    const outputPdf = await PDFDocument.create();
+    
+    const pageCount = inputPdf.getPageCount();
+    console.log(`Das Eingabe-PDF hat ${pageCount} Seiten`);
+    
+    if (pageCount === 0) {
+        throw new Error('Das Eingabe-PDF enthält keine Seiten.');
+    }
+    
+    const { width: targetWidth, height: targetHeight } = getPageDimensionsForFormat(format);
+    console.log(`Ziel-Seitendimensionen für ${format}: ${targetWidth}x${targetHeight}`);
+    
+    const outputPageSize = getOutputPageSize(format);
+    
+    if (format === 'a5' || format === 'a4-schmal') {
+        await createA5orA4SchmalBrochure(inputPdf, outputPdf, pageCount, format, targetWidth, targetHeight, outputPageSize);
+    } else if (format === 'dl') {
+        await createDinLangBrochure(inputPdf, outputPdf, pageCount, targetWidth, targetHeight, outputPageSize);
+    }
+    
+    console.log("Broschürenerstellung abgeschlossen, PDF wird gespeichert...");
+    return await outputPdf.save();
+}
+
+async function createDinLangBrochure(inputPdf, outputPdf, pageCount, targetWidth, targetHeight, outputPageSize) {
+    const pagesPerSheet = 3;
+    const sheetsNeeded = Math.ceil(pageCount / pagesPerSheet);
+    
+    for (let sheet = 0; sheet < sheetsNeeded; sheet++) {
+        const newPage = outputPdf.addPage(outputPageSize);
+        console.log(`Neue Seite zum Ausgabe-PDF hinzugefügt für Blatt ${sheet + 1}`);
+        
+        for (let i = 0; i < pagesPerSheet; i++) {
+            const pageIndex = sheet * pagesPerSheet + i;
+            if (pageIndex < pageCount) {
+                await drawPageOnSheet(inputPdf, outputPdf, newPage, pageIndex, i, targetWidth, targetHeight);
+            }
+        }
+    }
+}
+
+async function createA5orA4SchmalBrochure(inputPdf, outputPdf, pageCount, format, targetWidth, targetHeight, outputPageSize) {
+    const pagesPerSheet = 2;
+    let sheetsNeeded = Math.ceil(pageCount / pagesPerSheet);
+    
+    if (pageCount <= 4) {
+        // Logik für 1-4 Seiten
+        if (pageCount === 1) {
+            const newPage = outputPdf.addPage(outputPageSize);
+            console.log(`Neue Seite zum Ausgabe-PDF hinzugefügt für 1 Seite`);
+            await drawPageOnSheet(inputPdf, outputPdf, newPage, 0, 1, targetWidth, targetHeight, format);
+            console.log(`Seite 1 gezeichnet`);
+        } else if (pageCount === 2) {
+            const newPage = outputPdf.addPage(outputPageSize);
+            console.log(`Neue Seite zum Ausgabe-PDF hinzugefügt für 2 Seiten`);
+            await drawPageOnSheet(inputPdf, outputPdf, newPage, 0, 1, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, newPage, 1, 0, targetWidth, targetHeight, format);
+            console.log(`Seiten 1 und 2 auf einem Blatt gezeichnet`);
+        } else if (pageCount === 3) {
+            const firstPage = outputPdf.addPage(outputPageSize);
+            console.log(`Erste Seite zum Ausgabe-PDF hinzugefügt für 3 Seiten`);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 2, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 0, 1, targetWidth, targetHeight, format);
+            console.log(`Seiten 3 und 1 auf erster Ausgabeseite gezeichnet`);
+            
+            const secondPage = outputPdf.addPage(outputPageSize);
+            console.log(`Zweite Seite zum Ausgabe-PDF hinzugefügt für 3 Seiten`);
+            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 1, 1, targetWidth, targetHeight, format);
+            console.log(`Seite 2 auf zweiter Ausgabeseite gezeichnet`);
+        } else if (pageCount === 4) {
+            const firstPage = outputPdf.addPage(outputPageSize);
+            console.log(`Erste Seite zum Ausgabe-PDF hinzugefügt für 4 Seiten`);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 3, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 0, 1, targetWidth, targetHeight, format);
+            console.log(`Seiten 4 und 1 auf erster Ausgabeseite gezeichnet`);
+            
+            const secondPage = outputPdf.addPage(outputPageSize);
+            console.log(`Zweite Seite zum Ausgabe-PDF hinzugefügt für 4 Seiten`);
+            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 2, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 1, 1, targetWidth, targetHeight, format);
+            console.log(`Seiten 3 und 2 auf zweiter Ausgabeseite gezeichnet`);
+        }
+    } else {
+        // Logik für 5 oder mehr Seiten
+        for (let sheet = 0; sheet < sheetsNeeded; sheet++) {
+            const newPage = outputPdf.addPage(outputPageSize);
+            console.log(`Neue Seite zum Ausgabe-PDF hinzugefügt für Blatt ${sheet + 1}`);
+            
+            for (let i = 0; i < pagesPerSheet; i++) {
+                let pageIndex;
+                
+                if (sheet === 0) {
+                    // Erstes Blatt: Letzte Seite oben, erste Seite unten
+                    pageIndex = i === 0 ? pageCount - 1 : 0;
+                } else {
+                    // Folgende Blätter: Aufsteigende Seitenzahlen
+                    pageIndex = (sheet - 1) * 2 + i + 1;
+                }
+                
+                if (pageIndex < pageCount) {
+                    await drawPageOnSheet(inputPdf, outputPdf, newPage, pageIndex, i, targetWidth, targetHeight, format);
+                    console.log(`Seite ${pageIndex + 1} auf Position ${i + 1} von Blatt ${sheet + 1} gezeichnet`);
+                } else {
+                    console.log(`Leere Seite auf Position ${i + 1} von Blatt ${sheet + 1}`);
+                }
+            }
+        }
+    }
+}
+
+async function drawPageOnSheet(inputPdf, outputPdf, newPage, pageIndex, position, targetWidth, targetHeight, format) {
+    console.log(`Verarbeite Seite ${pageIndex + 1} für Position ${position + 1}`);
+    try {
+        const [embeddedPage] = await outputPdf.embedPages([inputPdf.getPage(pageIndex)]);
+        
+        if (!embeddedPage) {
+            console.error(`Fehler: Keine eingebettete Seite für Index ${pageIndex} erhalten`);
+            return;
+        }
+        
+        const { x, y } = getPositionOnSheet(position, targetWidth, targetHeight, newPage.getWidth(), newPage.getHeight(), format);
+        console.log(`Positioniere Seite ${pageIndex + 1} an Position (${x}, ${y})`);
+        
+        const scale = Math.min(targetWidth / embeddedPage.width, targetHeight / embeddedPage.height);
+        const scaledWidth = embeddedPage.width * scale;
+        const scaledHeight = embeddedPage.height * scale;
+        
+        newPage.drawPage(embeddedPage, {
+            x: x + (targetWidth - scaledWidth) / 2,
+            y: y + (targetHeight - scaledHeight) / 2,
+            width: scaledWidth,
+            height: scaledHeight
+        });
+        console.log(`Seite ${pageIndex + 1} erfolgreich zum Blatt hinzugefügt`);
+    } catch (error) {
+        console.error(`Fehler beim Einbetten oder Zeichnen der Seite ${pageIndex + 1}:`, error);
+    }
+}
+function getPositionOnSheet(position, targetWidth, targetHeight, sheetWidth, sheetHeight, format) {
+    if (format === 'a5') {
+        return {
+            x: position === 0 ? 0 : sheetWidth / 2,
+            y: 0
+        };
+    } else if (format === 'a4-schmal') {
+        return {
+            x: 0,
+            y: position === 0 ? sheetHeight / 2 : 0
+        };
+    }
+}
+
+function getPageDimensionsForFormat(format) {
+    const dimensions = {
+        'a5': { width: 420, height: 595 },
+        'dl': { width: 297, height: 210 },
+        'a4-schmal': { width: 297, height: 842 }
+    }[format];
+    
+    if (!dimensions) {
+        throw new Error(`Unbekanntes Format: ${format}`);
+    }
+    
+    return dimensions;
+}
+
+function getOutputPageSize(format) {
+    switch (format) {
+        case 'a5':
+        case 'dl':
+            return [841.89, 595.28];  // A4 Querformat
+        case 'a4-schmal':
+            return [595.28, 841.89];  // A4 Hochformat
+        default:
+            throw new Error('Unbekanntes Format');
+    }
+}
+
+function getPagesPerSheet(format) {
+    return {
+        'a5': 2,
+        'dl': 3,
+        'a4-schmal': 2
+    }[format] || 2;
+}
+
+//function getPageIndexForBrochure(sheet, position, totalPages, format) {
+//  const pagesPerSheet = getPagesPerSheet(format);
+//  const totalSheets = Math.ceil(totalPages / pagesPerSheet);
+//  
+//  let pageIndex;
+//  if (format === 'dl') {
+//      // Spezielle Logik für DIN lang
+//      const pageOrder = [5, 0, 1, 4, 3, 2];
+//      pageIndex = sheet * 6 + pageOrder[position];
+//  } else if (format === 'a5') {
+//      if (sheet % 2 === 0) { // Vorderseite
+//          pageIndex = position === 0 ? totalPages - 1 - sheet : sheet;
+//      } else { // Rückseite
+//          pageIndex = position === 0 ? sheet : totalPages - 2 - sheet;
+//      }
+//  } else { // a4-schmal
+//      if (sheet % 2 === 0) { // Vorderseite
+//          pageIndex = position === 0 ? totalPages - 1 - sheet : sheet;
+//      } else { // Rückseite
+//          pageIndex = position === 0 ? sheet : totalPages - 1 - sheet;
+//      }
+//  }
+//  
+//  return pageIndex >= 0 && pageIndex < totalPages ? pageIndex : null;
+//}
 
 window.onclick = function(event) {
     if (event.target.classList.contains('modal')) {
