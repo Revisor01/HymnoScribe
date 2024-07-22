@@ -22,6 +22,48 @@ document.addEventListener('DOMContentLoaded', function() {
     toggleLiedFelder.call(document.getElementById('typ'));
 });
 
+function applyGlobalConfigToPreview() {
+    const preview = document.getElementById('preview');
+    const config = JSON.parse(localStorage.getItem('liedblattConfig')) || {
+        fontFamily: 'Jost',
+        fontSize: '14',
+        textAlign: 'left',
+        lineHeight: '1.1'
+    };
+    
+    preview.style.fontFamily = config.fontFamily;
+    preview.style.fontSize = `${config.fontSize}px`;
+    preview.style.textAlign = config.textAlign;
+    preview.style.lineHeight = config.lineHeight;
+}
+
+// Update the filterObjekte function to style buttons
+function filterObjekte() {
+    const filterTyp = document.getElementById('filterTyp').value;
+    const searchTerm = document.getElementById('objektSearch').value.toLowerCase();
+    const filteredObjekte = alleObjekte.filter(objekt => 
+        (filterTyp === 'all' || objekt.typ === filterTyp) &&
+        objekt.titel.toLowerCase().includes(searchTerm)
+    );
+    
+    const objektListe = document.getElementById('objektListe');
+    objektListe.innerHTML = '';
+    filteredObjekte.forEach(objekt => {
+        const objektDiv = document.createElement('div');
+        objektDiv.className = 'objekt-item';
+        objektDiv.innerHTML = `
+            <div class="buttons">
+                <button onclick="editObjekt(${objekt.id})" class="btn btn-small">Bearbeiten</button>
+                <button onclick="deleteObjekt(${objekt.id})" class="btn btn-small delete-strophe">Löschen</button>
+            </div>
+            <h3>${objekt.titel} (${objekt.typ})</h3>
+        `;
+        objektListe.appendChild(objektDiv);
+    });
+}
+document.addEventListener('DOMContentLoaded', function() {
+    applyGlobalConfigToPreview();
+});
 function toggleLiedFelder() {
     const liedFelder = document.getElementById('liedFelder');
     const editorContainer = document.getElementById('editor-container');
@@ -345,8 +387,8 @@ function filterObjekte() {
         objektDiv.className = 'objekt-item';
         objektDiv.innerHTML = `
             <h3>${objekt.titel} (${objekt.typ})</h3>
-            <button onclick="editObjekt(${objekt.id})">Bearbeiten</button>
-            <button onclick="deleteObjekt(${objekt.id})">Löschen</button>
+            <button onclick="editObjekt(${objekt.id})" class="btn btn-small">Bearbeiten</button>
+            <button onclick="deleteObjekt(${objekt.id})" class="btn btn-small delete-strophe">Löschen</button>
         `;
         objektListe.appendChild(objektDiv);
     });
