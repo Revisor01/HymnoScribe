@@ -18,7 +18,7 @@ app.use((req, res, next) => {
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         let uploadPath;
-        if (file.fieldname === 'churchLogo') {
+        if (file.fieldname === 'logo') {
             uploadPath = path.join(__dirname, 'uploads', 'logos');
         } else if (req.body.typ === 'Liturgie') {
             uploadPath = path.join(__dirname, 'uploads', 'liturgie');
@@ -29,7 +29,8 @@ const storage = multer.diskStorage({
         cb(null, uploadPath);
     },
     filename: function (req, file, cb) {
-        if (file.fieldname === 'churchLogo') {
+        if (file.fieldname === 'logo') {
+            // Für Logo-Uploads behalten wir den Originalnamen bei
             cb(null, file.originalname);
         } else {
             const titel = req.body.titel.replace(/[^a-z0-9]/gi, '_').toLowerCase();
