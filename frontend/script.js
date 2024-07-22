@@ -1,6 +1,3 @@
-console.log("PDFLib verfügbar:", !!window.PDFLib);
-console.log("PDFLib Version:", PDFLib.VERSION);
-console.log("PDFLib Funktionen:", Object.keys(window.PDFLib).join(", "));
 let alleObjekte = [];
 let quillInstances = {};
 let globalConfig = {
@@ -690,20 +687,9 @@ function createLiedOptions(lied) {
         const label = document.createElement('label');
         label.htmlFor = checkbox.id;
         label.textContent = `Strophe ${index + 1}`;
-        
-        const pageBreakCheckbox = document.createElement('input');
-        pageBreakCheckbox.type = 'checkbox';
-        pageBreakCheckbox.id = `strophe-pagebreak-${lied.id}-${index}`;
-        pageBreakCheckbox.className = 'strophe-pagebreak';
-        
-        const pageBreakLabel = document.createElement('label');
-        pageBreakLabel.htmlFor = pageBreakCheckbox.id;
-        pageBreakLabel.textContent = 'Seitenumbruch nach Strophe';
-        
+    
         strophenContainer.appendChild(checkbox);
         strophenContainer.appendChild(label);
-        strophenContainer.appendChild(pageBreakCheckbox);
-        strophenContainer.appendChild(pageBreakLabel);
         strophenContainer.appendChild(document.createElement('br'));
     });
     
@@ -938,15 +924,21 @@ function updateLiedblatt() {
             }
             
             if (selectedStrophen.length > 0) {
-                selectedStrophen.forEach((index, i) => {
-                    content.innerHTML += `<p>Strophe ${index + 1}: ${strophen[index]}</p>`;
+                selectedStrophen.forEach((index, arrayIndex) => {
+                    const stropheDiv = document.createElement('div');
+                    stropheDiv.classList.add('strophe');
                     
-                    const pageBreakCheckbox = selected.querySelector(`#strophe-pagebreak-${objekt.id}-${index}`);
-                    if (pageBreakCheckbox && pageBreakCheckbox.checked && i < selectedStrophen.length - 1) {
-                        content.innerHTML += '<div class="page-break"></div>';
-                    }
+                    // Entferne alle <p> Tags aus dem Strophentext und füge die Nummer am Anfang hinzu
+                    const strophenText = strophen[index].replace(/<\/?p>/g, '').trim();
+                    
+                    // Füge einen Zeilenumbruch nach jeder Strophe hinzu, außer nach der letzten
+                    const lineBreak = arrayIndex < selectedStrophen.length - 1 ? '<p><br></p>' : '';
+                    
+                    stropheDiv.innerHTML = `<p><strong>${index + 1}.</strong> ${strophenText}${lineBreak}</p>`;
+                    content.appendChild(stropheDiv);
                 });
-            } else {
+            }
+            else {
                 content.innerHTML += '';
             }
         } else if (objekt.typ === 'Titel' || objekt.typ === 'Freitext') {
@@ -977,10 +969,29 @@ async function saveSession(name) {
     const selectedItems = document.querySelectorAll('.selected-item');
     const sessionData = Array.from(selectedItems).map(item => {
         const objekt = JSON.parse(item.getAttribute('data-object'));
+        const uniqueId = item.getAttribute('data-unique-id');
+        
         if (objekt.typ === 'Titel' || objekt.typ === 'Freitext') {
             objekt.inhalt = quillInstances[objekt.id].root.innerHTML;
+        } else if (objekt.typ === 'Lied' || objekt.typ === 'Liturgie') {
+            const liedOptions = item.querySelector('.lied-options');
+            if (liedOptions) {
+                const showNotesCheckbox = liedOptions.querySelector('input[type="checkbox"]');
+                objekt.showNotes = showNotesCheckbox ? showNotesCheckbox.checked : false;
+                const noteTypeRadio = liedOptions.querySelector('input[name^="noteType"]:checked');
+                objekt.noteType = noteTypeRadio ? noteTypeRadio.value : null;
+                objekt.selectedStrophen = Array.from(liedOptions.querySelectorAll('.strophen-container input:checked'))
+                .map(cb => parseInt(cb.value));
+            }
         }
-        return objekt;
+        
+        const showTitleCheckbox = item.querySelector('input[id^="showTitle"]');
+        objekt.showTitle = showTitleCheckbox ? showTitleCheckbox.checked : true;
+        
+        const altTitleInput = item.querySelector('.alternative-title-input');
+        objekt.alternativePrefix = altTitleInput ? altTitleInput.value : '';
+        
+        return { uniqueId, objekt };
     });
     
     try {
@@ -1020,6 +1031,7 @@ async function loadSession(id) {
         await customAlert('Fehler beim Laden der Session: ' + error.message);
     }
 }
+
 
 async function deleteSession(id) {
     const confirmed = await customConfirm('Sind Sie sicher, dass Sie diese Session löschen möchten?');
@@ -1077,6 +1089,7 @@ function saveSessionToLocalStorage() {
     const selectedItems = document.querySelectorAll('.selected-item');
     const sessionData = Array.from(selectedItems).map(item => {
         const objekt = JSON.parse(item.getAttribute('data-object'));
+        const uniqueId = item.getAttribute('data-unique-id');
         
         // Speichern des Ausblendstatus für alle Objekttypen
         const showTitleCheckbox = item.querySelector('input[id^="showTitle"]');
@@ -1102,10 +1115,10 @@ function saveSessionToLocalStorage() {
         const altTitleInput = item.querySelector('.alternative-title-input');
         objekt.alternativePrefix = altTitleInput ? altTitleInput.value : '';
         
-        return objekt;
+        return { uniqueId, objekt };
     });
     localStorage.setItem('lastSession', JSON.stringify(sessionData));
-    console.log('Session saved:', sessionData); // Logging für Debugging
+    console.log('Session saved:', sessionData);
 }
 
 function loadLastSession() {
@@ -1122,44 +1135,43 @@ function loadLastSession() {
 
 function applySessionData(sessionData) {
     document.getElementById('selected-items').innerHTML = '';
-    sessionData.forEach(item => {
-        addToSelected(item);
-        const itemElement = document.querySelector(`.selected-item[data-id="${item.id}"]`);
+    sessionData.forEach(({ uniqueId, objekt }) => {
+        addToSelected(objekt);
+        const itemElement = document.querySelector(`.selected-item[data-unique-id="${uniqueId}"]`);
         if (itemElement) {
             const showTitleCheckbox = itemElement.querySelector('input[id^="showTitle"]');
             if (showTitleCheckbox) {
-                showTitleCheckbox.checked = item.showTitle !== false;
+                showTitleCheckbox.checked = objekt.showTitle !== false;
             }
             
-            if (item.typ === 'Titel' || item.typ === 'Freitext') {
-                const quillInstance = quillInstances[item.id];
+            if (objekt.typ === 'Titel' || objekt.typ === 'Freitext') {
+                const quillInstance = quillInstances[objekt.id];
                 if (quillInstance) {
-                    quillInstance.root.innerHTML = item.inhalt || '';
+                    quillInstance.root.innerHTML = objekt.inhalt || '';
                 }
-            } else if (item.typ === 'Lied' || item.typ === 'Liturgie') {
+            } else if (objekt.typ === 'Lied' || objekt.typ === 'Liturgie') {
                 const liedOptions = itemElement.querySelector('.lied-options');
                 if (liedOptions) {
                     const showNotesCheckbox = liedOptions.querySelector('input[type="checkbox"]');
-                    if (showNotesCheckbox) showNotesCheckbox.checked = item.showNotes;
+                    if (showNotesCheckbox) showNotesCheckbox.checked = objekt.showNotes;
                     const noteTypeRadios = liedOptions.querySelectorAll('input[name^="noteType"]');
                     noteTypeRadios.forEach(radio => {
-                        if (radio.value === item.noteType) radio.checked = true;
+                        if (radio.value === objekt.noteType) radio.checked = true;
                     });
                     const strophenCheckboxes = liedOptions.querySelectorAll('.strophen-container input[type="checkbox"]');
                     strophenCheckboxes.forEach((checkbox, index) => {
-                        checkbox.checked = item.selectedStrophen && item.selectedStrophen.includes(index);
+                        checkbox.checked = objekt.selectedStrophen && objekt.selectedStrophen.includes(index);
                     });
                 }
             }
             
             const alternativePrefixInput = itemElement.querySelector('.alternative-title-input');
             if (alternativePrefixInput) {
-                alternativePrefixInput.value = item.alternativePrefix || '';
+                alternativePrefixInput.value = objekt.alternativePrefix || '';
             }
         }
     });
     updateLiedblatt();
-    console.log('Session applied:', sessionData); // Logging für Debugging
 }
 
 function customAlert(message) {
@@ -1253,10 +1265,29 @@ async function saveVorlage(name) {
     const selectedItems = document.querySelectorAll('.selected-item');
     const vorlageData = Array.from(selectedItems).map(item => {
         const objekt = JSON.parse(item.getAttribute('data-object'));
+        const uniqueId = item.getAttribute('data-unique-id');
+        
         if (objekt.typ === 'Titel' || objekt.typ === 'Freitext') {
             objekt.inhalt = quillInstances[objekt.id].root.innerHTML;
+        } else if (objekt.typ === 'Lied' || objekt.typ === 'Liturgie') {
+            const liedOptions = item.querySelector('.lied-options');
+            if (liedOptions) {
+                const showNotesCheckbox = liedOptions.querySelector('input[type="checkbox"]');
+                objekt.showNotes = showNotesCheckbox ? showNotesCheckbox.checked : false;
+                const noteTypeRadio = liedOptions.querySelector('input[name^="noteType"]:checked');
+                objekt.noteType = noteTypeRadio ? noteTypeRadio.value : null;
+                objekt.selectedStrophen = Array.from(liedOptions.querySelectorAll('.strophen-container input:checked'))
+                .map(cb => parseInt(cb.value));
+            }
         }
-        return objekt;
+        
+        const showTitleCheckbox = item.querySelector('input[id^="showTitle"]');
+        objekt.showTitle = showTitleCheckbox ? showTitleCheckbox.checked : true;
+        
+        const altTitleInput = item.querySelector('.alternative-title-input');
+        objekt.alternativePrefix = altTitleInput ? altTitleInput.value : '';
+        
+        return { uniqueId, objekt };
     });
     
     try {
@@ -1277,7 +1308,6 @@ async function saveVorlage(name) {
         await customAlert('Fehler beim Speichern der Vorlage: ' + error.message);
     }
 }
-
 async function loadVorlage(id) {
     console.log("loadVorlage aufgerufen mit ID:", id);
     try {
@@ -1285,9 +1315,7 @@ async function loadVorlage(id) {
         if (!response.ok) throw new Error('Fehler beim Laden der Vorlage');
         const vorlage = await response.json();
         console.log("Geladene Vorlage:", vorlage);
-        if (typeof vorlage.data === 'string') {
-            applySessionData(JSON.parse(vorlage.data));
-        } else if (Array.isArray(vorlage.data)) {
+        if (Array.isArray(vorlage.data)) {
             applySessionData(vorlage.data);
         } else {
             throw new Error('Unerwartetes Datenformat in der Vorlage');
