@@ -2090,7 +2090,7 @@ async function generatePDF(format) {
             // Andere Elemente (Text, Überschriften, etc.)
             const elements = item.querySelectorAll('h1, h2, h3, p, img');
             for (const element of elements) {
-                if (element.tagName === 'IMG' && element.alt === 'Benutzerdefiniertes Bild') {
+                if (element.tagName === 'IMG') {
                     const imgHeight = await drawImage(element.src, margin.left, y, contentWidth);
                     y -= imgHeight + 10; // Zusätzlicher Abstand nach Bildern
                 } else {
