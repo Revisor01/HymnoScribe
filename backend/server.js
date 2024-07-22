@@ -14,12 +14,36 @@ app.use((req, res, next) => {
     next();
 });
 
+const customImageStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const uploadPath = path.join(__dirname, 'uploads', 'custom');
+        fs.mkdirSync(uploadPath, { recursive: true });
+        cb(null, uploadPath);
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + '-' + file.originalname);
+    }
+});
+
+const uploadCustomImage = multer({ storage: customImageStorage });
+
+app.post('/upload-custom-image', uploadCustomImage.single('customImage'), (req, res) => {
+    if (req.file) {
+        const imagePath = `/uploads/custom/${req.file.filename}`;
+        res.json({ success: true, imagePath });
+    } else {
+        res.status(400).json({ success: false, message: 'Kein Bild hochgeladen' });
+    }
+});
+
 // Multer-Setup für das Hochladen von Dateien
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         let uploadPath;
         if (file.fieldname === 'logo') {
             uploadPath = path.join(__dirname, 'uploads', 'logos');
+        } else if (file.fieldname === 'customImage') {
+            uploadPath = path.join(__dirname, 'uploads', 'custom');
         } else if (req.body.typ === 'Liturgie') {
             uploadPath = path.join(__dirname, 'uploads', 'liturgie');
         } else {
@@ -32,6 +56,9 @@ const storage = multer.diskStorage({
         if (file.fieldname === 'logo') {
             // Für Logo-Uploads behalten wir den Originalnamen bei
             cb(null, file.originalname);
+        } else if (file.fieldname === 'customImage') {
+            // Für benutzerdefinierte Bilder verwenden wir einen Zeitstempel
+            cb(null, Date.now() + '-' + file.originalname);
         } else {
             const titel = req.body.titel.replace(/[^a-z0-9]/gi, '_').toLowerCase();
             const suffix = file.fieldname === 'notenbild' ? '_ohne' : '';
@@ -41,6 +68,28 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage });
+
+app.post('/upload-logo', upload.single('logo'), (req, res) => {
+    if (req.file) {
+        const logoPath = `/uploads/logos/${req.file.filename}`;
+        console.log("Logo uploaded successfully:", logoPath);
+        res.json({ success: true, logoPath });
+    } else {
+        console.log("No logo file received");
+        res.status(400).json({ success: false, message: 'Kein Bild hochgeladen' });
+    }
+});
+
+app.post('/upload-custom-image', upload.single('customImage'), (req, res) => {
+    if (req.file) {
+        const imagePath = `/uploads/custom/${req.file.filename}`;
+        console.log("Custom image uploaded successfully:", imagePath);
+        res.json({ success: true, imagePath });
+    } else {
+        console.log("No custom image file received");
+        res.status(400).json({ success: false, message: 'Kein Bild hochgeladen' });
+    }
+});
 
 app.post('/upload-logo', upload.single('logo'), (req, res) => {
     if (req.file) {

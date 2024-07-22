@@ -80,7 +80,10 @@ function getImagePath(objekt, imageType) {
         imagePath = objekt.notenbildMitText;
     } else if (imageType === 'logo') {
         imagePath = objekt.churchLogo;
+    } else if (imageType === 'customImage') {
+        imagePath = objekt.imagePath;
     }
+    
     
     if (!imagePath) return null;
     
@@ -208,6 +211,17 @@ function filterPoolItems() {
         poolItems.appendChild(div);
     });
 }
+
+function addCustomImage() {
+    const customImageObject = {
+        id: Date.now(),
+        typ: 'CustomImage',
+        titel: 'Benutzerdefiniertes Bild',
+        imagePath: ''
+    };
+    addToSelected(customImageObject);
+}
+
 function addFreierText(typ) {
     const freiTextObject = {
         id: Date.now(),
@@ -475,6 +489,41 @@ function addToSelected(objekt) {
         trennerIcon.style.fontSize = '24px';
         trennerIcon.style.color = '#888';
         newItem.appendChild(trennerIcon);
+    } else if (objekt.typ === 'CustomImage') {
+        const imageUploadInput = document.createElement('input');
+        imageUploadInput.type = 'file';
+        imageUploadInput.accept = 'image/*';
+        imageUploadInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const formData = new FormData();
+                formData.append('customImage', file);
+                
+                try {
+                    const response = await fetch('http://localhost:3000/upload-custom-image', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        objekt.imagePath = result.imagePath;
+                        newItem.setAttribute('data-object', JSON.stringify(objekt));
+                        updateLiedblatt();
+                    } else {
+                        console.error('Fehler beim Hochladen des Bildes');
+                    }
+                } catch (error) {
+                    console.error('Fehler:', error);
+                }
+            }
+        });
+        
+        const uploadButton = document.createElement('button');
+        uploadButton.textContent = 'Bild hochladen';
+        uploadButton.onclick = () => imageUploadInput.click();
+        
+        newItem.appendChild(uploadButton);
     } else if (objekt.typ === 'Lied' || objekt.typ === 'Liturgie') {
         // Erstellt und fügt Liedoptionen hinzu
         const liedOptions = createLiedOptions(objekt);
@@ -889,6 +938,16 @@ function updateLiedblatt() {
         }
         if (objekt.typ === 'Psalm') {
             content.style.textAlign = 'left';
+        }
+        if (objekt.typ === 'CustomImage') {
+            const imgSrc = getImagePath(objekt, 'customImage');
+            if (imgSrc) {
+                const imgElement = document.createElement('img');
+                imgElement.src = imgSrc;
+                imgElement.alt = "Benutzerdefiniertes Bild";
+                imgElement.style.maxWidth = '100%';
+                content.appendChild(imgElement);
+            }
         }
         if (objekt.typ === 'Trenner') {
             const trennerIcon = document.createElement('i');
@@ -2031,9 +2090,9 @@ async function generatePDF(format) {
             // Andere Elemente (Text, Überschriften, etc.)
             const elements = item.querySelectorAll('h1, h2, h3, p, img');
             for (const element of elements) {
-                if (element.tagName === 'IMG') {
+                if (element.tagName === 'IMG' && element.alt === 'Benutzerdefiniertes Bild') {
                     const imgHeight = await drawImage(element.src, margin.left, y, contentWidth);
-                    y -= imgHeight + 20; // Zusätzlicher Abstand nach Bildern
+                    y -= imgHeight + 10; // Zusätzlicher Abstand nach Bildern
                 } else {
                     let fontSize = globalConfig.fontSize;
                     let isHeading = false;
