@@ -2210,17 +2210,37 @@ async function createBrochure(inputPdfBytes, format) {
 }
 
 async function createDinLangBrochure(inputPdf, outputPdf, pageCount, targetWidth, targetHeight, outputPageSize) {
-    const pagesPerSheet = 3;
+    const pagesPerSheet = 3; // Drei DIN-Lang-Seiten pro A4-Blatt
     const sheetsNeeded = Math.ceil(pageCount / pagesPerSheet);
     
     for (let sheet = 0; sheet < sheetsNeeded; sheet++) {
         const newPage = outputPdf.addPage(outputPageSize);
         console.log(`Neue Seite zum Ausgabe-PDF hinzugefügt für Blatt ${sheet + 1}`);
         
-        for (let i = 0; i < pagesPerSheet; i++) {
-            const pageIndex = sheet * pagesPerSheet + i;
-            if (pageIndex < pageCount) {
-                await drawPageOnSheet(inputPdf, outputPdf, newPage, pageIndex, i, targetWidth, targetHeight);
+        if (pageCount <= 6) {
+            if (sheet === 0) {
+                // Blatt 1: Seiten 6, 1, 5 auf Vorderseite; Seiten 2, 3, 4 auf Rückseite
+                let pageIndexLeft = 5; // Seite 6
+                let pageIndexCenter = 0; // Seite 1
+                let pageIndexRight = 4; // Seite 5
+                
+                await drawPageOnSheet(inputPdf, outputPdf, newPage, pageIndexLeft, 0, targetWidth, targetHeight, 'dl'); // Links
+                await drawPageOnSheet(inputPdf, outputPdf, newPage, pageIndexCenter, 1, targetWidth, targetHeight, 'dl'); // Mitte
+                await drawPageOnSheet(inputPdf, outputPdf, newPage, pageIndexRight, 2, targetWidth, targetHeight, 'dl'); // Rechts
+                
+                const newPageBack = outputPdf.addPage(outputPageSize);
+                console.log(`Neue Rückseite zum Ausgabe-PDF hinzugefügt für Blatt ${sheet + 1}`);
+                
+                pageIndexLeft = 1; // Seite 2
+                pageIndexCenter = 2; // Seite 3
+                pageIndexRight = 3; // Seite 4
+                
+                await drawPageOnSheet(inputPdf, outputPdf, newPageBack, pageIndexLeft, 0, targetWidth, targetHeight, 'dl'); // Links
+                await drawPageOnSheet(inputPdf, outputPdf, newPageBack, pageIndexCenter, 1, targetWidth, targetHeight, 'dl'); // Mitte
+                await drawPageOnSheet(inputPdf, outputPdf, newPageBack, pageIndexRight, 2, targetWidth, targetHeight, 'dl'); // Rechts
+            } else {
+                // Falls mehr als 6 Seiten vorhanden sind
+                // Hier würde man zusätzliche Logik für mehr Blätter hinzufügen
             }
         }
     }
@@ -2230,71 +2250,89 @@ async function createA5orA4SchmalBrochure(inputPdf, outputPdf, pageCount, format
     const pagesPerSheet = 2;
     let sheetsNeeded = Math.ceil(pageCount / pagesPerSheet);
     
-    if (pageCount <= 4) {
-        // Logik für 1-4 Seiten
+    if (pageCount <= 8) {
         if (pageCount === 1) {
             const newPage = outputPdf.addPage(outputPageSize);
-            console.log(`Neue Seite zum Ausgabe-PDF hinzugefügt für 1 Seite`);
-            await drawPageOnSheet(inputPdf, outputPdf, newPage, 0, 1, targetWidth, targetHeight, format);
-            console.log(`Seite 1 gezeichnet`);
+            await drawPageOnSheet(inputPdf, outputPdf, newPage, 0, 0, targetWidth, targetHeight, format);
         } else if (pageCount === 2) {
             const newPage = outputPdf.addPage(outputPageSize);
-            console.log(`Neue Seite zum Ausgabe-PDF hinzugefügt für 2 Seiten`);
-            await drawPageOnSheet(inputPdf, outputPdf, newPage, 0, 1, targetWidth, targetHeight, format);
-            await drawPageOnSheet(inputPdf, outputPdf, newPage, 1, 0, targetWidth, targetHeight, format);
-            console.log(`Seiten 1 und 2 auf einem Blatt gezeichnet`);
+            await drawPageOnSheet(inputPdf, outputPdf, newPage, 0, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, newPage, 1, 1, targetWidth, targetHeight, format);
         } else if (pageCount === 3) {
             const firstPage = outputPdf.addPage(outputPageSize);
-            console.log(`Erste Seite zum Ausgabe-PDF hinzugefügt für 3 Seiten`);
-            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 2, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, -1, 0, targetWidth, targetHeight, format); // Leere Seite
             await drawPageOnSheet(inputPdf, outputPdf, firstPage, 0, 1, targetWidth, targetHeight, format);
-            console.log(`Seiten 3 und 1 auf erster Ausgabeseite gezeichnet`);
             
             const secondPage = outputPdf.addPage(outputPageSize);
-            console.log(`Zweite Seite zum Ausgabe-PDF hinzugefügt für 3 Seiten`);
-            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 1, 1, targetWidth, targetHeight, format);
-            console.log(`Seite 2 auf zweiter Ausgabeseite gezeichnet`);
-        } else if (pageCount === 4) {
-            const firstPage = outputPdf.addPage(outputPageSize);
-            console.log(`Erste Seite zum Ausgabe-PDF hinzugefügt für 4 Seiten`);
-            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 3, 0, targetWidth, targetHeight, format);
-            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 0, 1, targetWidth, targetHeight, format);
-            console.log(`Seiten 4 und 1 auf erster Ausgabeseite gezeichnet`);
-            
-            const secondPage = outputPdf.addPage(outputPageSize);
-            console.log(`Zweite Seite zum Ausgabe-PDF hinzugefügt für 4 Seiten`);
             await drawPageOnSheet(inputPdf, outputPdf, secondPage, 2, 0, targetWidth, targetHeight, format);
             await drawPageOnSheet(inputPdf, outputPdf, secondPage, 1, 1, targetWidth, targetHeight, format);
-            console.log(`Seiten 3 und 2 auf zweiter Ausgabeseite gezeichnet`);
-        }
-    } else {
-        // Logik für 5 oder mehr Seiten
-        for (let sheet = 0; sheet < sheetsNeeded; sheet++) {
-            const newPage = outputPdf.addPage(outputPageSize);
-            console.log(`Neue Seite zum Ausgabe-PDF hinzugefügt für Blatt ${sheet + 1}`);
+        } else if (pageCount === 4) {
+            const firstPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 3, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 0, 1, targetWidth, targetHeight, format);
             
-            for (let i = 0; i < pagesPerSheet; i++) {
-                let pageIndex;
-                
-                if (sheet === 0) {
-                    // Erstes Blatt: Letzte Seite oben, erste Seite unten
-                    pageIndex = i === 0 ? pageCount - 1 : 0;
-                } else {
-                    // Folgende Blätter: Aufsteigende Seitenzahlen
-                    pageIndex = (sheet - 1) * 2 + i + 1;
-                }
-                
-                if (pageIndex < pageCount) {
-                    await drawPageOnSheet(inputPdf, outputPdf, newPage, pageIndex, i, targetWidth, targetHeight, format);
-                    console.log(`Seite ${pageIndex + 1} auf Position ${i + 1} von Blatt ${sheet + 1} gezeichnet`);
-                } else {
-                    console.log(`Leere Seite auf Position ${i + 1} von Blatt ${sheet + 1}`);
-                }
-            }
+            const secondPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 1, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 2, 1, targetWidth, targetHeight, format);
+        } else if (pageCount === 5) {
+            const firstPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 3, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 0, 1, targetWidth, targetHeight, format);
+            
+            const secondPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 1, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 2, 1, targetWidth, targetHeight, format);
+            
+            const thirdPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, thirdPage, 4, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, thirdPage, -1, 1, targetWidth, targetHeight, format); // Leere Seite
+        } else if (pageCount === 6) {
+            const firstPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 5, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 0, 1, targetWidth, targetHeight, format);
+            
+            const secondPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 1, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 2, 1, targetWidth, targetHeight, format);
+            
+            const thirdPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, thirdPage, 4, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, thirdPage, 3, 1, targetWidth, targetHeight, format);
+        } else if (pageCount === 7) {
+            const firstPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 6, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 0, 1, targetWidth, targetHeight, format);
+            
+            const secondPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 1, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 2, 1, targetWidth, targetHeight, format);
+            
+            const thirdPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, thirdPage, 4, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, thirdPage, 3, 1, targetWidth, targetHeight, format);
+            
+            const fourthPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, fourthPage, 7, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, fourthPage, -1, 1, targetWidth, targetHeight, format); // Leere Seite
+        } else if (pageCount === 8) {
+            const firstPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 7, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, firstPage, 0, 1, targetWidth, targetHeight, format);
+            
+            const secondPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 1, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, secondPage, 6, 1, targetWidth, targetHeight, format);
+            
+            const thirdPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, thirdPage, 5, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, thirdPage, 2, 1, targetWidth, targetHeight, format);
+            
+            const fourthPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheet(inputPdf, outputPdf, fourthPage, 3, 0, targetWidth, targetHeight, format);
+            await drawPageOnSheet(inputPdf, outputPdf, fourthPage, 4, 1, targetWidth, targetHeight, format);
         }
     }
 }
-
 async function drawPageOnSheet(inputPdf, outputPdf, newPage, pageIndex, position, targetWidth, targetHeight, format) {
     console.log(`Verarbeite Seite ${pageIndex + 1} für Position ${position + 1}`);
     try {
@@ -2331,8 +2369,8 @@ function getPositionOnSheet(position, targetWidth, targetHeight, sheetWidth, she
         };
     } else if (format === 'a4-schmal') {
         return {
-            x: 0,
-            y: position === 0 ? sheetHeight / 2 : 0
+            x: position === 0 ? 0 : sheetWidth / 2,
+            y: 0
         };
     }
 }
@@ -2370,32 +2408,6 @@ function getPagesPerSheet(format) {
         'a4-schmal': 2
     }[format] || 2;
 }
-
-//function getPageIndexForBrochure(sheet, position, totalPages, format) {
-//  const pagesPerSheet = getPagesPerSheet(format);
-//  const totalSheets = Math.ceil(totalPages / pagesPerSheet);
-//  
-//  let pageIndex;
-//  if (format === 'dl') {
-//      // Spezielle Logik für DIN lang
-//      const pageOrder = [5, 0, 1, 4, 3, 2];
-//      pageIndex = sheet * 6 + pageOrder[position];
-//  } else if (format === 'a5') {
-//      if (sheet % 2 === 0) { // Vorderseite
-//          pageIndex = position === 0 ? totalPages - 1 - sheet : sheet;
-//      } else { // Rückseite
-//          pageIndex = position === 0 ? sheet : totalPages - 2 - sheet;
-//      }
-//  } else { // a4-schmal
-//      if (sheet % 2 === 0) { // Vorderseite
-//          pageIndex = position === 0 ? totalPages - 1 - sheet : sheet;
-//      } else { // Rückseite
-//          pageIndex = position === 0 ? sheet : totalPages - 1 - sheet;
-//      }
-//  }
-//  
-//  return pageIndex >= 0 && pageIndex < totalPages ? pageIndex : null;
-//}
 
 window.onclick = function(event) {
     if (event.target.classList.contains('modal')) {
