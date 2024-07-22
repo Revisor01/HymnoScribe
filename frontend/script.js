@@ -937,7 +937,7 @@ function updateLiedblatt() {
             return; // Fügen Sie nichts weiteres für den Seitenumbruch hinzu
         }
         if (objekt.typ === 'Psalm') {
-            content.style.textAlign = 'left';
+            //content.style.textAlign = 'left';
         }
         if (objekt.typ === 'CustomImage') {
             const imgSrc = getImagePath(objekt, 'customImage');
@@ -1007,9 +1007,10 @@ function updateLiedblatt() {
                 content.appendChild(editorContent);
             }
         } else {
+            //Layout für Psalm
             let objektContent = objekt.inhalt;
             if (objektContent) {
-                objektContent = objektContent.replace(/<p class="ql-indent-1">/g, '<p style="padding-left: 2em;">')
+                objektContent = objektContent.replace(/<p class="ql-indent-1">/g, '<p style="font-weight: bold;">')
                 .replace(/<p class="ql-indent-2">/g, '<p style="padding-left: 4em;">')
                 .replace(/<p class="ql-indent-3">/g, '<p style="padding-left: 6em;">');
                 content.innerHTML += objektContent;
