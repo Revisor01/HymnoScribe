@@ -2305,26 +2305,26 @@ async function createDinLangBrochure(inputPdf, outputPdf, pageCount, targetWidth
             await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 0, 0, targetWidth, targetHeight);
         } else if (pageCount === 2) {
             const newPage = outputPdf.addPage(outputPageSize);
-            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 1, 0, targetWidth, targetHeight);
-            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 0, 1, targetWidth, targetHeight);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 0, 0, targetWidth, targetHeight);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 1, 1, targetWidth, targetHeight);
         } else if (pageCount === 3) {
             const newPage = outputPdf.addPage(outputPageSize);
-            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 1, 0, targetWidth, targetHeight);
-            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 2, 1, targetWidth, targetHeight);
-            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 0, 2, targetWidth, targetHeight);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 0, 0, targetWidth, targetHeight);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 1, 1, targetWidth, targetHeight);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 2, 2, targetWidth, targetHeight);
         } else if (pageCount >= 4) {
+            const secondPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, secondPage, 0, 2, targetWidth, targetHeight);
             const firstPage = outputPdf.addPage(outputPageSize);
             await drawPageOnSheetForDinLang(inputPdf, outputPdf, firstPage, 1, 0, targetWidth, targetHeight);
             await drawPageOnSheetForDinLang(inputPdf, outputPdf, firstPage, 2, 1, targetWidth, targetHeight);
             await drawPageOnSheetForDinLang(inputPdf, outputPdf, firstPage, 3, 2, targetWidth, targetHeight);
-            
-            const secondPage = outputPdf.addPage(outputPageSize);
-            await drawPageOnSheetForDinLang(inputPdf, outputPdf, secondPage, 0, 0, targetWidth, targetHeight);
+
             if (pageCount >= 5) {
-                await drawPageOnSheetForDinLang(inputPdf, outputPdf, secondPage, 4, 1, targetWidth, targetHeight);
+                await drawPageOnSheetForDinLang(inputPdf, outputPdf, secondPage, 4, 0, targetWidth, targetHeight);
             }
             if (pageCount === 6) {
-                await drawPageOnSheetForDinLang(inputPdf, outputPdf, secondPage, 5, 2, targetWidth, targetHeight);
+                await drawPageOnSheetForDinLang(inputPdf, outputPdf, secondPage, 5, 1, targetWidth, targetHeight);
             }
         }
     } else {
