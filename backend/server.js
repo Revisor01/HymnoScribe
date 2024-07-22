@@ -17,14 +17,25 @@ app.use((req, res, next) => {
 // Multer-Setup für das Hochladen von Dateien
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        const uploadPath = path.join(__dirname, 'uploads', 'logos');
+        let uploadPath;
+        if (file.fieldname === 'churchLogo') {
+            uploadPath = path.join(__dirname, 'uploads', 'logos');
+        } else if (req.body.typ === 'Liturgie') {
+            uploadPath = path.join(__dirname, 'uploads', 'liturgie');
+        } else {
+            uploadPath = path.join(__dirname, 'uploads', 'noten');
+        }
         fs.mkdirSync(uploadPath, { recursive: true });
         cb(null, uploadPath);
     },
     filename: function (req, file, cb) {
-        // Behalten Sie den Originaldateinamen bei, fügen Sie einen Zeitstempel hinzu, um Überschreibungen zu vermeiden
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+        if (file.fieldname === 'churchLogo') {
+            cb(null, file.originalname);
+        } else {
+            const titel = req.body.titel.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            const suffix = file.fieldname === 'notenbild' ? '_ohne' : '';
+            cb(null, `${titel}${suffix}${path.extname(file.originalname)}`);
+        }
     }
 });
 
@@ -156,12 +167,13 @@ async function startServer() {
             let notenbild = existingObjekt[0].notenbild;
             let notenbildMitText = existingObjekt[0].notenbildMitText;
             
-            // Überprüfen Sie, ob neue Dateien hochgeladen wurden
             if (req.files && req.files['notenbild']) {
-                notenbild = req.files['notenbild'][0].path;
+                const uploadDir = req.body.typ === 'Liturgie' ? 'uploads/liturgie/' : 'uploads/noten/';
+                notenbild = uploadDir + path.basename(req.files['notenbild'][0].path);
             }
             if (req.files && req.files['notenbildMitText']) {
-                notenbildMitText = req.files['notenbildMitText'][0].path;
+                const uploadDir = req.body.typ === 'Liturgie' ? 'uploads/liturgie/' : 'uploads/noten/';
+                notenbildMitText = uploadDir + path.basename(req.files['notenbildMitText'][0].path);
             }
             
             // Wenn die Felder im Formular leer sind, setzen Sie die Werte auf null

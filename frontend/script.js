@@ -12,11 +12,6 @@ let globalConfig = {
 function updateGlobalConfig(newConfig) {
     console.log("Updating global config with:", newConfig);
     
-    // Entferne das Base64-Bild aus newConfig, falls vorhanden
-    if (newConfig.churchLogo && newConfig.churchLogo.startsWith('data:image')) {
-        delete newConfig.churchLogo;
-    }
-    
     // Aktualisiere globalConfig mit newConfig
     Object.assign(globalConfig, newConfig);
     
@@ -54,6 +49,7 @@ function updateGlobalConfig(newConfig) {
     console.log("Updated global config:", globalConfig);
 }
 
+
 function updateAndSaveConfig(newConfig) {
     console.log("Updating global config with:", newConfig);
     
@@ -74,7 +70,31 @@ function applyConfigChanges() {
     // Schließe das Konfigurationsmodal
     document.getElementById('config-modal').style.display = 'none';
 }
-
+function getImagePath(objekt, imageType) {
+    const basePath = 'http://localhost:3000/';
+    let imagePath;
+    
+    if (imageType === 'notenbild') {
+        imagePath = objekt.notenbild;
+    } else if (imageType === 'notenbildMitText') {
+        imagePath = objekt.notenbildMitText;
+    } else if (imageType === 'logo') {
+        imagePath = objekt.churchLogo;
+    }
+    
+    if (!imagePath) return null;
+    
+    // Entfernen Sie führende Schrägstriche
+    imagePath = imagePath.replace(/^\/+/, '');
+    
+    // Wenn der Pfad bereits vollständig ist, geben wir ihn direkt zurück
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+        return imagePath;
+    }
+    
+    // Ansonsten fügen wir den Basispfad hinzu
+    return basePath + imagePath;
+}
 function updateLiedblattStyle() {
     const liedblatt = document.getElementById('liedblatt-content');
     liedblatt.style.fontFamily = globalConfig.fontFamily;
@@ -157,10 +177,13 @@ async function loadObjekte() {
         }
         alleObjekte = await response.json();
         console.log('Geladene Objekte:', alleObjekte); // Debugging
+        
+        // Wir müssen die Bildpfade hier nicht mehr anpassen, da getImagePath das jetzt übernimmt
+        
         filterPoolItems();
     } catch (error) {
         console.error('Fehler beim Laden der Objekte:', error);
-        alert('Fehler beim Laden der Objekte: ' + error.message);
+        await customAlert('Fehler beim Laden der Objekte: ' + error.message);
     }
 }
 
@@ -882,10 +905,9 @@ function updateLiedblatt() {
             const noteType = selected.querySelector('input[name^="noteType"]:checked')?.value;
             
             if (showNotes && noteType) {
-                const imgSrc = noteType === 'with' ? objekt.notenbildMitText : objekt.notenbild;
+                const imgSrc = noteType === 'with' ? getImagePath(objekt, 'notenbildMitText') : getImagePath(objekt, 'notenbild');
                 if (imgSrc) {
-                    const fullImgSrc = imgSrc.startsWith('http') ? imgSrc : `http://localhost:3000/${imgSrc}`;
-                    content.innerHTML += `<img src="${fullImgSrc}" alt="Noten">`;
+                    content.innerHTML += `<img src="${imgSrc}" alt="Noten">`;
                 }
             }
             

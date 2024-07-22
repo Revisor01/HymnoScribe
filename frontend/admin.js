@@ -33,7 +33,9 @@ function toggleLiedFelder() {
         if (editorContainer) editorContainer.style.display = 'none';
         if (strophenContainer) {
             strophenContainer.innerHTML = '';
-            addStrophe();
+            if (strophenEditors.length === 0) {
+                addStrophe();
+            }
         }
     } else {
         if (liedFelder) liedFelder.style.display = 'none';
@@ -210,14 +212,6 @@ async function handleFormSubmit(e) {
         const strophen = strophenEditors.map(editor => editor.root.innerHTML);
         objektData.strophen = JSON.stringify(strophen);
         objektData.inhalt = JSON.stringify({typ: objektData.typ});
-        
-        if (objektId) {
-            const existingObjekt = alleObjekte.find(obj => obj.id === parseInt(objektId));
-            if (existingObjekt) {
-                objektData.notenbild = existingObjekt.notenbild || null;
-                objektData.notenbildMitText = existingObjekt.notenbildMitText || null;
-            }
-        }
     } else {
         objektData.inhalt = quill ? quill.root.innerHTML : '';
     }
@@ -414,13 +408,13 @@ function editObjekt(id) {
             document.getElementById('notesWithText').checked = true;
         }
         if (objekt.notenbild) {
-            document.getElementById('currentNotenbild').src = `http://localhost:3000/${objekt.notenbild}`;
+            document.getElementById('currentNotenbild').src = getImagePath(objekt, 'notenbild');
             document.getElementById('currentNotenbild').style.display = 'block';
         } else {
             document.getElementById('currentNotenbild').style.display = 'none';
         }
         if (objekt.notenbildMitText) {
-            document.getElementById('currentNotenbildMitText').src = `http://localhost:3000/${objekt.notenbildMitText}`;
+            document.getElementById('currentNotenbildMitText').src = getImagePath(objekt, 'notenbildMitText');
             document.getElementById('currentNotenbildMitText').style.display = 'block';
         } else {
             document.getElementById('currentNotenbildMitText').style.display = 'none';
@@ -433,6 +427,32 @@ function editObjekt(id) {
     }
     
     updatePreview();
+}
+
+function getImagePath(objekt, imageType) {
+    const basePath = 'http://localhost:3000/';
+    let imagePath;
+    
+    if (imageType === 'notenbild') {
+        imagePath = objekt.notenbild;
+    } else if (imageType === 'notenbildMitText') {
+        imagePath = objekt.notenbildMitText;
+    } else if (imageType === 'logo') {
+        imagePath = objekt.churchLogo;
+    }
+    
+    if (!imagePath) return null;
+    
+    // Entfernen Sie führende Schrägstriche
+    imagePath = imagePath.replace(/^\/+/, '');
+    
+    // Wenn der Pfad bereits vollständig ist, geben wir ihn direkt zurück
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+        return imagePath;
+    }
+    
+    // Ansonsten fügen wir den Basispfad hinzu
+    return basePath + imagePath;
 }
 
 function customAlert(message) {
