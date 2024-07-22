@@ -2211,16 +2211,48 @@ async function createBrochure(inputPdfBytes, format) {
 
 async function createDinLangBrochure(inputPdf, outputPdf, pageCount, targetWidth, targetHeight, outputPageSize) {
     const pagesPerSheet = 3;
-    const sheetsNeeded = Math.ceil(pageCount / pagesPerSheet);
     
-    for (let sheet = 0; sheet < sheetsNeeded; sheet++) {
-        const newPage = outputPdf.addPage(outputPageSize);
-        console.log(`Neue Seite zum Ausgabe-PDF hinzugefügt für Blatt ${sheet + 1}`);
+    if (pageCount <= 6) {
+        if (pageCount === 1) {
+            const newPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 0, 0, targetWidth, targetHeight);
+        } else if (pageCount === 2) {
+            const newPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 1, 0, targetWidth, targetHeight);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 0, 1, targetWidth, targetHeight);
+        } else if (pageCount === 3) {
+            const newPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 1, 0, targetWidth, targetHeight);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 2, 1, targetWidth, targetHeight);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, 0, 2, targetWidth, targetHeight);
+        } else if (pageCount >= 4) {
+            const firstPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, firstPage, 1, 0, targetWidth, targetHeight);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, firstPage, 2, 1, targetWidth, targetHeight);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, firstPage, 3, 2, targetWidth, targetHeight);
+            
+            const secondPage = outputPdf.addPage(outputPageSize);
+            await drawPageOnSheetForDinLang(inputPdf, outputPdf, secondPage, 0, 0, targetWidth, targetHeight);
+            if (pageCount >= 5) {
+                await drawPageOnSheetForDinLang(inputPdf, outputPdf, secondPage, 4, 1, targetWidth, targetHeight);
+            }
+            if (pageCount === 6) {
+                await drawPageOnSheetForDinLang(inputPdf, outputPdf, secondPage, 5, 2, targetWidth, targetHeight);
+            }
+        }
+    } else {
+        // Für mehr als 6 Seiten verwenden wir eine allgemeine Logik
+        const sheetsNeeded = Math.ceil(pageCount / pagesPerSheet);
         
-        for (let i = 0; i < pagesPerSheet; i++) {
-            const pageIndex = sheet * pagesPerSheet + i;
-            if (pageIndex < pageCount) {
-                await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, pageIndex, i, targetWidth, targetHeight);
+        for (let sheet = 0; sheet < sheetsNeeded; sheet++) {
+            const newPage = outputPdf.addPage(outputPageSize);
+            console.log(`Neue Seite zum Ausgabe-PDF hinzugefügt für Blatt ${sheet + 1}`);
+            
+            for (let i = 0; i < pagesPerSheet; i++) {
+                const pageIndex = sheet * pagesPerSheet + i;
+                if (pageIndex < pageCount) {
+                    await drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, pageIndex, i, targetWidth, targetHeight);
+                }
             }
         }
     }
