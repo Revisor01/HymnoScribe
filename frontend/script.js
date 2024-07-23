@@ -1742,11 +1742,14 @@ const pageSizes = {
 const PX_TO_PT_RATIO = 0.75;
 const pxToPt = (px) => px * PX_TO_PT_RATIO;
 
+const baseFontSize = 12; // Basis-Schriftgröße, von der wir ausgehen
+const scaleFactor = globalConfig.fontSize / baseFontSize;
+
 const headingStyles = {
-    title: { fontSize: pxToPt(22), bold: true, lineHeight: 1.1, spacingBefore: pxToPt(10), spacingAfter: pxToPt(3) },
-    subtitle: { fontSize: pxToPt(16), lineHeight: 1.1, spacingBefore: pxToPt(10), spacingAfter: pxToPt(10)},
-    heading: { fontSize: pxToPt(14), bold: true, lineHeight: 1.1, spacingBefore: pxToPt(10), spacingAfter: pxToPt(10) },
-    bodyText: { fontSize: pxToPt(12), lineHeight: 1.2, spacingBefore: pxToPt(10), spacingAfter: pxToPt(10) }
+    title: { fontSize: globalConfig.fontSize * 1.8, bold: true, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 3 },
+    subtitle: { fontSize: globalConfig.fontSize * 1.3, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 10},
+    heading: { fontSize: globalConfig.fontSize * 1.2, bold: true, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 10 },
+    bodyText: { fontSize: globalConfig.fontSize, lineHeight: 1.2, spacingBefore: 10, spacingAfter: 10 }
 };
 
 async function generatePDF(format) {
@@ -2120,7 +2123,15 @@ async function generatePDF(format) {
             const strophen = Array.from(item.children).filter(child => child.tagName === 'P');
             
             // Zeichne den Titel
-            y -= await drawText(title.textContent, margin.left, y, headingStyles.heading.fontSize, contentWidth, { bold: true, alignment: 'center' });
+            y -= headingStyles.heading.spacingBefore;
+            await drawText(title.textContent, margin.left, y, headingStyles.heading.fontSize, contentWidth, { bold: true, alignment: 'center' });
+            y -= headingStyles.heading.fontSize * headingStyles.heading.lineHeight + headingStyles.heading.spacingAfter;
+
+            // Zeichne das Copyright, falls vorhanden
+            if (copyright) {
+                await drawText(copyright.textContent, margin.left, y, 8, contentWidth, { alignment: 'left' });
+                y -= 8 * 1.2; // Ein bisschen Abstand nach dem Copyright
+            }
             
             // Zeichne die Noten, falls vorhanden
             if (notes) {
@@ -2174,9 +2185,9 @@ async function generatePDF(format) {
                 } else {
                     let fontSize = globalConfig.fontSize;
                     let isHeading = false;
-                    if (element.tagName === 'H1') { fontSize = headingStyles.title.fontSize; isHeading = true; headingSpacing = 10; } // Abstand bei Überschriften
-                    if (element.tagName === 'H2') { fontSize = headingStyles.subtitle.fontSize; isHeading = true; headingSpacing = 10; }
-                    if (element.tagName === 'H3') { fontSize = headingStyles.heading.fontSize; isHeading = true; headingSpacing = 10; }
+                    if (element.tagName === 'H1') { fontSize = globalConfig.fontSize * 1.8; isHeading = true; headingSpacing = 10; } // Abstand bei Überschriften
+                    if (element.tagName === 'H2') { fontSize = globalConfig.fontSize * 1.6; isHeading = true; headingSpacing = 10; }
+                    if (element.tagName === 'H3') { fontSize = globalConfig.fontSize * 1.3; isHeading = true; headingSpacing = 10; }
                     let options = {
                         bold: element.tagName === 'STRONG' || window.getComputedStyle(element).fontWeight === 'bold' || parseInt(window.getComputedStyle(element).fontWeight) >= 700,
                         italic: element.tagName === 'EM' || window.getComputedStyle(element).fontStyle === 'italic',
