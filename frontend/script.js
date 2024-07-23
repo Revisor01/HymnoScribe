@@ -1871,7 +1871,16 @@ async function generatePDF(format) {
             const logoResponse = await fetch(logoUrl);
             if (!logoResponse.ok) throw new Error(`HTTP error! Status: ${logoResponse.status}`);
             const logoArrayBuffer = await logoResponse.arrayBuffer();
-            logoImage = await doc.embedPng(logoArrayBuffer);
+            
+            const logoType = getImageType(logoArrayBuffer);
+            
+            if (logoType === 'png') {
+                logoImage = await doc.embedPng(logoArrayBuffer);
+            } else if (logoType === 'jpeg') {
+                logoImage = await doc.embedJpg(logoArrayBuffer);
+            } else {
+                throw new Error('Unsupported logo image type');
+            }
             
             console.log("Church logo embedded successfully");
         } catch (error) {
@@ -1879,6 +1888,20 @@ async function generatePDF(format) {
         }
     } else {
         console.log("No church logo path found in global config");
+    }
+    
+    function getImageType(arrayBuffer) {
+        const uint8Array = new Uint8Array(arrayBuffer);
+        const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+        const jpegSignature = [255, 216, 255];
+        
+        if (pngSignature.every((byte, index) => uint8Array[index] === byte)) {
+            return 'png';
+        } else if (jpegSignature.every((byte, index) => uint8Array[index] === byte)) {
+            return 'jpeg';
+        } else {
+            return 'unknown';
+        }
     }
     
     function addLogoToPage(page) {
@@ -2015,7 +2038,16 @@ async function generatePDF(format) {
         try {
             const response = await fetch(imgSrc);
             const imgArrayBuffer = await response.arrayBuffer();
-            let img = await doc.embedPng(imgArrayBuffer);
+            const imgType = getImageType(imgArrayBuffer);
+            
+            let img;
+            if (imgType === 'png') {
+                img = await doc.embedPng(imgArrayBuffer);
+            } else if (imgType === 'jpeg') {
+                img = await doc.embedJpg(imgArrayBuffer);
+            } else {
+                throw new Error('Unsupported image type');
+            }
             
             const scaledDims = img.scale(imgWidth / img.width);
             
@@ -2030,6 +2062,20 @@ async function generatePDF(format) {
         } catch (error) {
             console.error("Error embedding image:", error);
             return 0;
+        }
+    }
+    
+    function getImageType(arrayBuffer) {
+        const uint8Array = new Uint8Array(arrayBuffer);
+        const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+        const jpegSignature = [255, 216, 255];
+        
+        if (pngSignature.every((byte, index) => uint8Array[index] === byte)) {
+            return 'png';
+        } else if (jpegSignature.every((byte, index) => uint8Array[index] === byte)) {
+            return 'jpeg';
+        } else {
+            return 'unknown';
         }
     }
     

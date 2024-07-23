@@ -176,8 +176,12 @@ async function startServer() {
             console.log('Received files:', req.files);
             
             const { typ, titel, inhalt, strophen, copyright } = req.body;
-            const notenbild = req.files && req.files['notenbild'] ? req.files['notenbild'][0].path : null;
-            const notenbildMitText = req.files && req.files['notenbildMitText'] ? req.files['notenbildMitText'][0].path : null;
+            const notenbild = req.files && req.files['notenbild'] 
+            ? path.join('/uploads', path.relative(path.join(__dirname, 'uploads'), req.files['notenbild'][0].path))
+            : null;
+            const notenbildMitText = req.files && req.files['notenbildMitText']
+            ? path.join('/uploads', path.relative(path.join(__dirname, 'uploads'), req.files['notenbildMitText'][0].path))
+            : null;
             
             console.log('Prepared data:', { typ, titel, inhalt, strophen, notenbild, notenbildMitText, copyright });
             
@@ -231,10 +235,10 @@ async function startServer() {
             let notenbildMitText = existingObjekt[0].notenbildMitText;
             
             if (req.files && req.files['notenbild']) {
-                notenbild = req.files['notenbild'][0].path;
+                notenbild = path.join('/uploads', path.relative(path.join(__dirname, 'uploads'), req.files['notenbild'][0].path));
             }
             if (req.files && req.files['notenbildMitText']) {
-                notenbildMitText = req.files['notenbildMitText'][0].path;
+                notenbildMitText = path.join('/uploads', path.relative(path.join(__dirname, 'uploads'), req.files['notenbildMitText'][0].path));
             }
             
             const query = 'UPDATE objekte SET typ = ?, titel = ?, inhalt = ?, strophen = ?, notenbild = ?, notenbildMitText = ?, copyright = ? WHERE id = ?';
