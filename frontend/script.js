@@ -534,6 +534,14 @@ function addToSelected(objekt) {
             const showNotesCheckbox = liedOptions.querySelector('input[type="checkbox"]');
             if (showNotesCheckbox) showNotesCheckbox.checked = objekt.showNotes;
         }
+        if (objekt.copyright) {
+            const copyrightDiv = document.createElement('div');
+            copyrightDiv.classList.add('copyright-info');
+            copyrightDiv.textContent = `© ${objekt.copyright}`;
+            copyrightDiv.style.fontSize = '10px';
+            copyrightDiv.style.color = '#666';
+            newItem.appendChild(copyrightDiv);
+        }
         if (objekt.noteType) {
             const noteTypeRadio = liedOptions.querySelector(`input[name^="noteType"][value="${objekt.noteType}"]`);
             if (noteTypeRadio) noteTypeRadio.checked = true;
@@ -963,7 +971,14 @@ function updateLiedblatt() {
             const selectedStrophen = Array.from(selected.querySelectorAll('.strophen-container input:checked')).map(cb => parseInt(cb.value));
             const showNotes = selected.querySelector('input[type="checkbox"]').checked;
             const noteType = selected.querySelector('input[name^="noteType"]:checked')?.value;
-            
+            if (objekt.copyright) {
+                const copyrightElement = document.createElement('p');
+                copyrightElement.textContent = `© ${objekt.copyright}`;
+                copyrightElement.style.fontSize = '8pt';
+                copyrightElement.style.color = '#666';
+                copyrightElement.style.marginTop = '0';
+                content.appendChild(copyrightElement);
+            }
             if (showNotes && noteType) {
                 const imgSrc = noteType === 'with' ? getImagePath(objekt, 'notenbildMitText') : getImagePath(objekt, 'notenbild');
                 if (imgSrc) {

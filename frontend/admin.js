@@ -66,12 +66,14 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 function toggleLiedFelder() {
     const liedFelder = document.getElementById('liedFelder');
+    const copyrightField = document.getElementById('copyrightField');
     const editorContainer = document.getElementById('editor-container');
     const strophenContainer = document.getElementById('strophenContainer');
     const typ = this.value || document.getElementById('typ').value;
     
     if (typ === 'Lied' || typ === 'Liturgie') {
         if (liedFelder) liedFelder.style.display = 'block';
+        if (copyrightField) copyrightField.style.display = 'block';
         if (editorContainer) editorContainer.style.display = 'none';
         if (strophenContainer) {
             strophenContainer.innerHTML = '';
@@ -81,6 +83,7 @@ function toggleLiedFelder() {
         }
     } else {
         if (liedFelder) liedFelder.style.display = 'none';
+        if (copyrightField) copyrightField.style.display = 'none';
         if (strophenContainer) strophenContainer.innerHTML = '';
         strophenEditors = [];
         initializeQuillEditor();
@@ -245,7 +248,8 @@ async function handleFormSubmit(e) {
         inhalt: null,
         strophen: null,
         notenbild: null,
-        notenbildMitText: null
+        notenbildMitText: null,
+        copyright: document.getElementById('copyright').value
     };
     
     console.log('Initial objektData:', JSON.stringify(objektData));
@@ -350,6 +354,7 @@ function updatePreview() {
 function resetForm() {
     document.getElementById('objektForm').reset();
     document.getElementById('objektId').value = '';
+    document.getElementById('copyright').value = '';
     document.getElementById('strophenContainer').innerHTML = '';
     strophenEditors = [];
     document.getElementById('currentNotenbild').style.display = 'none';
@@ -401,6 +406,7 @@ function editObjekt(id) {
     document.getElementById('objektId').value = objekt.id;
     document.getElementById('typ').value = objekt.typ;
     document.getElementById('titel').value = objekt.titel;
+    document.getElementById('copyright').value = objekt.copyright || '';
     
     toggleLiedFelder.call(document.getElementById('typ'));
     

@@ -126,9 +126,17 @@ async function initializeDatabase() {
                 inhalt LONGTEXT,
                 notenbild VARCHAR(255),
                 notenbildMitText VARCHAR(255),
-                strophen JSON
+                strophen JSON,
+                copyright VARCHAR(255)
             )
         `);
+        
+        // Überprüfen, ob die copyright-Spalte bereits existiert, falls nicht, fügen wir sie hinzu
+        const [columns] = await connection.execute("SHOW COLUMNS FROM objekte LIKE 'copyright'");
+        if (columns.length === 0) {
+            await connection.execute("ALTER TABLE objekte ADD COLUMN copyright VARCHAR(255)");
+            console.log('Copyright-Spalte zur objekte-Tabelle hinzugefügt.');
+        }
 
         await connection.execute(`
             CREATE TABLE IF NOT EXISTS sessions (
@@ -167,19 +175,18 @@ async function startServer() {
             console.log('Received request body:', req.body);
             console.log('Received files:', req.files);
             
-            const { typ, titel, inhalt, strophen } = req.body;
+            const { typ, titel, inhalt, strophen, copyright } = req.body;
             const notenbild = req.files && req.files['notenbild'] ? req.files['notenbild'][0].path : null;
             const notenbildMitText = req.files && req.files['notenbildMitText'] ? req.files['notenbildMitText'][0].path : null;
             
-            console.log('Prepared data:', { typ, titel, inhalt, strophen, notenbild, notenbildMitText });
+            console.log('Prepared data:', { typ, titel, inhalt, strophen, notenbild, notenbildMitText, copyright });
             
-            // Stellen Sie sicher, dass alle Werte definiert sind, bevor Sie sie an die Datenbank übergeben
             const safeInhalt = inhalt === undefined ? null : inhalt;
             const safeStrophen = strophen === undefined ? null : strophen;
             
             const [result] = await db.execute(
-                'INSERT INTO objekte (typ, titel, inhalt, notenbild, notenbildMitText, strophen) VALUES (?, ?, ?, ?, ?, ?)',
-                [typ, titel, safeInhalt, notenbild, notenbildMitText, safeStrophen]
+                'INSERT INTO objekte (typ, titel, inhalt, notenbild, notenbildMitText, strophen, copyright) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [typ, titel, safeInhalt, notenbild, notenbildMitText, safeStrophen, copyright]
             );
             
             console.log('Database insert result:', result);
@@ -209,29 +216,41 @@ async function startServer() {
     ]), async (req, res) => {
         try {
             const { id } = req.params;
-            const { typ, titel, inhalt, strophen } = req.body;
+            const { typ, titel, inhalt, strophen, copyright } = req.body;
+            
+            console.log('Empfangene Daten:', { id, typ, titel, inhalt, strophen, copyright });
             
             // Holen Sie das existierende Objekt aus der Datenbank
             const [existingObjekt] = await db.execute('SELECT * FROM objekte WHERE id = ?', [id]);
+            
+            if (existingObjekt.length === 0) {
+                return res.status(404).json({ message: 'Objekt nicht gefunden' });
+            }
             
             let notenbild = existingObjekt[0].notenbild;
             let notenbildMitText = existingObjekt[0].notenbildMitText;
             
             if (req.files && req.files['notenbild']) {
-                const uploadDir = req.body.typ === 'Liturgie' ? 'uploads/liturgie/' : 'uploads/noten/';
-                notenbild = uploadDir + path.basename(req.files['notenbild'][0].path);
+                notenbild = req.files['notenbild'][0].path;
             }
             if (req.files && req.files['notenbildMitText']) {
-                const uploadDir = req.body.typ === 'Liturgie' ? 'uploads/liturgie/' : 'uploads/noten/';
-                notenbildMitText = uploadDir + path.basename(req.files['notenbildMitText'][0].path);
+                notenbildMitText = req.files['notenbildMitText'][0].path;
             }
             
-            // Wenn die Felder im Formular leer sind, setzen Sie die Werte auf null
-            if (req.body.notenbild === '') notenbild = null;
-            if (req.body.notenbildMitText === '') notenbildMitText = null;
+            const query = 'UPDATE objekte SET typ = ?, titel = ?, inhalt = ?, strophen = ?, notenbild = ?, notenbildMitText = ?, copyright = ? WHERE id = ?';
+            const params = [
+                typ, 
+                titel, 
+                inhalt || null, 
+                strophen || null, 
+                notenbild, 
+                notenbildMitText, 
+                copyright || null,  // Erlaubt NULL, wenn kein Copyright angegeben ist
+                id
+            ];
             
-            const query = 'UPDATE objekte SET typ = ?, titel = ?, inhalt = ?, strophen = ?, notenbild = ?, notenbildMitText = ? WHERE id = ?';
-            const params = [typ, titel, inhalt || null, strophen || null, notenbild, notenbildMitText, id];
+            console.log('SQL Query:', query);
+            console.log('SQL Params:', params);
             
             const [result] = await db.execute(query, params);
             
@@ -240,11 +259,10 @@ async function startServer() {
             }
             res.json({ message: 'Objekt erfolgreich aktualisiert' });
         } catch (error) {
-            console.error('Fehler beim Aktualisieren des Objekts: ', error);
-            res.status(500).json({ error: 'Interner Serverfehler', details: error.message });
+            console.error('Detaillierter Fehler:', error);
+            res.status(500).json({ error: 'Interner Serverfehler', details: error.message, stack: error.stack });
         }
     });
-    
     app.delete('/objekte/:id', async (req, res) => {
         try {
             const { id } = req.params;
