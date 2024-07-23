@@ -67,6 +67,7 @@ function updateAndSaveConfig(newConfig) {
 
 function applyConfigChanges() {
     updateLiedblattStyle();
+    updateLiedblatt();
     // Schließe das Konfigurationsmodal
     document.getElementById('config-modal').style.display = 'none';
 }
@@ -1010,10 +1011,17 @@ function updateLiedblatt() {
             //Layout für Psalm
             let objektContent = objekt.inhalt;
             if (objektContent) {
+                if (globalConfig.textAlign === 'center') {
                 objektContent = objektContent.replace(/<p class="ql-indent-1">/g, '<p style="font-weight: bold;">')
                 .replace(/<p class="ql-indent-2">/g, '<p style="padding-left: 4em;">')
                 .replace(/<p class="ql-indent-3">/g, '<p style="padding-left: 6em;">');
                 content.innerHTML += objektContent;
+                } else if (globalConfig.textAlign === 'left'){
+                    objektContent = objektContent.replace(/<p class="ql-indent-1">/g, '<p style="padding-left: 2em;">')
+                    .replace(/<p class="ql-indent-2">/g, '<p style="padding-left: 4em;">')
+                    .replace(/<p class="ql-indent-3">/g, '<p style="padding-left: 6em;">');
+                    content.innerHTML += objektContent;
+                }
             }
         }
         
@@ -2089,20 +2097,21 @@ async function generatePDF(format) {
             y -= iconHeight + 20; // Abstand nach Icons
         } else {
             // Andere Elemente (Text, Überschriften, etc.)
-            const elements = item.querySelectorAll('h1, h2, h3, p, img');
+            const elements = item.querySelectorAll('h1, h2, h3, p, img, strong, em, u, img');
             for (const element of elements) {
                 if (element.tagName === 'IMG') {
                     const imgHeight = await drawImage(element.src, margin.left, y, contentWidth);
-                    y -= imgHeight + 10; // Zusätzlicher Abstand nach Bildern
+                    y -= imgHeight + 5; // Zusätzlicher Abstand nach Bildern
                 } else {
                     let fontSize = globalConfig.fontSize;
                     let isHeading = false;
                     if (element.tagName === 'H1') { fontSize = headingStyles.title.fontSize; isHeading = true; headingSpacing = 10; } // Abstand bei Überschriften
                     if (element.tagName === 'H2') { fontSize = headingStyles.subtitle.fontSize; isHeading = true; headingSpacing = 10; }
                     if (element.tagName === 'H3') { fontSize = headingStyles.heading.fontSize; isHeading = true; headingSpacing = 10; }
-                    const options = {
-                        bold: isHeading || window.getComputedStyle(element).fontWeight === 'bold',
-                        italic: window.getComputedStyle(element).fontStyle === 'italic',
+                    let options = {
+                        bold: element.tagName === 'STRONG' || window.getComputedStyle(element).fontWeight === 'bold' || parseInt(window.getComputedStyle(element).fontWeight) >= 700,
+                        italic: element.tagName === 'EM' || window.getComputedStyle(element).fontStyle === 'italic',
+                        underline: element.tagName === 'U' || window.getComputedStyle(element).textDecoration.includes('underline'),
                         alignment: window.getComputedStyle(element).textAlign || globalConfig.textAlign,
                         indent: parseFloat(window.getComputedStyle(element).paddingLeft) || 0
                     };
