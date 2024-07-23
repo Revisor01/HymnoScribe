@@ -1026,13 +1026,14 @@ function updateLiedblatt() {
             const showNotes = selected.querySelector('input[type="checkbox"]').checked;
             const noteType = selected.querySelector('input[name^="noteType"]:checked')?.value;
             if (objekt.copyright) {
-                const copyrightElement = document.createElement('p');
-                copyrightElement.textContent = `© ${objekt.copyright}`;
+                const copyrightElement = document.createElement('span');
+                copyrightElement.innerHTML = `© ${objekt.copyright}`;
                 copyrightElement.style.fontSize = '8pt';
-                copyrightElement.style.color = '#666';
+                copyrightElement.classList.add('copyright-info');
                 copyrightElement.style.marginTop = '0';
                 content.appendChild(copyrightElement);
             }
+
             if (showNotes && noteType) {
                 const imgSrc = noteType === 'with' ? getImagePath(objekt, 'notenbildMitText') : getImagePath(objekt, 'notenbild');
                 if (imgSrc) {
@@ -1896,7 +1897,7 @@ async function generatePDF(format) {
     }
     
     async function drawText(text, x, y, fontSize, maxWidth, options = {}) {
-        const { bold, italic, underline, alignment, indent } = options;
+        const { bold, italic, underline, alignment, indent, isCopyright } = options;
         let font;
         if (bold && italic) {
             font = fonts[globalConfig.fontFamily].boldItalic;
@@ -1908,8 +1909,11 @@ async function generatePDF(format) {
             font = fonts[globalConfig.fontFamily].normal;
         }
         
-        console.log("Drawing text:", { text: text.substring(0, 20) + "...", x, y, fontSize, bold, italic, underline, alignment, indent });
+        console.log("Drawing text:", { text: text.substring(0, 20) + "...", x, y, fontSize, bold, italic, underline, alignment, indent, isCopyright });
         
+        if (options.isCopyright) {
+            fontSize = 8; // Feste Größe von 8pt für Copyright
+        }
         // Hier können Sie die Schriftgröße für fette Schrift anpassen
         const actualFontSize = bold ? fontSize * 0.9 : fontSize;
         
@@ -2119,18 +2123,23 @@ async function generatePDF(format) {
         
         if (item.classList.contains('lied') || item.classList.contains('liturgie')) {
             const title = item.querySelector('h3');
+            const copyright = item.querySelector('.copyright-info');
             const notes = item.querySelector('img');
             const strophen = Array.from(item.children).filter(child => child.tagName === 'P');
             
             // Zeichne den Titel
             y -= headingStyles.heading.spacingBefore;
             await drawText(title.textContent, margin.left, y, headingStyles.heading.fontSize, contentWidth, { bold: true, alignment: 'center' });
-            y -= headingStyles.heading.fontSize * headingStyles.heading.lineHeight + headingStyles.heading.spacingAfter;
+            //y -= headingStyles.heading.fontSize * headingStyles.heading.lineHeight + headingStyles.heading.spacingAfter;
 
             // Zeichne das Copyright, falls vorhanden
             if (copyright) {
-                await drawText(copyright.textContent, margin.left, y, 8, contentWidth, { alignment: 'left' });
-                y -= 8 * 1.2; // Ein bisschen Abstand nach dem Copyright
+                const copyrightStyle = window.getComputedStyle(copyright);
+                y -= await drawText(copyright.textContent, margin.left, y, globalConfig.fontSize, contentWidth, { 
+                    alignment: 'left', 
+                    isCopyright: true,
+                    fontSize: parseInt(copyrightStyle.fontSize)
+                });
             }
             
             // Zeichne die Noten, falls vorhanden
@@ -2177,7 +2186,7 @@ async function generatePDF(format) {
             y -= iconHeight + 20; // Abstand nach Icons
         } else {
             // Andere Elemente (Text, Überschriften, etc.)
-            const elements = item.querySelectorAll('h1, h2, h3, p, img, strong, em, u, img');
+            const elements = item.querySelectorAll('h1, h2, h3, p, img, em, u, .copyright-info'); //Strong hier rein und bold wird angezeigt, aber da geht nicht sonst werden falsche strophennummern angezeigt
             for (const element of elements) {
                 if (element.tagName === 'IMG') {
                     const imgHeight = await drawImage(element.src, margin.left, y, contentWidth);
@@ -2185,21 +2194,39 @@ async function generatePDF(format) {
                 } else {
                     let fontSize = globalConfig.fontSize;
                     let isHeading = false;
+                    let isCopyright = element.classList.contains('copyright-info');
+                    
                     if (element.tagName === 'H1') { fontSize = globalConfig.fontSize * 1.8; isHeading = true; headingSpacing = 10; } // Abstand bei Überschriften
                     if (element.tagName === 'H2') { fontSize = globalConfig.fontSize * 1.6; isHeading = true; headingSpacing = 10; }
                     if (element.tagName === 'H3') { fontSize = globalConfig.fontSize * 1.3; isHeading = true; headingSpacing = 10; }
+                    if (isCopyright) { fontSize = 8; }//if (element.tagName === 'SPAN') { fontSize = 8; isCopyright = true; copySpacing = 20;}
                     let options = {
                         bold: element.tagName === 'STRONG' || window.getComputedStyle(element).fontWeight === 'bold' || parseInt(window.getComputedStyle(element).fontWeight) >= 700,
                         italic: element.tagName === 'EM' || window.getComputedStyle(element).fontStyle === 'italic',
                         underline: element.tagName === 'U' || window.getComputedStyle(element).textDecoration.includes('underline'),
                         alignment: window.getComputedStyle(element).textAlign || globalConfig.textAlign,
-                        indent: parseFloat(window.getComputedStyle(element).paddingLeft) || 0
+                        indent: parseFloat(window.getComputedStyle(element).paddingLeft) || 0,
+                        isCopyright: isCopyright
                     };
                     if (isHeading) {
-                        y -= headingSpacing; // Abstand vor Überschriften hinzufügen
+                        y -= fontSize * 0.5; // Abstand vor Überschriften hinzufügen
                     }
                     const textHeight = await drawText(element.innerText, margin.left, y, fontSize, contentWidth, options);
                     y -= textHeight + (isHeading ? fontSize * 0.8 : fontSize * 0.2);
+                
+                    
+                    if (isHeading) {
+                        y -= fontSize * 0.3; // Reduzierter Abstand nach Überschriften
+                    } else if (isCopyright) {
+                        y -= fontSize * 0.5; // Spezifischer Abstand nach Copyright
+                    } else {
+                        y -= fontSize * 0.2; // Standardabstand zwischen Absätzen
+                    }
+                    //if (isCopyright) {
+                    //    y += copySpacing ? fontSize * 0.8 : fontSize * 0.2; // Abstand nach Copy
+                    //}
+                    //const textHeight = await drawText(element.innerText, margin.left, y, fontSize, contentWidth, options);
+                    //y -= textHeight + (isHeading ? fontSize * 0.8 : fontSize * 0.2);
                 }
                 
                 // Überprüfe, ob genug Platz für das nächste Element vorhanden ist
