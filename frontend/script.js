@@ -2175,7 +2175,7 @@ async function generatePDF(format) {
             
             for (const element of elements) {
                 // Überspringe leere Paragraphen und zusätzliche leere Paragraphen nach Strophen
-                if (element.tagName === 'P' && (element.textContent.trim() === '' || (lastElementWasStrophe && element.textContent.trim() === ''))) {
+                if (element.tagName === 'P' && element.textContent.trim() === '' && !element.closest('.strophe')) {
                     continue;
                 }
                 
@@ -2190,7 +2190,7 @@ async function generatePDF(format) {
                         y += globalConfig.fontSize * 0.3; // Verringere den vorherigen Abstand
                     }
                     const imgHeight = await drawImage(element.src, margin.left, y, contentWidth);
-                    y -= imgHeight + 5; // Zusätzlicher Abstand nach Bildern
+                    y -= imgHeight + 15; // Zusätzlicher Abstand nach Bildern
                     lastElementWasStrophe = false;
                     lastElementType = 'image';
                 } else {
@@ -2223,12 +2223,13 @@ async function generatePDF(format) {
                     }
                     
                     // Wenn das vorherige Element eine Überschrift oder Copyright war, verringern wir den Abstand
-                    if ((lastElementType === 'heading' || lastElementType === 'copyright') && !isHeading && !isCopyright) {
-                        y += globalConfig.fontSize * 0.3; // Verringere den vorherigen Abstand
+                    if (lastElementType === 'heading' && isCopyright) {
+                        y += globalConfig.fontSize * 0.8; // Verringere den vorherigen Abstand stark
+                    } else if ((lastElementType === 'heading' || lastElementType === 'copyright') && !isHeading && !isCopyright) {
+                        y += globalConfig.fontSize * 0.1; // Verringere den vorherigen Abstand leicht für andere Elemente
                     }
-                    
                     if (isHeading) {
-                        y -= fontSize * 0.3; // Verringerter Abstand vor Überschriften
+                        y -= fontSize * 1; // Verringerter Abstand vor Überschriften
                     }
                     const textHeight = await drawText(textContent, margin.left, y, fontSize, contentWidth, options);
                     y -= textHeight;
@@ -2240,10 +2241,10 @@ async function generatePDF(format) {
                         y -= fontSize * 0.1; // Geringer Abstand nach Copyright
                         lastElementType = 'copyright';
                     } else if (lastElementWasStrophe) {
-                        y -= fontSize * 1; // Etwas größerer Abstand nach Strophen
+                        y -= fontSize * 0.1; // Etwas größerer Abstand nach Strophen
                         lastElementType = 'strophe';
                     } else {
-                        y -= fontSize * 1; // Standardabstand zwischen Absätzen
+                        y -= fontSize * 0.1; // Standardabstand zwischen Absätzen
                         lastElementType = 'normal';
                     }
                 }
