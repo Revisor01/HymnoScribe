@@ -2062,23 +2062,23 @@ async function generatePDF(format) {
             return 0;
         }
     }
-    async function drawStrophe(stropheNum, stropheText, x, y, maxWidth, fontSize, options) {
-        const font = fonts[globalConfig.fontFamily].normal;
-        const stropheNumWidth = await font.widthOfTextAtSize(stropheNum + ' ', fontSize);
-        
-        // Zeichnen Sie die Strophennummer
-        page.drawText(stropheNum + ' ', {
-            x,
-            y,
-            size: fontSize,
-            font: font
-        });
-        
-        // Zeichnen Sie den Strophentext
-        const textHeight = await drawText(stropheText, x + stropheNumWidth, y, fontSize, maxWidth - stropheNumWidth, options);
-        
-        return textHeight;
-    }
+//  async function drawStrophe(stropheNum, stropheText, x, y, maxWidth, fontSize, options) {
+//      const font = fonts[globalConfig.fontFamily].normal;
+//      const stropheNumWidth = await font.widthOfTextAtSize(stropheNum + ' ', fontSize);
+//      
+//      // Zeichnen Sie die Strophennummer
+//      page.drawText( + ' ', {
+//          x,
+//          y,
+//          size: fontSize,
+//          font: font
+//      });
+//      
+//      // Zeichnen Sie den Strophentext
+//      const textHeight = await drawText(stropheText, x + stropheNumWidth, y, fontSize, maxWidth - stropheNumWidth, options);
+//      
+//      return textHeight;
+//  }
     function showProgress(percent) {
         const progressBar = document.getElementById('pdf-progress-bar');
         const progressText = document.getElementById('pdf-progress-text');
@@ -2121,60 +2121,42 @@ async function generatePDF(format) {
             continue;
         }
         
-        if (item.classList.contains('lied') || item.classList.contains('liturgie')) {
-            const title = item.querySelector('h3');
-            const copyright = item.querySelector('.copyright-info');
-            const notes = item.querySelector('img');
-            const strophen = Array.from(item.children).filter(child => child.tagName === 'P');
-            
-            // Zeichne den Titel
-            y -= headingStyles.heading.spacingBefore;
-            await drawText(title.textContent, margin.left, y, headingStyles.heading.fontSize, contentWidth, { bold: true, alignment: 'center' });
-            //y -= headingStyles.heading.fontSize * headingStyles.heading.lineHeight + headingStyles.heading.spacingAfter;
-
-            // Zeichne das Copyright, falls vorhanden
-            if (copyright) {
-                const copyrightStyle = window.getComputedStyle(copyright);
-                y -= await drawText(copyright.textContent, margin.left, y, globalConfig.fontSize, contentWidth, { 
-                    alignment: 'left', 
-                    isCopyright: true,
-                    fontSize: parseInt(copyrightStyle.fontSize)
-                });
-            }
-            
-            // Zeichne die Noten, falls vorhanden
-            if (notes) {
-                const notesHeight = await drawImage(notes.src, margin.left, y, contentWidth);
-                y -= notesHeight;
-            }
-            
-            // Zeichne die Strophen
-            for (let j = 0; j < strophen.length; j++) {
-                const strophe = strophen[j];
-                const stropheText = strophe.textContent;
-                
-                if (stropheText.trim() !== '' && !stropheText.includes('Strophe NaN: undefined')) {
-                    const textHeight = await drawText(stropheText, margin.left, y, globalConfig.fontSize, contentWidth, { alignment: 'center' });
-                    y -= textHeight;
-                }
-                
-                const nextElement = strophe.nextElementSibling;
-                if (nextElement && nextElement.classList.contains('page-break')) {
-                    // Zeichne eine gestrichelte Linie für den Seitenumbruch
-                    page.drawLine({
-                        start: { x: margin.left, y: y - 10 },
-                        end: { x: width - margin.right, y: y - 10 },
-                        thickness: 1,
-                        color: rgb(0, 0, 0),
-                        dashArray: [5, 5],
-                    });
-                    
-                    ({ page, y } = addPage());
-                }
-            }
+//      if (item.classList.contains('lied') || item.classList.contains('liturgie')) {
+//          const title = item.querySelector('h3');
+//          const copyright = item.querySelector('.copyright-info');
+//          const notes = item.querySelector('img');
+//          const strophen = Array.from(item.children).filter(child => child.tagName === 'P');
+//          
+//          // Zeichne den Titel
+//          y -= headingStyles.heading.spacingBefore;
+//          await drawText(title.textContent, margin.left, y, headingStyles.heading.fontSize, contentWidth, { bold: true, alignment: 'center' });
+//          //y -= headingStyles.heading.fontSize * headingStyles.heading.lineHeight + headingStyles.heading.spacingAfter;
+//
+////          // Zeichne das Copyright, falls vorhanden
+////          if (copyright) {
+////              const copyrightStyle = window.getComputedStyle(copyright);
+////              y -= await drawText(copyright.textContent, margin.left, y, globalConfig.fontSize, contentWidth, { 
+////                  alignment: 'left', 
+////                  isCopyright: true,
+////                  fontSize: parseInt(copyrightStyle.fontSize)
+////              });
+////          }
+//          
+//          // Zeichne die Noten, falls vorhanden
+//          if (notes) {
+//              const notesHeight = await drawImage(notes.src, margin.left, y, contentWidth);
+//              y -= notesHeight;
+//          }
+//          
+//          // Zeichne die Strophen
+//          for (let j = 0; j < strophen.length; j++) {
+//              //const strophe = strophen[j];
+//              //const stropheText = strophe.textContent;
+//          }
             
         //    y -= globalConfig.fontSize; // Zusätzlicher Abstand nach dem Lied/der Liturgie
-        } else if (item.querySelector('.fas, .trenner-default-img')) {
+        //}
+        if (item.querySelector('.fas, .trenner-default-img')) {
             // Icon-Logik (bleibt unverändert)
             let iconType = 'default';
             const iconElement = item.querySelector('.fas, .trenner-default-img');
@@ -2186,20 +2168,41 @@ async function generatePDF(format) {
             y -= iconHeight + 20; // Abstand nach Icons
         } else {
             // Andere Elemente (Text, Überschriften, etc.)
-            const elements = item.querySelectorAll('h1, h2, h3, p, img, em, u, .copyright-info'); //Strong hier rein und bold wird angezeigt, aber da geht nicht sonst werden falsche strophennummern angezeigt
+            const elements = item.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
+            let lastElementWasStrophe = false;
+            let strophenCounter = 0;
+            let lastElementType = null;
+            
             for (const element of elements) {
+                // Überspringe leere Paragraphen und zusätzliche leere Paragraphen nach Strophen
+                if (element.tagName === 'P' && (element.textContent.trim() === '' || (lastElementWasStrophe && element.textContent.trim() === ''))) {
+                    continue;
+                }
+                
+                // Überspringe alleinstehende Strophennummern
+                if (element.tagName === 'STRONG' && /^\d+\.$/.test(element.textContent.trim())) {
+                    continue;
+                }
+                
                 if (element.tagName === 'IMG') {
+                    // Wenn das vorherige Element eine Überschrift oder Copyright war, verringern wir den Abstand
+                    if (lastElementType === 'heading' || lastElementType === 'copyright') {
+                        y += globalConfig.fontSize * 0.3; // Verringere den vorherigen Abstand
+                    }
                     const imgHeight = await drawImage(element.src, margin.left, y, contentWidth);
                     y -= imgHeight + 5; // Zusätzlicher Abstand nach Bildern
+                    lastElementWasStrophe = false;
+                    lastElementType = 'image';
                 } else {
                     let fontSize = globalConfig.fontSize;
                     let isHeading = false;
                     let isCopyright = element.classList.contains('copyright-info');
                     
-                    if (element.tagName === 'H1') { fontSize = globalConfig.fontSize * 1.8; isHeading = true; headingSpacing = 10; } // Abstand bei Überschriften
-                    if (element.tagName === 'H2') { fontSize = globalConfig.fontSize * 1.6; isHeading = true; headingSpacing = 10; }
-                    if (element.tagName === 'H3') { fontSize = globalConfig.fontSize * 1.3; isHeading = true; headingSpacing = 10; }
-                    if (isCopyright) { fontSize = 8; }//if (element.tagName === 'SPAN') { fontSize = 8; isCopyright = true; copySpacing = 20;}
+                    if (element.tagName === 'H1') { fontSize = globalConfig.fontSize * 1.8; isHeading = true; }
+                    if (element.tagName === 'H2') { fontSize = globalConfig.fontSize * 1.6; isHeading = true; }
+                    if (element.tagName === 'H3') { fontSize = globalConfig.fontSize * 1.3; isHeading = true; }
+                    if (isCopyright) { fontSize = 8; }
+                    
                     let options = {
                         bold: element.tagName === 'STRONG' || window.getComputedStyle(element).fontWeight === 'bold' || parseInt(window.getComputedStyle(element).fontWeight) >= 700,
                         italic: element.tagName === 'EM' || window.getComputedStyle(element).fontStyle === 'italic',
@@ -2208,25 +2211,41 @@ async function generatePDF(format) {
                         indent: parseFloat(window.getComputedStyle(element).paddingLeft) || 0,
                         isCopyright: isCopyright
                     };
-                    if (isHeading) {
-                        y -= fontSize * 0.5; // Abstand vor Überschriften hinzufügen
+                    
+                    // Strophen-Nummerierung hinzufügen
+                    let textContent = element.innerText;
+                    if (element.tagName === 'P' && element.closest('.lied, .liturgie')) {
+                        if (element.classList.contains('strophe') || element.closest('.strophe')) {
+                            strophenCounter++;
+                            textContent = `${strophenCounter}. ${textContent.replace(/^\d+\.\s*/, '')}`;
+                            lastElementWasStrophe = true;
+                        }
                     }
-                    const textHeight = await drawText(element.innerText, margin.left, y, fontSize, contentWidth, options);
-                    y -= textHeight + (isHeading ? fontSize * 0.8 : fontSize * 0.2);
-                
+                    
+                    // Wenn das vorherige Element eine Überschrift oder Copyright war, verringern wir den Abstand
+                    if ((lastElementType === 'heading' || lastElementType === 'copyright') && !isHeading && !isCopyright) {
+                        y += globalConfig.fontSize * 0.3; // Verringere den vorherigen Abstand
+                    }
                     
                     if (isHeading) {
-                        y -= fontSize * 0.3; // Reduzierter Abstand nach Überschriften
-                    } else if (isCopyright) {
-                        y -= fontSize * 0.5; // Spezifischer Abstand nach Copyright
-                    } else {
-                        y -= fontSize * 0.2; // Standardabstand zwischen Absätzen
+                        y -= fontSize * 0.3; // Verringerter Abstand vor Überschriften
                     }
-                    //if (isCopyright) {
-                    //    y += copySpacing ? fontSize * 0.8 : fontSize * 0.2; // Abstand nach Copy
-                    //}
-                    //const textHeight = await drawText(element.innerText, margin.left, y, fontSize, contentWidth, options);
-                    //y -= textHeight + (isHeading ? fontSize * 0.8 : fontSize * 0.2);
+                    const textHeight = await drawText(textContent, margin.left, y, fontSize, contentWidth, options);
+                    y -= textHeight;
+                    
+                    if (isHeading) {
+                        y -= fontSize * 0.1; // Sehr geringer Abstand nach Überschriften
+                        lastElementType = 'heading';
+                    } else if (isCopyright) {
+                        y -= fontSize * 0.1; // Geringer Abstand nach Copyright
+                        lastElementType = 'copyright';
+                    } else if (lastElementWasStrophe) {
+                        y -= fontSize * 1; // Etwas größerer Abstand nach Strophen
+                        lastElementType = 'strophe';
+                    } else {
+                        y -= fontSize * 1; // Standardabstand zwischen Absätzen
+                        lastElementType = 'normal';
+                    }
                 }
                 
                 // Überprüfe, ob genug Platz für das nächste Element vorhanden ist
@@ -2235,7 +2254,6 @@ async function generatePDF(format) {
                 }
             }
         }
-        
         showProgress((i + 1) / items.length * 100);
     }
     
