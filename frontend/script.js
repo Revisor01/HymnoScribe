@@ -1058,13 +1058,27 @@ function updateLiedblatt() {
                     const stropheDiv = document.createElement('div');
                     stropheDiv.classList.add('strophe');
                     
-                    // Entferne alle <p> Tags aus dem Strophentext und füge die Nummer am Anfang hinzu
-                    const strophenText = strophen[index].replace(/<\/?p>/g, '').trim();
+                    // Ersetze <p> Tags durch <br> Tags und entferne die schließenden </p> Tags
+                    let strophenText = strophen[index].replace(/<p>/g, '').replace(/<\/p>/g, '<br>');
                     
-                    // Füge einen Zeilenumbruch nach jeder Strophe hinzu, außer nach der letzten
-                    const lineBreak = arrayIndex < selectedStrophen.length - 1 ? '<p><br></p>' : '';
+                    // Teile den Strophentext an den <br> Tags
+                    let strophenTextArray = strophenText.split('<br>');
                     
-                    stropheDiv.innerHTML = `<p><strong>${index + 1}.</strong> ${strophenText}${lineBreak}</p>`;
+                    // Erstelle den ersten <p> Tag mit der Nummerierung und dem ersten Teil der Strophe
+                    const pElementWithNumber = document.createElement('p');
+                    pElementWithNumber.innerHTML = `<span class="strophenum">${index + 1}.</span> ${strophenTextArray[0]}`;
+                    stropheDiv.appendChild(pElementWithNumber);
+                    
+                    // Füge die restlichen Teile des Strophentexts in eigene <p> Tags ein
+                    for (let i = 1; i < strophenTextArray.length; i++) {
+                        if (strophenTextArray[i].trim() !== '') {
+                            const pElement = document.createElement('p');
+                            pElement.textContent = strophenTextArray[i];
+                            stropheDiv.appendChild(pElement);
+                        }
+                    }
+                    
+                    // Füge das stropheDiv zum content hinzu
                     content.appendChild(stropheDiv);
                 });
             }
@@ -2175,9 +2189,9 @@ async function generatePDF(format) {
             
             for (const element of elements) {
                 // Überspringe leere Paragraphen und zusätzliche leere Paragraphen nach Strophen
-                if (element.tagName === 'P' && element.textContent.trim() === '' && !element.closest('.strophe')) {
-                    continue;
-                }
+//              if (element.tagName === 'div' && element.textContent.trim() === '' && !element.closest('.strophe')) {
+//                  continue;
+//              }
                 
                 // Überspringe alleinstehende Strophennummern
                 if (element.tagName === 'STRONG' && /^\d+\.$/.test(element.textContent.trim())) {
@@ -2213,14 +2227,13 @@ async function generatePDF(format) {
                     };
                     
                     // Strophen-Nummerierung hinzufügen
-                    let textContent = element.innerText;
-                    if (element.tagName === 'P' && element.closest('.lied, .liturgie')) {
-                        if (element.classList.contains('strophe') || element.closest('.strophe')) {
-                            strophenCounter++;
-                            textContent = `${strophenCounter}. ${textContent.replace(/^\d+\.\s*/, '')}`;
-                            lastElementWasStrophe = true;
-                        }
-                    }
+                  let textContent = element.innerText;
+//                      if (element.classList.contains('strophe') || element.closest('.strophe')) {
+//                          strophenCounter++;
+//                          textContent = `${strophenCounter}. ${textContent.replace(/^\d+\.\s*/, '')}`;
+//                          lastElementWasStrophe = true;
+//                      }
+                    
                     
                     // Wenn das vorherige Element eine Überschrift oder Copyright war, verringern wir den Abstand
                     if (lastElementType === 'heading' && isCopyright) {
