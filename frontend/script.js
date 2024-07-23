@@ -179,16 +179,70 @@ async function loadObjekte() {
         if (!response.ok) {
             throw new Error('Fehler beim Abrufen der Objekte: ' + response.statusText);
         }
-        alleObjekte = await response.json();
-        console.log('Geladene Objekte:', alleObjekte); // Debugging
+        const neueObjekte = await response.json();
         
-        // Wir müssen die Bildpfade hier nicht mehr anpassen, da getImagePath das jetzt übernimmt
+        // Prüfen und Aktualisieren der Objekte
+        const wurdenObjekteAktualisiert = checkAndUpdateObjects(neueObjekte);
+        
+        if (wurdenObjekteAktualisiert) {
+            console.log('Objekte wurden aktualisiert');
+            updateLiedblatt();
+        } else {
+            console.log('Keine Änderungen an den Objekten');
+        }
         
         filterPoolItems();
     } catch (error) {
         console.error('Fehler beim Laden der Objekte:', error);
         await customAlert('Fehler beim Laden der Objekte: ' + error.message);
     }
+}
+function checkAndUpdateObjects(neueObjekte) {
+    let wurdeAktualisiert = false;
+    const selectedItems = document.querySelectorAll('.selected-item');
+    
+    selectedItems.forEach(selected => {
+        const objektData = JSON.parse(selected.getAttribute('data-object'));
+        const neuesObjekt = neueObjekte.find(obj => obj.id === objektData.id);
+        
+        if (neuesObjekt && objektHatSichGeaendert(objektData, neuesObjekt)) {
+            // Behalten Sie die lokalen Einstellungen bei
+            const aktualisiertesDaten = {
+                ...neuesObjekt,
+                showTitle: objektData.showTitle,
+                alternativePrefix: objektData.alternativePrefix,
+                selectedStrophen: objektData.selectedStrophen,
+                showNotes: objektData.showNotes,
+                noteType: objektData.noteType
+            };
+            
+            selected.setAttribute('data-object', JSON.stringify(aktualisiertesDaten));
+            wurdeAktualisiert = true;
+            
+            // Aktualisieren Sie den angezeigten Titel
+            const titleSpan = selected.querySelector('.title-row span');
+            if (titleSpan) {
+                titleSpan.textContent = aktualisiertesDaten.alternativePrefix || aktualisiertesDaten.titel;
+            }
+        }
+    });
+    
+    // Aktualisieren Sie auch die globale alleObjekte Liste
+    alleObjekte = neueObjekte;
+    
+    return wurdeAktualisiert;
+}
+
+function objektHatSichGeaendert(altesObjekt, neuesObjekt) {
+    const relevanteFelderKeys = ['typ', 'titel', 'inhalt', 'strophen', 'notenbild', 'notenbildMitText', 'copyright'];
+    
+    for (const key of relevanteFelderKeys) {
+        if (JSON.stringify(altesObjekt[key]) !== JSON.stringify(neuesObjekt[key])) {
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 function filterPoolItems() {
@@ -918,7 +972,7 @@ function updateLiedblatt() {
     liedblattContent.innerHTML = "";
     const selectedItems = document.querySelectorAll('.selected-item');
     
-    selectedItems.forEach((selected, index) => {  // Fügen Sie 'index' als Parameter hinzu
+    selectedItems.forEach((selected, index) => {
         const objekt = JSON.parse(selected.getAttribute('data-object'));
         if (!objekt) return;
         
