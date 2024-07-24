@@ -13,12 +13,12 @@
     <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
     <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
-    <title>Gottesdienst-Liedblatt Generator</title>
+    <title>HymnoScribe - Der Liedblatt Generator</title>
     <link rel="stylesheet" href="style.css">
 </head>
     <body>
         <header>
-            <h1>Gottesdienst-Liedblatt Generator</h1>
+            <h1>HymnoScribe - Der Liedblatt Generator</h1>
             <nav>
                 <a href="admin.html" class="btn">Admin-Oberfläche</a>
                 <button class="btn" onclick="showConfigModal()">Globale Einstellungen</button>
@@ -102,7 +102,7 @@
                         <button class="trenner-btn" onclick="addTrenner('star')"><i class="fas fa-star"></i></button>
                         <button class="trenner-btn" onclick="addTrenner('cross')"><i class="fas fa-cross"></i></button>
                         <button class="trenner-btn" onclick="addTrenner('dove')"><i class="fas fa-dove"></i></button>
-                        <button class="trenner-btn" onclick="addTrenner('default')"><img src="http://localhost:3000/icons/default.png" alt="Default" style="width: auto; height: 12px;"></button>
+                        <button class="trenner-btn" onclick="addTrenner('default')"><img src="/api/icons/default.png" alt="Default" style="width: auto; height: 12px;"></button>
                     </div>
                     <div class="object-group">
                         <h3>Seitenumbruch</h3>

@@ -249,7 +249,7 @@ async function handleFormSubmit(e) {
         strophen: null,
         notenbild: null,
         notenbildMitText: null,
-        copyright: document.getElementById('copyright').value
+        copyright: document.getElementById('copyright').value || null
     };
     
     console.log('Initial objektData:', JSON.stringify(objektData));
@@ -265,7 +265,7 @@ async function handleFormSubmit(e) {
     console.log('Prepared objektData:', JSON.stringify(objektData));
     
     try {
-        const url = objektId ? `http://localhost:3000/objekte/${objektId}` : 'http://localhost:3000/objekte';
+        const url = objektId ? `/api/objekte/${objektId}` : '/api/objekte';
         const method = objektId ? 'PUT' : 'POST';
         
         const formData = new FormData();
@@ -365,7 +365,7 @@ function resetForm() {
 
 async function loadObjekte() {
     try {
-        const response = await fetch('http://localhost:3000/objekte');
+        const response = await fetch('/api/objekte');
         if (!response.ok) {
             throw new Error('Fehler beim Abrufen der Objekte');
         }
@@ -478,7 +478,7 @@ function editObjekt(id) {
 }
 
 function getImagePath(objekt, imageType) {
-    const basePath = 'http://localhost:3000/';
+    const basePath = '';
     let imagePath;
     
     if (imageType === 'notenbild') {
@@ -541,7 +541,7 @@ function customConfirm(message) {
 async function deleteObjekt(id) {
     if (await customConfirm('Sind Sie sicher, dass Sie dieses Objekt löschen möchten?')) {
         try {
-            const response = await fetch(`http://localhost:3000/objekte/${id}`, {
+            const response = await fetch(`/api/objekte/${id}`, {
                 method: 'DELETE'
             });
             if (!response.ok) {

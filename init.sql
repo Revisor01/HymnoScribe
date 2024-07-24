@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS objekte (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    typ VARCHAR(255) NOT NULL,
+    titel VARCHAR(255) NOT NULL,
+    inhalt LONGTEXT,
+    notenbild VARCHAR(255),
+    notenbildMitText VARCHAR(255),
+    strophen JSON,
+    copyright VARCHAR(255)
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    data JSON NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vorlagen (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    data JSON NOT NULL
+);

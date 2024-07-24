@@ -1,6 +1,8 @@
-# Gottesdienst-Liedblatt Generator
+# HymnoScribe
 
-Dieses Projekt ist ein umfassendes Tool zur Erstellung von Gottesdienst-Liedblättern. Es bietet eine benutzerfreundliche Oberfläche zum Erstellen, Bearbeiten und Verwalten von Gottesdienstobjekten sowie zur Generierung von PDF-Liedblättern.
+[![Docker](https://github.com/Revisor01/HymnoScribe/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/Revisor01/HymnoScribe/actions/workflows/docker-publish.yml)
+
+HymnoScribe ist ein umfassendes Tool zur Erstellung von Gottesdienst-Liedblättern. Es bietet eine benutzerfreundliche Oberfläche zum Erstellen, Bearbeiten und Verwalten von Gottesdienstobjekten sowie zur Generierung von PDF-Liedblättern.
 
 ## Funktionen
 
@@ -15,14 +17,16 @@ Dieses Projekt ist ein umfassendes Tool zur Erstellung von Gottesdienst-Liedblä
 
 ## Installation und Nutzung
 
+### Lokale Installation
+
 1. Klonen Sie das Repository:
    ```
-   git clone https://github.com/ihr-benutzername/gottesdienst-liedblatt-generator.git
+   git clone https://github.com/Revisor01/HymnoScribe.git
    ```
 
 2. Navigieren Sie in das Projektverzeichnis:
    ```
-   cd gottesdienst-liedblatt-generator
+   cd HymnoScribe
    ```
 
 3. Installieren Sie die Abhängigkeiten:
@@ -37,29 +41,17 @@ Dieses Projekt ist ein umfassendes Tool zur Erstellung von Gottesdienst-Liedblä
 
 5. Öffnen Sie einen Webbrowser und navigieren Sie zu `http://localhost:3000`
 
-## Docker-Nutzung
+### Docker-Nutzung
 
-1. Bauen Sie das Docker-Image:
-   ```
-   docker build -t gottesdienst-liedblatt-generator .
-   ```
+Sie können HymnoScribe auch über Docker ausführen:
 
-2. Starten Sie den Container:
-   ```
-   docker run -p 3000:3000 -v /pfad/zum/upload/ordner:/app/uploads gottesdienst-liedblatt-generator
-   ```
+```
+docker run -p 3000:3000 -v /pfad/zum/upload/ordner:/app/uploads revisoren/hymnoscripe:latest
+```
 
-## Hinweise zur Nutzung
+## Entwicklung
 
-- **Admin-Oberfläche**: Verwenden Sie die Admin-Oberfläche, um neue Gottesdienstobjekte hinzuzufügen oder bestehende zu bearbeiten.
-- **Liedblatt-Erstellung**: Ziehen Sie Objekte aus dem Pool in den Arbeitsbereich, um Ihr Liedblatt zu gestalten.
-- **PDF-Generierung**: Wählen Sie das gewünschte Format und klicken Sie auf "PDF generieren", um Ihr Liedblatt als PDF zu erstellen.
-- **Sessions und Vorlagen**: Nutzen Sie das Session-Management, um Ihre Arbeit zu speichern und später fortzusetzen. Erstellen Sie Vorlagen für wiederkehrende Liedblatt-Strukturen.
-
-## Hinweise zur Ausgabe
-
-- Die generierten PDFs sind optimiert für die Druckausgabe in A4 und A3 duplex.
-- Die Broschüren-Option ermöglicht es, Liedblätter im Booklet-Format zu erstellen, ideal für gefaltete Gottesdienstordnungen.
+HymnoScribe verwendet GitHub Actions für kontinuierliche Integration und Bereitstellung. Bei jedem Push in den `main`-Branch wird automatisch ein neues Docker-Image gebaut und auf Docker Hub veröffentlicht.
 
 ## Beitrag
 

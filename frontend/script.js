@@ -23,7 +23,7 @@ function updateGlobalConfig(newConfig) {
         formData.append('logo', logoFile);
         
         // Lade das Bild auf den Server hoch
-        fetch('http://localhost:3000/upload-logo', {
+        fetch('/api/upload-logo', {
             method: 'POST',
             body: formData
         })
@@ -72,7 +72,7 @@ function applyConfigChanges() {
     document.getElementById('config-modal').style.display = 'none';
 }
 function getImagePath(objekt, imageType) {
-    const basePath = 'http://localhost:3000/';
+    const basePath = '';
     let imagePath;
     
     if (imageType === 'notenbild') {
@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function loadObjekte() {
     try {
-        const response = await fetch('http://localhost:3000/objekte');
+        const response = await fetch('/api/objekte');
         if (!response.ok) {
             throw new Error('Fehler beim Abrufen der Objekte: ' + response.statusText);
         }
@@ -555,7 +555,7 @@ function addToSelected(objekt) {
                 formData.append('customImage', file);
                 
                 try {
-                    const response = await fetch('http://localhost:3000/upload-custom-image', {
+                    const response = await fetch('/upload-custom-image', {
                         method: 'POST',
                         body: formData
                     });
@@ -1147,7 +1147,7 @@ async function saveSession(name) {
     });
     
     try {
-        const response = await fetch('http://localhost:3000/sessions', {
+        const response = await fetch('/api/sessions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1167,7 +1167,7 @@ async function saveSession(name) {
 
 async function loadSession(id) {
     try {
-        const response = await fetch(`http://localhost:3000/sessions/${id}`);
+        const response = await fetch(`/api/sessions/${id}`);
         if (!response.ok) throw new Error('Fehler beim Laden der Session');
         const session = await response.json();
         if (typeof session.data === 'string') {
@@ -1190,7 +1190,7 @@ async function deleteSession(id) {
     if (!confirmed) return;
     
     try {
-        const response = await fetch(`http://localhost:3000/sessions/${id}`, {
+        const response = await fetch(`/api/sessions/${id}`, {
             method: 'DELETE',
         });
         if (!response.ok) throw new Error('Fehler beim Löschen der Session');
@@ -1212,7 +1212,7 @@ async function loadSessionList() {
         return;
     }
     try {
-        const response = await fetch('http://localhost:3000/sessions');
+        const response = await fetch('/api/sessions');
         if (!response.ok) throw new Error('Fehler beim Laden der Sessions');
         const sessions = await response.json();
         sessionList.innerHTML = '';
@@ -1443,7 +1443,7 @@ async function saveVorlage(name) {
     });
     
     try {
-        const response = await fetch('http://localhost:3000/vorlagen', {
+        const response = await fetch('/api/vorlagen', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1463,7 +1463,7 @@ async function saveVorlage(name) {
 async function loadVorlage(id) {
     console.log("loadVorlage aufgerufen mit ID:", id);
     try {
-        const response = await fetch(`http://localhost:3000/vorlagen/${id}`);
+        const response = await fetch(`/api/vorlagen/${id}`);
         if (!response.ok) throw new Error('Fehler beim Laden der Vorlage');
         const vorlage = await response.json();
         console.log("Geladene Vorlage:", vorlage);
@@ -1484,7 +1484,7 @@ async function deleteVorlage(id) {
     if (!confirmed) return;
     
     try {
-        const response = await fetch(`http://localhost:3000/vorlagen/${id}`, {
+        const response = await fetch(`/api/vorlagen/${id}`, {
             method: 'DELETE',
         });
         if (!response.ok) throw new Error('Fehler beim Löschen der Vorlage');
@@ -1499,7 +1499,7 @@ async function deleteVorlage(id) {
 
 async function loadVorlagenList() {
     try {
-        const response = await fetch('http://localhost:3000/vorlagen');
+        const response = await fetch('/api/vorlagen');
         if (!response.ok) throw new Error('Fehler beim Laden der Vorlagen');
         const vorlagen = await response.json();
         const vorlagenList = document.getElementById('vorlagen-list');
@@ -1529,7 +1529,7 @@ async function loadVorlagenList() {
 function updateSessionSelect() {
     const select = document.getElementById('session-select');
     select.innerHTML = '<option value="">Gespeicherte Sitzung laden...</option>';
-    fetch('http://localhost:3000/sessions')
+    fetch('/api/sessions')
     .then(response => response.json())
     .then(sessions => {
         sessions.forEach(session => {
@@ -1544,7 +1544,7 @@ function updateSessionSelect() {
 function updateVorlageSelect() {
     const select = document.getElementById('vorlage-select');
     select.innerHTML = '<option value="">Vorlage laden...</option>';
-    fetch('http://localhost:3000/vorlagen')
+    fetch('/api/vorlagen')
     .then(response => response.json())
     .then(vorlagen => {
         vorlagen.forEach(vorlage => {
@@ -1597,7 +1597,7 @@ function showSessionsAndVorlagen() {
 function updateSessionsList() {
     const sessionsList = document.getElementById('sessions-list');
     sessionsList.innerHTML = '<h3>Gespeicherte Sessions</h3>';
-    fetch('http://localhost:3000/sessions')
+    fetch('/api/sessions')
     .then(response => response.json())
     .then(sessions => {
         sessions.forEach(session => {
@@ -1615,7 +1615,7 @@ function updateSessionsList() {
 function updateVorlagenList() {
     const vorlagenList = document.getElementById('vorlagen-list');
     vorlagenList.innerHTML = '<h3>Gespeicherte Vorlagen</h3>';
-    fetch('http://localhost:3000/vorlagen')
+    fetch('/api/vorlagen')
     .then(response => response.json())
     .then(vorlagen => {
         vorlagen.forEach(vorlage => {
@@ -1635,7 +1635,7 @@ async function deleteSession(id) {
     const confirmed = await customConfirm('Sind Sie sicher, dass Sie diese Session löschen möchten?');
     if (confirmed) {
         try {
-            const response = await fetch(`http://localhost:3000/sessions/${id}`, {
+            const response = await fetch(`/api/sessions/${id}`, {
                 method: 'DELETE',
             });
             if (!response.ok) throw new Error('Fehler beim Löschen der Session');
@@ -1653,7 +1653,7 @@ async function deleteVorlage(id) {
     const confirmed = await customConfirm('Sind Sie sicher, dass Sie diese Vorlage löschen möchten?');
     if (confirmed) {
         try {
-            const response = await fetch(`http://localhost:3000/vorlagen/${id}`, {
+            const response = await fetch(`/api/vorlagen/${id}`, {
                 method: 'DELETE',
             });
             if (!response.ok) throw new Error('Fehler beim Löschen der Vorlage');
@@ -2082,10 +2082,10 @@ async function generatePDF(format) {
     async function drawIcon(iconName, x, y, size) {
         console.log("Drawing icon:", { iconName, x, y, size });
         const iconPaths = {
-            'star': 'http://localhost:3000/icons/star.png',
-            'cross': 'http://localhost:3000/icons/cross.png',
-            'dove': 'http://localhost:3000/icons/dove.png',
-            'default': 'http://localhost:3000/icons/default.png'
+            'star': '/api/icons/star.png',
+            'cross': '/api/icons/cross.png',
+            'dove': '/api/icons/dove.png',
+            'default': '/api/icons/default.png'
         };
         
         const iconPath = iconPaths[iconName] || iconPaths['default'];
@@ -2294,16 +2294,16 @@ async function generatePDF(format) {
                     y -= textHeight;
                     
                     if (isHeading) {
-                        y -= fontSize * 0.1; // Sehr geringer Abstand nach Überschriften
+                        y -= fontSize * 0.2; // Sehr geringer Abstand nach Überschriften
                         lastElementType = 'heading';
                     } else if (isCopyright) {
-                        y -= fontSize * 0.1; // Geringer Abstand nach Copyright
+                        y -= fontSize * 0.2; // Geringer Abstand nach Copyright
                         lastElementType = 'copyright';
                     } else if (lastElementWasStrophe) {
-                        y -= fontSize * 0.1; // Etwas größerer Abstand nach Strophen
+                        y -= fontSize * 0.4; // Etwas größerer Abstand nach Strophen
                         lastElementType = 'strophe';
                     } else {
-                        y -= fontSize * 0.1; // Standardabstand zwischen Absätzen
+                        y -= fontSize * 0.4; // Standardabstand zwischen Absätzen
                         lastElementType = 'normal';
                     }
                 }
@@ -2384,7 +2384,7 @@ function findPageBreak(element) {
 
 async function fetchAndEmbedFont(doc, fontName) {
     console.log("Fetching font:", fontName);
-    const url = `http://localhost:3000/ttf/${fontName}.ttf`;
+    const url = `/api/ttf/${fontName}.ttf`;
     try {
         const fontBytes = await fetch(url).then(res => {
             if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);

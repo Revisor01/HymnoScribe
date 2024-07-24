@@ -1,0 +1,32 @@
+version: '3'
+services:
+  hymnoscribe:
+    image: revisoren/hymnoscripe:latest
+    ports:
+      - "9615:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - DB_HOST=${DB_HOST:-db}
+      - DB_USER=${DB_USER:-hymnoscribe}
+      - DB_PASSWORD=${DB_PASSWORD:-hymnoscribe9715}
+      - DB_NAME=${DB_NAME:-hymnoscribe}
+      - URL=${URL:-https://hymnoscripe.godsapp.de}
+      - API_URL=${API_URL:-https://api.hymnoscripe.godsapp.de}
+    volumes:
+      - ./backend/uploads:/app/backend/uploads
+    depends_on:
+      - db
+
+  db:
+    image: mysql:9.0
+    volumes:
+      - ./hymnoscribe_db:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-hymnoscribe9715}
+      MYSQL_DATABASE: ${DB_NAME:-hymnoscribe}
+      MYSQL_USER: ${DB_USER:-hymnoscribe}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-hymnoscribe9715}
+    
+volumes:
+  hymnoscribe_db:

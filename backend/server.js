@@ -2,17 +2,27 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
-const mysql = require('mysql2/promise');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
+const mysql = require('mysql2/promise');
+
+const pool = mysql.createPool({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    connectionLimit: 5
+});
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
 app.use(express.json());
-app.use(cors());
-app.use((req, res, next) => {
-    console.log(`Received request for: ${req.url}`);
-    next();
-});
+app.use(cors({
+    origin: process.env.URL.split(','),
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 const customImageStorage = multer.diskStorage({
     destination: function (req, file, cb) {
@@ -27,16 +37,6 @@ const customImageStorage = multer.diskStorage({
 
 const uploadCustomImage = multer({ storage: customImageStorage });
 
-app.post('/upload-custom-image', uploadCustomImage.single('customImage'), (req, res) => {
-    if (req.file) {
-        const imagePath = `/uploads/custom/${req.file.filename}`;
-        res.json({ success: true, imagePath });
-    } else {
-        res.status(400).json({ success: false, message: 'Kein Bild hochgeladen' });
-    }
-});
-
-// Multer-Setup für das Hochladen von Dateien
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         let uploadPath;
@@ -54,10 +54,8 @@ const storage = multer.diskStorage({
     },
     filename: function (req, file, cb) {
         if (file.fieldname === 'logo') {
-            // Für Logo-Uploads behalten wir den Originalnamen bei
             cb(null, file.originalname);
         } else if (file.fieldname === 'customImage') {
-            // Für benutzerdefinierte Bilder verwenden wir einen Zeitstempel
             cb(null, Date.now() + '-' + file.originalname);
         } else {
             const titel = req.body.titel.replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -69,31 +67,20 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-app.post('/upload-logo', upload.single('logo'), (req, res) => {
-    if (req.file) {
-        const logoPath = `/uploads/logos/${req.file.filename}`;
-        console.log("Logo uploaded successfully:", logoPath);
-        res.json({ success: true, logoPath });
-    } else {
-        console.log("No logo file received");
-        res.status(400).json({ success: false, message: 'Kein Bild hochgeladen' });
-    }
-});
+const apiRouter = express.Router();
 
-app.post('/upload-custom-image', upload.single('customImage'), (req, res) => {
+apiRouter.post('/upload-custom-image', uploadCustomImage.single('customImage'), (req, res) => {
     if (req.file) {
-        const imagePath = `/uploads/custom/${req.file.filename}`;
-        console.log("Custom image uploaded successfully:", imagePath);
+        const imagePath = `/api/uploads/custom/${req.file.filename}`;
         res.json({ success: true, imagePath });
     } else {
-        console.log("No custom image file received");
         res.status(400).json({ success: false, message: 'Kein Bild hochgeladen' });
     }
 });
 
-app.post('/upload-logo', upload.single('logo'), (req, res) => {
+apiRouter.post('/upload-logo', upload.single('logo'), (req, res) => {
     if (req.file) {
-        const logoPath = `/uploads/logos/${req.file.filename}`;
+        const logoPath = `/api/uploads/logos/${req.file.filename}`;
         console.log("Logo uploaded successfully:", logoPath);
         res.json({ success: true, logoPath });
     } else {
@@ -102,23 +89,228 @@ app.post('/upload-logo', upload.single('logo'), (req, res) => {
     }
 });
 
-app.use('/icons', express.static(path.join(__dirname, 'icons')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/ttf', express.static(path.join(__dirname, 'ttf')));
+apiRouter.post('/objekte', upload.fields([
+    { name: 'notenbild', maxCount: 1 },
+    { name: 'notenbildMitText', maxCount: 1 }
+]), async (req, res) => {
+    try {
+        const { typ, titel, inhalt, strophen, copyright } = req.body;
+        const notenbild = req.files && req.files['notenbild'] 
+            ? `/api/uploads/${path.relative(path.join(__dirname, 'uploads'), req.files['notenbild'][0].path)}`
+            : null;
+        const notenbildMitText = req.files && req.files['notenbildMitText']
+            ? `/api/uploads/${path.relative(path.join(__dirname, 'uploads'), req.files['notenbildMitText'][0].path)}`
+            : null;
+        
+        console.log('Prepared data:', { typ, titel, inhalt, strophen, notenbild, notenbildMitText, copyright });
+        
+        const safeInhalt = inhalt === undefined ? null : inhalt;
+        const safeStrophen = strophen === undefined ? null : strophen;
+        console.log('Received request body:', req.body);
 
-const PORT = 3000;
+        const [result] = await pool.query(
+            'INSERT INTO objekte (typ, titel, inhalt, notenbild, notenbildMitText, strophen, copyright) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [typ, titel, safeInhalt, notenbild, notenbildMitText, safeStrophen, copyright]
+        );
+
+        console.log('Database insert result:', result);
+        
+        res.status(201).json({ id: result.insertId, message: 'Objekt erfolgreich gespeichert' });
+    } catch (error) {
+        console.error('Server-Fehler:', error);
+        res.status(500).json({ error: 'Interner Serverfehler', details: error.message });
+    }
+});
+
+apiRouter.get('/objekte', async (req, res) => {
+    try {
+        console.log('GET /objekte aufgerufen');
+        const [results] = await pool.query('SELECT * FROM objekte');
+        console.log('Abgerufene Objekte:', results);
+        res.json(results);
+    } catch (error) {
+        console.error('Fehler beim Abrufen der Objekte: ', error);
+        res.status(500).json({ error: 'Interner Serverfehler', details: error.message });
+    }
+});
+
+apiRouter.put('/objekte/:id', upload.fields([
+    { name: 'notenbild', maxCount: 1 },
+    { name: 'notenbildMitText', maxCount: 1 }
+]), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { typ, titel, inhalt, strophen, copyright } = req.body;
+        
+        console.log('Empfangene Daten:', { id, typ, titel, inhalt, strophen, copyright });
+        
+        const [existingObjekt] = await pool.query('SELECT * FROM objekte WHERE id = ?', [id]);
+        
+        if (existingObjekt.length === 0) {
+            return res.status(404).json({ message: 'Objekt nicht gefunden' });
+        }
+        
+        let notenbild = existingObjekt[0].notenbild;
+        let notenbildMitText = existingObjekt[0].notenbildMitText;
+        
+        if (req.files && req.files['notenbild']) {
+            notenbild = `/api/uploads/${path.relative(path.join(__dirname, 'uploads'), req.files['notenbild'][0].path)}`;
+        }
+        if (req.files && req.files['notenbildMitText']) {
+            notenbildMitText = `/api/uploads/${path.relative(path.join(__dirname, 'uploads'), req.files['notenbildMitText'][0].path)}`;
+        }
+        
+        const query = 'UPDATE objekte SET typ = ?, titel = ?, inhalt = ?, strophen = ?, notenbild = ?, notenbildMitText = ?, copyright = ? WHERE id = ?';
+        const params = [typ, titel, inhalt || null, strophen || null, notenbild, notenbildMitText, copyright || null, id];
+        
+        console.log('SQL Query:', query);
+        console.log('SQL Params:', params);
+        
+        const [result] = await pool.query(query, params);
+        
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Objekt nicht gefunden' });
+        }
+        res.json({ message: 'Objekt erfolgreich aktualisiert' });
+    } catch (error) {
+        console.error('Detaillierter Fehler:', error);
+        res.status(500).json({ error: 'Interner Serverfehler', details: error.message, stack: error.stack });
+    }
+});
+
+apiRouter.delete('/objekte/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const [result] = await pool.query('DELETE FROM objekte WHERE id = ?', [id]);
+        
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Objekt nicht gefunden' });
+        }
+        res.json({ message: 'Objekt erfolgreich gelöscht' });
+    } catch (error) {
+        console.error('Fehler beim Löschen des Objekts: ', error);
+        res.status(500).json({ error: 'Interner Serverfehler', details: error.message });
+    }
+});
+
+apiRouter.post('/sessions', async (req, res) => {
+    try {
+        const { name, data } = req.body;
+        const id = uuidv4();
+        await pool.query('INSERT INTO sessions (id, name, data) VALUES (?, ?, ?)', [id, name, JSON.stringify(data)]);
+        res.status(201).json({ id, message: 'Session erfolgreich gespeichert' });
+    } catch (error) {
+        console.error('Fehler beim Speichern der Session:', error);
+        res.status(500).json({ error: 'Interner Serverfehler' });
+    }
+});
+
+apiRouter.get('/sessions', async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT id, name, created_at FROM sessions ORDER BY created_at DESC');
+        res.json(rows);
+    } catch (error) {
+        console.error('Fehler beim Abrufen der Sessions:', error);
+        res.status(500).json({ error: 'Interner Serverfehler' });
+    }
+});
+
+apiRouter.get('/sessions/:id', async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM sessions WHERE id = ?', [req.params.id]);
+        if (rows.length === 0) {
+            res.status(404).json({ error: 'Session nicht gefunden' });
+        } else {
+            console.log("Gefundene Session:", rows[0]);
+            res.json(rows[0]);
+        }
+    } catch (error) {
+        console.error('Fehler beim Abrufen der Session:', error);
+        res.status(500).json({ error: 'Interner Serverfehler' });
+    }
+});
+
+apiRouter.delete('/sessions/:id', async (req, res) => {
+    try {
+        const [result] = await pool.query('DELETE FROM sessions WHERE id = ?', [req.params.id]);
+        if (result.affectedRows === 0) {
+            res.status(404).json({ error: 'Session nicht gefunden' });
+        } else {
+            res.json({ message: 'Session erfolgreich gelöscht' });
+        }
+    } catch (error) {
+        console.error('Fehler beim Löschen der Session:', error);
+        res.status(500).json({ error: 'Interner Serverfehler' });
+    }
+});
+
+apiRouter.post('/vorlagen', async (req, res) => {
+    try {
+        const { name, data } = req.body;
+        const id = uuidv4();
+        await pool.query('INSERT INTO vorlagen (id, name, data) VALUES (?, ?, ?)', [id, name, JSON.stringify(data)]);
+        res.status(201).json({ id, message: 'Vorlage erfolgreich gespeichert' });
+    } catch (error) {
+        console.error('Fehler beim Speichern der Vorlage:', error);
+        res.status(500).json({ error: 'Interner Serverfehler' });
+    }
+});
+
+apiRouter.get('/vorlagen', async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT id, name FROM vorlagen');
+        res.json(rows);
+    } catch (error) {
+        console.error('Fehler beim Abrufen der Vorlagen:', error);
+        res.status(500).json({ error: 'Interner Serverfehler' });
+    }
+});
+
+apiRouter.get('/vorlagen/:id', async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM vorlagen WHERE id = ?', [req.params.id]);
+        if (rows.length === 0) {
+            res.status(404).json({ error: 'Vorlage nicht gefunden' });
+        } else {
+            res.json(rows[0]);
+        }
+    } catch (error) {
+        console.error('Fehler beim Abrufen der Vorlage:', error);
+        res.status(500).json({ error: 'Interner Serverfehler' });
+    }
+});
+
+apiRouter.delete('/vorlagen/:id', async (req, res) => {
+    try {
+        const [result] = await pool.query('DELETE FROM vorlagen WHERE id = ?', [req.params.id]);
+        if (result.affectedRows === 0) {
+            res.status(404).json({ error: 'Vorlage nicht gefunden' });
+        } else {
+            res.json({ message: 'Vorlage erfolgreich gelöscht' });
+        }
+    } catch (error) {
+        console.error('Fehler beim Löschen der Vorlage:', error);
+        res.status(500).json({ error: 'Interner Serverfehler' });
+    }
+});
+
+app.use('/api', apiRouter);
+
+app.use('/api/icons', express.static(path.join(__dirname, 'icons')));
+app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api/ttf', express.static(path.join(__dirname, 'ttf')));
+
+app.use(express.static(path.join(__dirname, '../frontend')));
+
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
 
 async function initializeDatabase() {
     try {
-        const connection = await mysql.createConnection({
-            host: 'localhost',
-            user: 'root',
-            password: '',
-            database: 'gottesdienst'
-        });
+        const conn = await pool.getConnection();
         
-        // Überprüfen und Aktualisieren der Datenbankstruktur
-        await connection.execute(`
+        await conn.execute(`
             CREATE TABLE IF NOT EXISTS objekte (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 typ VARCHAR(255) NOT NULL,
@@ -131,14 +323,13 @@ async function initializeDatabase() {
             )
         `);
         
-        // Überprüfen, ob die copyright-Spalte bereits existiert, falls nicht, fügen wir sie hinzu
-        const [columns] = await connection.execute("SHOW COLUMNS FROM objekte LIKE 'copyright'");
+        const [columns] = await conn.execute("SHOW COLUMNS FROM objekte LIKE 'copyright'");
         if (columns.length === 0) {
-            await connection.execute("ALTER TABLE objekte ADD COLUMN copyright VARCHAR(255)");
+            await conn.execute("ALTER TABLE objekte ADD COLUMN copyright VARCHAR(255)");
             console.log('Copyright-Spalte zur objekte-Tabelle hinzugefügt.');
         }
-
-        await connection.execute(`
+        
+        await conn.execute(`
             CREATE TABLE IF NOT EXISTS sessions (
                 id VARCHAR(36) PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
@@ -146,250 +337,33 @@ async function initializeDatabase() {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
-
-        await connection.execute(`
+        
+        await conn.execute(`
             CREATE TABLE IF NOT EXISTS vorlagen (
                 id VARCHAR(36) PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
                 data JSON NOT NULL
             )
         `);
-
+        
         console.log('Datenbankstruktur überprüft und aktualisiert.');
         
-        return connection;
+        conn.release();
     } catch (error) {
         console.error('Fehler bei der Datenbankinitialisierung:', error);
         process.exit(1);
     }
 }
 
-async function startServer() {
-    const db = await initializeDatabase();
-    
-    app.post('/objekte', upload.fields([
-        { name: 'notenbild', maxCount: 1 },
-        { name: 'notenbildMitText', maxCount: 1 }
-    ]), async (req, res) => {
-        try {
-            console.log('Received request body:', req.body);
-            console.log('Received files:', req.files);
-            
-            const { typ, titel, inhalt, strophen, copyright } = req.body;
-            const notenbild = req.files && req.files['notenbild'] 
-            ? path.join('/uploads', path.relative(path.join(__dirname, 'uploads'), req.files['notenbild'][0].path))
-            : null;
-            const notenbildMitText = req.files && req.files['notenbildMitText']
-            ? path.join('/uploads', path.relative(path.join(__dirname, 'uploads'), req.files['notenbildMitText'][0].path))
-            : null;
-            
-            console.log('Prepared data:', { typ, titel, inhalt, strophen, notenbild, notenbildMitText, copyright });
-            
-            const safeInhalt = inhalt === undefined ? null : inhalt;
-            const safeStrophen = strophen === undefined ? null : strophen;
-            
-            const [result] = await db.execute(
-                'INSERT INTO objekte (typ, titel, inhalt, notenbild, notenbildMitText, strophen, copyright) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [typ, titel, safeInhalt, notenbild, notenbildMitText, safeStrophen, copyright]
-            );
-            
-            console.log('Database insert result:', result);
-            
-            res.status(201).json({ id: result.insertId, message: 'Objekt erfolgreich gespeichert' });
-        } catch (error) {
-            console.error('Server-Fehler:', error);
-            res.status(500).json({ error: 'Interner Serverfehler', details: error.message });
-        }
-    });
-    
-    app.get('/objekte', async (req, res) => {
-        try {
-            console.log('GET /objekte aufgerufen');
-            const [results] = await db.execute('SELECT * FROM objekte');
-            console.log('Abgerufene Objekte:', results);
-            res.json(results);
-        } catch (error) {
-            console.error('Fehler beim Abrufen der Objekte: ', error);
-            res.status(500).json({ error: 'Interner Serverfehler', details: error.message });
-        }
-    });
-    
-    app.put('/objekte/:id', upload.fields([
-        { name: 'notenbild', maxCount: 1 },
-        { name: 'notenbildMitText', maxCount: 1 }
-    ]), async (req, res) => {
-        try {
-            const { id } = req.params;
-            const { typ, titel, inhalt, strophen, copyright } = req.body;
-            
-            console.log('Empfangene Daten:', { id, typ, titel, inhalt, strophen, copyright });
-            
-            // Holen Sie das existierende Objekt aus der Datenbank
-            const [existingObjekt] = await db.execute('SELECT * FROM objekte WHERE id = ?', [id]);
-            
-            if (existingObjekt.length === 0) {
-                return res.status(404).json({ message: 'Objekt nicht gefunden' });
-            }
-            
-            let notenbild = existingObjekt[0].notenbild;
-            let notenbildMitText = existingObjekt[0].notenbildMitText;
-            
-            if (req.files && req.files['notenbild']) {
-                notenbild = path.join('/uploads', path.relative(path.join(__dirname, 'uploads'), req.files['notenbild'][0].path));
-            }
-            if (req.files && req.files['notenbildMitText']) {
-                notenbildMitText = path.join('/uploads', path.relative(path.join(__dirname, 'uploads'), req.files['notenbildMitText'][0].path));
-            }
-            
-            const query = 'UPDATE objekte SET typ = ?, titel = ?, inhalt = ?, strophen = ?, notenbild = ?, notenbildMitText = ?, copyright = ? WHERE id = ?';
-            const params = [
-                typ, 
-                titel, 
-                inhalt || null, 
-                strophen || null, 
-                notenbild, 
-                notenbildMitText, 
-                copyright || null,  // Erlaubt NULL, wenn kein Copyright angegeben ist
-                id
-            ];
-            
-            console.log('SQL Query:', query);
-            console.log('SQL Params:', params);
-            
-            const [result] = await db.execute(query, params);
-            
-            if (result.affectedRows === 0) {
-                return res.status(404).json({ message: 'Objekt nicht gefunden' });
-            }
-            res.json({ message: 'Objekt erfolgreich aktualisiert' });
-        } catch (error) {
-            console.error('Detaillierter Fehler:', error);
-            res.status(500).json({ error: 'Interner Serverfehler', details: error.message, stack: error.stack });
-        }
-    });
-    app.delete('/objekte/:id', async (req, res) => {
-        try {
-            const { id } = req.params;
-            const [result] = await db.execute('DELETE FROM objekte WHERE id = ?', [id]);
-            
-            if (result.affectedRows === 0) {
-                return res.status(404).json({ message: 'Objekt nicht gefunden' });
-            }
-            res.json({ message: 'Objekt erfolgreich gelöscht' });
-        } catch (error) {
-            console.error('Fehler beim Löschen des Objekts: ', error);
-            res.status(500).json({ error: 'Interner Serverfehler', details: error.message });
-        }
-    });
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
-    // Neue Routen für Session-Management
-    app.post('/sessions', async (req, res) => {
-        try {
-            const { name, data } = req.body;
-            const id = uuidv4();
-            await db.execute('INSERT INTO sessions (id, name, data) VALUES (?, ?, ?)', [id, name, JSON.stringify(data)]);
-            res.status(201).json({ id, message: 'Session erfolgreich gespeichert' });
-        } catch (error) {
-            console.error('Fehler beim Speichern der Session:', error);
-            res.status(500).json({ error: 'Interner Serverfehler' });
-        }
+initializeDatabase().then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server läuft auf http://0.0.0.0:${PORT}`);
     });
-
-    app.get('/sessions', async (req, res) => {
-        try {
-            const [rows] = await db.execute('SELECT id, name, created_at FROM sessions ORDER BY created_at DESC');
-            res.json(rows);
-        } catch (error) {
-            console.error('Fehler beim Abrufen der Sessions:', error);
-            res.status(500).json({ error: 'Interner Serverfehler' });
-        }
-    });
-
-    app.get('/sessions/:id', async (req, res) => {
-        try {
-            const [rows] = await db.execute('SELECT * FROM sessions WHERE id = ?', [req.params.id]);
-            if (rows.length === 0) {
-                res.status(404).json({ error: 'Session nicht gefunden' });
-            } else {
-                console.log("Gefundene Session:", rows[0]);
-                res.json(rows[0]);
-            }
-        } catch (error) {
-            console.error('Fehler beim Abrufen der Session:', error);
-            res.status(500).json({ error: 'Interner Serverfehler' });
-        }
-    });
-
-    app.delete('/sessions/:id', async (req, res) => {
-        try {
-            const [result] = await db.execute('DELETE FROM sessions WHERE id = ?', [req.params.id]);
-            if (result.affectedRows === 0) {
-                res.status(404).json({ error: 'Session nicht gefunden' });
-            } else {
-                res.json({ message: 'Session erfolgreich gelöscht' });
-            }
-        } catch (error) {
-            console.error('Fehler beim Löschen der Session:', error);
-            res.status(500).json({ error: 'Interner Serverfehler' });
-        }
-    });
-    
-    
-
-    // Routen für Vorlagen
-    app.post('/vorlagen', async (req, res) => {
-        try {
-            const { name, data } = req.body;
-            const id = uuidv4();
-            await db.execute('INSERT INTO vorlagen (id, name, data) VALUES (?, ?, ?)', [id, name, JSON.stringify(data)]);
-            res.status(201).json({ id, message: 'Vorlage erfolgreich gespeichert' });
-        } catch (error) {
-            console.error('Fehler beim Speichern der Vorlage:', error);
-            res.status(500).json({ error: 'Interner Serverfehler' });
-        }
-    });
-
-    app.get('/vorlagen', async (req, res) => {
-        try {
-            const [rows] = await db.execute('SELECT id, name FROM vorlagen');
-            res.json(rows);
-        } catch (error) {
-            console.error('Fehler beim Abrufen der Vorlagen:', error);
-            res.status(500).json({ error: 'Interner Serverfehler' });
-        }
-    });
-
-    app.get('/vorlagen/:id', async (req, res) => {
-        try {
-            const [rows] = await db.execute('SELECT * FROM vorlagen WHERE id = ?', [req.params.id]);
-            if (rows.length === 0) {
-                res.status(404).json({ error: 'Vorlage nicht gefunden' });
-            } else {
-                res.json(rows[0]);
-            }
-        } catch (error) {
-            console.error('Fehler beim Abrufen der Vorlage:', error);
-            res.status(500).json({ error: 'Interner Serverfehler' });
-        }
-    });
-
-    app.delete('/vorlagen/:id', async (req, res) => {
-        try {
-            const [result] = await db.execute('DELETE FROM vorlagen WHERE id = ?', [req.params.id]);
-            if (result.affectedRows === 0) {
-                res.status(404).json({ error: 'Vorlage nicht gefunden' });
-            } else {
-                res.json({ message: 'Vorlage erfolgreich gelöscht' });
-            }
-        } catch (error) {
-            console.error('Fehler beim Löschen der Vorlage:', error);
-            res.status(500).json({ error: 'Interner Serverfehler' });
-        }
-    });
-
-    app.listen(PORT, () => {
-        console.log(`Server läuft auf http://localhost:${PORT}`);
-    });
-}
-
-startServer();
+}).catch(error => {
+    console.error('Fehler beim Starten des Servers:', error);
+    process.exit(1);
+});
