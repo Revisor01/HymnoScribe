@@ -555,7 +555,7 @@ function addToSelected(objekt) {
                 formData.append('customImage', file);
                 
                 try {
-                    const response = await fetch('/upload-custom-image', {
+                    const response = await fetch('/api/upload-custom-image', {
                         method: 'POST',
                         body: formData
                     });
@@ -1740,7 +1740,7 @@ function showConfigModal() {
     // Aktuelles Logo anzeigen
     const currentLogoDiv = document.getElementById('currentLogo');
     if (globalConfig.churchLogo) {
-        currentLogoDiv.innerHTML = `<img src="http://localhost:3000${globalConfig.churchLogo}" alt="Aktuelles Logo" style="max-width: 100px; max-height: 100px;">`;
+        currentLogoDiv.innerHTML = `<img src="${globalConfig.churchLogo}" alt="Aktuelles Logo" style="max-width: 100px; max-height: 100px;">`;
     } else {
         currentLogoDiv.innerHTML = 'Kein Logo ausgewählt';
     }
@@ -1810,6 +1810,18 @@ async function generatePDF(format) {
             bold: await fetchAndEmbedFont(doc, 'OpenSans-Bold'),
             italic: await fetchAndEmbedFont(doc, 'OpenSans-Italic'),
             boldItalic: await fetchAndEmbedFont(doc, 'OpenSans-BoldItalic')
+        },
+        'Andada Pro': {
+            normal: await fetchAndEmbedFont(doc, 'AndadaPro-Regular'),
+            bold: await fetchAndEmbedFont(doc, 'AndadaPro-Bold'),
+            italic: await fetchAndEmbedFont(doc, 'AndadaPro-Italic'),
+            boldItalic: await fetchAndEmbedFont(doc, 'AndadaPro-BoldItalic')
+        },
+        'EB Garamond': {
+            normal: await fetchAndEmbedFont(doc, 'EBGaramond-Regular'),
+            bold: await fetchAndEmbedFont(doc, 'EBGaramond-Bold'),
+            italic: await fetchAndEmbedFont(doc, 'EBGaramond-Italic'),
+            boldItalic: await fetchAndEmbedFont(doc, 'EBGaramond-BoldItalic')
         }
     };
     console.log("Fonts loaded:", Object.keys(fonts));
@@ -1866,7 +1878,7 @@ async function generatePDF(format) {
     if (globalConfig.churchLogo) {
         console.log("Fetching church logo from:", globalConfig.churchLogo);
         try {
-            const logoUrl = `http://localhost:3000${globalConfig.churchLogo}`;
+            const logoUrl = `${globalConfig.churchLogo}`;
             console.log("Full logo URL:", logoUrl);
             const logoResponse = await fetch(logoUrl);
             if (!logoResponse.ok) throw new Error(`HTTP error! Status: ${logoResponse.status}`);
@@ -2122,23 +2134,7 @@ async function generatePDF(format) {
             return 0;
         }
     }
-//  async function drawStrophe(stropheNum, stropheText, x, y, maxWidth, fontSize, options) {
-//      const font = fonts[globalConfig.fontFamily].normal;
-//      const stropheNumWidth = await font.widthOfTextAtSize(stropheNum + ' ', fontSize);
-//      
-//      // Zeichnen Sie die Strophennummer
-//      page.drawText( + ' ', {
-//          x,
-//          y,
-//          size: fontSize,
-//          font: font
-//      });
-//      
-//      // Zeichnen Sie den Strophentext
-//      const textHeight = await drawText(stropheText, x + stropheNumWidth, y, fontSize, maxWidth - stropheNumWidth, options);
-//      
-//      return textHeight;
-//  }
+
     function showProgress(percent) {
         const progressBar = document.getElementById('pdf-progress-bar');
         const progressText = document.getElementById('pdf-progress-text');
@@ -2729,6 +2725,7 @@ function getPageDimensionsForFormat(format) {
 function getOutputPageSize(format) {
     switch (format) {
         case 'a5':
+            return [841.89, 595.28];  // A4 Querformat
         case 'dl':
             return [841.89, 595.28];  // A4 Querformat
         case 'a4-schmal':

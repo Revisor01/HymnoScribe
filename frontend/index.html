@@ -20,8 +20,8 @@
         <header>
             <h1>HymnoScribe - Der Liedblatt Generator</h1>
             <nav>
-                <a href="admin.html" class="btn">Admin-Oberfläche</a>
-                <button class="btn" onclick="showConfigModal()">Globale Einstellungen</button>
+                <a href="admin.html" class="btn">Bibliothek verwalten</a>
+                <button class="btn" onclick="showConfigModal()">Layout anpassen</button>
             </nav>
         </header>
         <section class="session-management">
@@ -49,6 +49,8 @@
                         <option value="Roboto">Roboto</option>
                         <option value="Lato">Lato</option>
                         <option value="Open Sans">Open Sans</option>
+                        <option value="Andada Pro">Andada Pro</option>
+                        <option value="EB Garamond">EB Garamond</option>
                     </select>
                     
                     <label for="fontSize">Schriftgröße:</label>
@@ -59,14 +61,13 @@
                         <option value="left">Links</option>
                         <option value="center">Zentriert</option>
                         <option value="right">Rechts</option>
-                        <option value="justify">Blocksatz</option>
                     </select>
                     
                     <label for="lineHeight">Zeilenabstand:</label>
                     <input type="number" id="lineHeight" min="1" max="3" step="0.1" value="1.5">
                     
                     <div class="form-group">
-                        <label for="churchLogo">Kirchenlogo:</label>
+                        <label for="churchLogo">Logo:</label>
                         <input type="file" id="churchLogo" accept="image/*">
                         <button type="button" id="deleteLogo">Logo löschen</button>
                         <div id="currentLogo"></div>
@@ -95,7 +96,7 @@
         <div class="left-panel">
             
             <section class="standard-objects">
-                <h2>Standardobjekte</h2>
+                <h2>Bausteine</h2>
                 <div class="object-group">
                     <h3>Trenner</h3>
                     <div class="trenner-options">
@@ -105,25 +106,15 @@
                         <button class="trenner-btn" onclick="addTrenner('default')"><img src="/api/icons/default.png" alt="Default" style="width: auto; height: 12px;"></button>
                     </div>
                     <div class="object-group">
-                        <h3>Seitenumbruch</h3>
-                        <button onclick="addPageBreak()">Seitenumbruch einfügen</button>
-                    </div>
-                </div>
-                <div class="object-group">
-                    <h3>Freitexte</h3>
-                    <div class="freitext-options">
-                        <button class="freitext-btn" onclick="addFreierText('Titel')">Titel</button>
+                        <h3>Elemente</h3>
+                        <button onclick="addPageBreak()">Seitenumbruch</button>
                         <button class="freitext-btn" onclick="addFreierText('Freitext')">Freitext</button>
+                        <button onclick="addCustomImage()">Bild</button>
                     </div>
                 </div>
-                <div class="object-group">
-                    <h3>Benutzerdefiniertes Bild</h3>
-                    <button onclick="addCustomImage()">Bild hinzufügen</button>
-                </div>
-
             </section>
             <section class="pool">
-                <h2>Pool</h2>
+                <h2>Inhaltsbibliothek</h2>
                 <div class="filter-container">
                     <input type="text" id="poolSearch" placeholder="Suche...">
                     <select id="filterTyp">
@@ -140,7 +131,7 @@
             </section>
         </div>
         <div class="middle-panel">
-            <h2>Ausgewählte Elemente</h2>
+            <h2>Ausgewählte Bausteine</h2>
             <div id="selected-items"></div>
         </div>
         <div class="right-panel">
