@@ -1751,7 +1751,8 @@ const mmToPt = (mm) => mm * 2.83465;
 const pageSizes = {
     'a5': { width: mmToPt(148), height: mmToPt(210) },
     'dl': { width: mmToPt(99), height: mmToPt(210) },
-    'a4-schmal': { width: mmToPt(105), height: mmToPt(297) }
+    'a4-schmal': { width: mmToPt(105), height: mmToPt(297) },
+    'a3-schmal': { width: mmToPt(148), height: mmToPt(420) }
 };
 
 const PX_TO_PT_RATIO = 0.75;
@@ -1772,6 +1773,7 @@ async function generatePDF(format) {
     const progressBar = document.getElementById('pdf-progress-bar');
     const progressText = document.getElementById('pdf-progress-text');
     progressContainer.style.display = 'block';
+    showProgress(0, "Initialisiere PDF-Erstellung");
     console.log("Starting PDF generation for format:", format);
     const { PDFDocument } = window.PDFLib;
     const fontkit = window.fontkit;
@@ -1780,6 +1782,7 @@ async function generatePDF(format) {
     doc.registerFontkit(fontkit);
     
     console.log("Loading fonts...");
+    showProgress(10, "Lade Schriftarten");
     const fonts = {
         'Jost': {
             normal: await fetchAndEmbedFont(doc, 'Jost-Regular'),
@@ -1860,7 +1863,8 @@ async function generatePDF(format) {
     const pageSizes = {
         'a5': { width: mmToPt(148), height: mmToPt(210) },
         'dl': { width: mmToPt(99), height: mmToPt(210) },
-        'a4-schmal': { width: mmToPt(105), height: mmToPt(297) }
+        'a4-schmal': { width: mmToPt(105), height: mmToPt(297) },
+        'a3-schmal': { width: mmToPt(148), height: mmToPt(420) }
     };
     
     const { width, height } = pageSizes[format];
@@ -1876,6 +1880,7 @@ async function generatePDF(format) {
     
     let logoImage = null;
     if (globalConfig.churchLogo) {
+        showProgress(30, "Lade Logo");
         console.log("Fetching church logo from:", globalConfig.churchLogo);
         try {
             const logoUrl = `${globalConfig.churchLogo}`;
@@ -2135,14 +2140,16 @@ async function generatePDF(format) {
         }
     }
 
-    function showProgress(percent) {
+    function showProgress(percent, message = '') {
         const progressBar = document.getElementById('pdf-progress-bar');
         const progressText = document.getElementById('pdf-progress-text');
         if (progressBar && progressText) {
             progressBar.style.width = `${percent}%`;
-            progressText.textContent = `${Math.round(percent)}%`;
+            progressText.textContent = `${Math.round(percent)}% ${message}`;
         }
+        console.log(`Progress: ${percent}% ${message}`);
     }
+    
     function addPage() {
         console.log("Adding new page");
         page = doc.addPage([width, height]);
@@ -2155,7 +2162,6 @@ async function generatePDF(format) {
     const items = liedblattContent.children;
     
     console.log("Processing liedblatt content...");
-    showProgress(0);
     
     let lastItemType = null;
     
@@ -2166,7 +2172,7 @@ async function generatePDF(format) {
         }
         return false;
     }
-    
+    showProgress(40, "Verarbeite Inhalte");
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
         console.log("Processing item:", item.tagName, item.className);
@@ -2176,42 +2182,6 @@ async function generatePDF(format) {
             ({ page, y } = addPage());
             continue;
         }
-        
-//      if (item.classList.contains('lied') || item.classList.contains('liturgie')) {
-//          const title = item.querySelector('h3');
-//          const copyright = item.querySelector('.copyright-info');
-//          const notes = item.querySelector('img');
-//          const strophen = Array.from(item.children).filter(child => child.tagName === 'P');
-//          
-//          // Zeichne den Titel
-//          y -= headingStyles.heading.spacingBefore;
-//          await drawText(title.textContent, margin.left, y, headingStyles.heading.fontSize, contentWidth, { bold: true, alignment: 'center' });
-//          //y -= headingStyles.heading.fontSize * headingStyles.heading.lineHeight + headingStyles.heading.spacingAfter;
-//
-////          // Zeichne das Copyright, falls vorhanden
-////          if (copyright) {
-////              const copyrightStyle = window.getComputedStyle(copyright);
-////              y -= await drawText(copyright.textContent, margin.left, y, globalConfig.fontSize, contentWidth, { 
-////                  alignment: 'left', 
-////                  isCopyright: true,
-////                  fontSize: parseInt(copyrightStyle.fontSize)
-////              });
-////          }
-//          
-//          // Zeichne die Noten, falls vorhanden
-//          if (notes) {
-//              const notesHeight = await drawImage(notes.src, margin.left, y, contentWidth);
-//              y -= notesHeight;
-//          }
-//          
-//          // Zeichne die Strophen
-//          for (let j = 0; j < strophen.length; j++) {
-//              //const strophe = strophen[j];
-//              //const stropheText = strophe.textContent;
-//          }
-            
-        //    y -= globalConfig.fontSize; // Zusätzlicher Abstand nach dem Lied/der Liturgie
-        //}
         if (item.querySelector('.fas, .trenner-default-img')) {
             // Icon-Logik (bleibt unverändert)
             let iconType = 'default';
@@ -2230,11 +2200,6 @@ async function generatePDF(format) {
             let lastElementType = null;
             
             for (const element of elements) {
-                // Überspringe leere Paragraphen und zusätzliche leere Paragraphen nach Strophen
-//              if (element.tagName === 'div' && element.textContent.trim() === '' && !element.closest('.strophe')) {
-//                  continue;
-//              }
-                
                 // Überspringe alleinstehende Strophennummern
                 if (element.tagName === 'STRONG' && /^\d+\.$/.test(element.textContent.trim())) {
                     continue;
@@ -2270,12 +2235,6 @@ async function generatePDF(format) {
                     
                     // Strophen-Nummerierung hinzufügen
                   let textContent = element.innerText;
-//                      if (element.classList.contains('strophe') || element.closest('.strophe')) {
-//                          strophenCounter++;
-//                          textContent = `${strophenCounter}. ${textContent.replace(/^\d+\.\s*/, '')}`;
-//                          lastElementWasStrophe = true;
-//                      }
-                    
                     
                     // Wenn das vorherige Element eine Überschrift oder Copyright war, verringern wir den Abstand
                     if (lastElementType === 'heading' && isCopyright) {
@@ -2310,10 +2269,11 @@ async function generatePDF(format) {
                 }
             }
         }
-        showProgress((i + 1) / items.length * 100);
+        showProgress(40 + (i / items.length) * 50, "Generiere PDF-Inhalt");
     }
     
     console.log("PDF generation complete. Saving...");
+    showProgress(90, "Finalisiere PDF");
     const pdfBytes = await doc.save();
     console.log("PDF saved. Checking if brochure is needed...");
     
@@ -2325,7 +2285,7 @@ async function generatePDF(format) {
         const createBrochureChecked = document.getElementById('createBrochure').checked;
         if (createBrochureChecked) {
             console.log("Creating brochure...");
-            showProgress(75);
+            showProgress(95, "Erstelle Broschüre");
             
             const tempDoc = await PDFDocument.load(pdfBytes);
             let pageCount = tempDoc.getPageCount();
@@ -2346,7 +2306,7 @@ async function generatePDF(format) {
             downloadPDF(pdfBytes, `liedblatt_${format}.pdf`);
         }
         
-        showProgress(100);
+        showProgress(100, "PDF-Erstellung abgeschlossen");
     } catch (error) {
         console.error("Error during PDF generation or brochure creation:", error);
         await customAlert(`Fehler bei der PDF-Erstellung: ${error.message}`);
@@ -2477,7 +2437,7 @@ async function createBrochure(inputPdfBytes, format) {
     
     const outputPageSize = getOutputPageSize(format);
     
-    if (format === 'a5' || format === 'a4-schmal') {
+    if (format === 'a5' || format === 'a4-schmal' || format === 'a3-schmal') {
         await createA5orA4SchmalBrochure(inputPdf, outputPdf, pageCount, format, targetWidth, targetHeight, outputPageSize);
     } else if (format === 'dl') {
         await createDinLangBrochure(inputPdf, outputPdf, pageCount, targetWidth, targetHeight, outputPageSize);
@@ -2712,7 +2672,8 @@ function getPageDimensionsForFormat(format) {
     const dimensions = {
         'a5': { width: 420, height: 595 },
         'dl': { width: 849, height: 595 },
-        'a4-schmal': { width: 297, height: 842 }
+        'a4-schmal': { width: 297, height: 842 },
+        'a3-schmal': { width: 420, height: 1191 }
     }[format];
     
     if (!dimensions) {
@@ -2725,13 +2686,13 @@ function getPageDimensionsForFormat(format) {
 function getOutputPageSize(format) {
     switch (format) {
         case 'a5':
-            return [841.89, 595.28];  // A4 Querformat
         case 'dl':
-            return [841.89, 595.28];  // A4 Querformat
         case 'a4-schmal':
-            return [595.28, 841.89];  // A4 Hochformat
+            return [595.28, 841.89]; // A4 Querformat
+        case 'a3-schmal':
+            return [841.89, 1190.55]; // A3 Querformat
         default:
-            throw new Error('Unbekanntes Format');
+            return [595.28, 841.89]; // A4 Hochformat als Fallback
     }
 }
 

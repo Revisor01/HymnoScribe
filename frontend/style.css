@@ -150,7 +150,7 @@ footer {
     background-position: left;
 }
 .trenner-default-img {
-    background-image: url('http://localhost:3000/icons/default.png');
+    background-image: url('/api/icons/default.png');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
