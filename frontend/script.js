@@ -1762,9 +1762,9 @@ const baseFontSize = 12; // Basis-Schriftgröße, von der wir ausgehen
 const scaleFactor = globalConfig.fontSize / baseFontSize;
 
 const headingStyles = {
-    title: { fontSize: globalConfig.fontSize * 1.8, bold: true, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 3 },
-    subtitle: { fontSize: globalConfig.fontSize * 1.3, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 10},
-    heading: { fontSize: globalConfig.fontSize * 1.2, bold: true, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 10 },
+    title: { fontSize: globalConfig.fontSize * 2, bold: true, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 3 },
+    subtitle: { fontSize: globalConfig.fontSize * 1.7, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 10},
+    heading: { fontSize: globalConfig.fontSize * 1.5, bold: true, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 10 },
     bodyText: { fontSize: globalConfig.fontSize, lineHeight: 1.2, spacingBefore: 10, spacingAfter: 10 }
 };
 
@@ -1783,51 +1783,6 @@ async function generatePDF(format) {
     
     console.log("Loading fonts...");
     showProgress(10, "Lade Schriftarten");
-    const fonts = {
-        'Jost': {
-            normal: await fetchAndEmbedFont(doc, 'Jost-Regular'),
-            bold: await fetchAndEmbedFont(doc, 'Jost-Bold'),
-            italic: await fetchAndEmbedFont(doc, 'Jost-Italic'),
-            boldItalic: await fetchAndEmbedFont(doc, 'Jost-BoldItalic')
-        },
-        'Lato': {
-            normal: await fetchAndEmbedFont(doc, 'Lato-Regular'),
-            bold: await fetchAndEmbedFont(doc, 'Lato-Bold'),
-            italic: await fetchAndEmbedFont(doc, 'Lato-Italic'),
-            boldItalic: await fetchAndEmbedFont(doc, 'Lato-BoldItalic')
-        },
-        'Montserrat': {
-            normal: await fetchAndEmbedFont(doc, 'Montserrat-Regular'),
-            bold: await fetchAndEmbedFont(doc, 'Montserrat-Bold'),
-            italic: await fetchAndEmbedFont(doc, 'Montserrat-Italic'),
-            boldItalic: await fetchAndEmbedFont(doc, 'Montserrat-BoldItalic')
-        },
-        'Roboto': {
-        normal: await fetchAndEmbedFont(doc, 'Roboto-Regular'),
-        bold: await fetchAndEmbedFont(doc, 'Roboto-Bold'),
-        italic: await fetchAndEmbedFont(doc, 'Roboto-Italic'),
-        boldItalic: await fetchAndEmbedFont(doc, 'Roboto-BoldItalic')
-        },
-        'Open Sans': {
-            normal: await fetchAndEmbedFont(doc, 'OpenSans-Regular'),
-            bold: await fetchAndEmbedFont(doc, 'OpenSans-Bold'),
-            italic: await fetchAndEmbedFont(doc, 'OpenSans-Italic'),
-            boldItalic: await fetchAndEmbedFont(doc, 'OpenSans-BoldItalic')
-        },
-        'Andada Pro': {
-            normal: await fetchAndEmbedFont(doc, 'AndadaPro-Regular'),
-            bold: await fetchAndEmbedFont(doc, 'AndadaPro-Bold'),
-            italic: await fetchAndEmbedFont(doc, 'AndadaPro-Italic'),
-            boldItalic: await fetchAndEmbedFont(doc, 'AndadaPro-BoldItalic')
-        },
-        'EB Garamond': {
-            normal: await fetchAndEmbedFont(doc, 'EBGaramond-Regular'),
-            bold: await fetchAndEmbedFont(doc, 'EBGaramond-Bold'),
-            italic: await fetchAndEmbedFont(doc, 'EBGaramond-Italic'),
-            boldItalic: await fetchAndEmbedFont(doc, 'EBGaramond-BoldItalic')
-        }
-    };
-    console.log("Fonts loaded:", Object.keys(fonts));
     
     let config;
     try {
@@ -1843,8 +1798,8 @@ async function generatePDF(format) {
         config = {
             fontFamily: 'Jost',
             fontSize: 12,
-            lineHeight: 1.5,
-            textAlign: 'left',
+            lineHeight: 1.2,
+            textAlign: 'center',
             format: 'a5',
             churchLogo: null
         };
@@ -1860,6 +1815,11 @@ async function generatePDF(format) {
     };
     console.log("Global config for PDF generation:", globalConfig);
     
+    console.log("Loading selected font...");
+    showProgress(10, "Lade ausgewählte Schriftart");
+    const fonts = await fetchAndEmbedFont(doc, config.fontFamily);
+    console.log("Font loaded:", config.fontFamily);
+
     const pageSizes = {
         'a5': { width: mmToPt(148), height: mmToPt(210) },
         'dl': { width: mmToPt(99), height: mmToPt(210) },
@@ -1954,13 +1914,17 @@ async function generatePDF(format) {
         const { bold, italic, underline, alignment, indent, isCopyright } = options;
         let font;
         if (bold && italic) {
-            font = fonts[globalConfig.fontFamily].boldItalic;
+            font = fonts.boldItalic;
         } else if (bold) {
-            font = fonts[globalConfig.fontFamily].bold;
+            font = fonts.bold;
         } else if (italic) {
-            font = fonts[globalConfig.fontFamily].italic;
+            font = fonts.italic;
         } else {
-            font = fonts[globalConfig.fontFamily].normal;
+            font = fonts.regular; 
+        }
+        if (!font) {
+            console.error(`Required font style not found for ${globalConfig.fontFamily}`);
+            font = fonts.regular || Object.values(fonts)[0];  // Fallback zur ersten verfügbaren Schrift
         }
         
         console.log("Drawing text:", { text: text.substring(0, 20) + "...", x, y, fontSize, bold, italic, underline, alignment, indent, isCopyright });
@@ -2049,7 +2013,6 @@ async function generatePDF(format) {
             }
         }
     }
-    
     async function drawImage(imgSrc, x, y, imgWidth) {
         console.log("Drawing image:", { imgSrc, x, y, imgWidth });
         try {
@@ -2175,6 +2138,7 @@ async function generatePDF(format) {
     showProgress(40, "Verarbeite Inhalte");
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
+        //const fonts = await fetchAndEmbedFont(doc, config.fontFamily);
         console.log("Processing item:", item.tagName, item.className);
         
         if (item.classList.contains('page-break')) {
@@ -2191,7 +2155,7 @@ async function generatePDF(format) {
             if (iconElement.classList.contains('fa-dove')) iconType = 'dove';
             
             const iconHeight = await drawIcon(iconType, margin.left, y, 24);
-            y -= iconHeight + 20; // Abstand nach Icons
+            y -= iconHeight + 10; // Abstand nach Icons
         } else {
             // Andere Elemente (Text, Überschriften, etc.)
             const elements = item.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
@@ -2219,9 +2183,9 @@ async function generatePDF(format) {
                     let isHeading = false;
                     let isCopyright = element.classList.contains('copyright-info');
                     
-                    if (element.tagName === 'H1') { fontSize = globalConfig.fontSize * 1.8; isHeading = true; }
-                    if (element.tagName === 'H2') { fontSize = globalConfig.fontSize * 1.6; isHeading = true; }
-                    if (element.tagName === 'H3') { fontSize = globalConfig.fontSize * 1.3; isHeading = true; }
+                    if (element.tagName === 'H1') { fontSize = globalConfig.fontSize * 2; isHeading = true; }
+                    if (element.tagName === 'H2') { fontSize = globalConfig.fontSize * 1.8; isHeading = true; }
+                    if (element.tagName === 'H3') { fontSize = globalConfig.fontSize * 1.5; isHeading = true; }
                     if (isCopyright) { fontSize = 8; }
                     
                     let options = {
@@ -2255,10 +2219,10 @@ async function generatePDF(format) {
                         y -= fontSize * 0.2; // Geringer Abstand nach Copyright
                         lastElementType = 'copyright';
                     } else if (lastElementWasStrophe) {
-                        y -= fontSize * 0.4; // Etwas größerer Abstand nach Strophen
+                        y -= fontSize * 0.5; // Etwas größerer Abstand nach Strophen
                         lastElementType = 'strophe';
                     } else {
-                        y -= fontSize * 0.4; // Standardabstand zwischen Absätzen
+                        y -= fontSize * 0.5; // Standardabstand zwischen Absätzen
                         lastElementType = 'normal';
                     }
                 }
@@ -2338,32 +2302,77 @@ function findPageBreak(element) {
     return null;
 }
 
-async function fetchAndEmbedFont(doc, fontName) {
-    console.log("Fetching font:", fontName);
-    const url = `/api/ttf/${fontName}.ttf`;
-    try {
-        const fontBytes = await fetch(url).then(res => {
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            return res.arrayBuffer();
-        });
-        const font = await doc.embedFont(fontBytes, { 
-            subset: true,
-            features: {
-                liga: true,
-                kern: true
-            }
-        });
-        if (!font || typeof font.widthOfTextAtSize !== 'function') {
-            throw new Error('Font not properly embedded');
-        }
-        console.log("Font embedded successfully:", fontName);
-        return font;
-    } catch (error) {
-        console.error("Error fetching or embedding font:", fontName, error);
-        throw error; // Re-throw the error instead of returning null
-    }
+function getCleanFontFamily(fontFamily) {
+    return fontFamily.split('-')[0].trim();
 }
 
+async function fetchAndEmbedFont(doc, fontFamily) {
+    fontFamily = getCleanFontFamily(fontFamily);
+    console.log("Fetching font family:", fontFamily);
+    
+    const fontFamilyMapping = {
+        'Playfair Display': 'PlayfairDisplay',
+        'Crimson Text': 'CrimsonText',
+        'Open Sans': 'OpenSans',
+        'Alegreya Sans': 'AlegreyaSans',
+        'Andada Pro': 'AndadaPro',
+        'Bodoni Moda': 'BodoniModa'
+    };
+    
+    const formattedFontFamily = fontFamilyMapping[fontFamily] || fontFamily.replace(/\s+/g, '');
+    const styles = ['Regular', 'Bold', 'Italic', 'BoldItalic'];
+    
+    const loadedFonts = {};
+    
+    for (const style of styles) {
+        const fontName = `${formattedFontFamily}-${style}`;
+        const url = `/api/ttf/${fontName}.ttf`;
+        
+        try {
+            console.log(`Attempting to load: ${url}`);
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const fontBytes = await response.arrayBuffer();
+            
+            const font = await doc.embedFont(fontBytes, { 
+                subset: true,
+                features: {
+                    liga: true,
+                    kern: true
+                }
+            });
+            
+            if (!font || typeof font.widthOfTextAtSize !== 'function') {
+                throw new Error('Font not properly embedded or missing widthOfTextAtSize function');
+            }
+            
+            // Testen der widthOfTextAtSize Funktion
+            const testWidth = font.widthOfTextAtSize('Test', 12);
+            if (typeof testWidth !== 'number' || isNaN(testWidth)) {
+                throw new Error('widthOfTextAtSize function is not working correctly');
+            }
+            
+            console.log(`Font ${fontName} embedded successfully`);
+            loadedFonts[style.toLowerCase()] = font;
+        } catch (error) {
+            console.error(`Error fetching or embedding font: ${fontName}`, error);
+            if (style !== 'Regular' && loadedFonts.regular) {
+                console.warn(`Using Regular as fallback for ${style}`);
+                loadedFonts[style.toLowerCase()] = loadedFonts.regular;
+            } else if (style === 'Regular') {
+                throw error; // Wenn Regular fehlt, werfen wir einen Fehler
+            }
+        }
+    }
+    
+    if (!loadedFonts.regular) {
+        throw new Error(`Failed to load Regular style for ${fontFamily}`);
+    }
+    
+    return loadedFonts;
+}
 async function splitTextToLines(text, font, fontSize, maxWidth) {
     const words = text.split(' ');
     const lines = [];
