@@ -1,5 +1,32 @@
-.DS_Store
+# Node.js
 node_modules/
-uploads/
+npm-debug.log
+yarn-error.log
+
+# Umgebungsvariablen
 .env
+
+# Betriebssystem-Dateien
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
 *.log
+
+# Temporäre Dateien
+tmp/
+temp/
+
+# Builds
+dist/
+build/
+
+# Datenbank
+*.sqlite
+
+# Uploads
+uploads/
+
+# Docker
+hymnoscribe_db/

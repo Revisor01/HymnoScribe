@@ -5,6 +5,14 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const mysql = require('mysql2/promise');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+
+console.log('Database config:', {
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME
+});
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST,
@@ -19,7 +27,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(cors({
-    origin: process.env.URL.split(','),
+    origin: process.env.URL ? process.env.URL.split(',') : '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -308,9 +316,29 @@ app.get('*', (req, res) => {
 
 async function initializeDatabase() {
     try {
-        const conn = await pool.getConnection();
+        const conn = await mysql.createConnection({
+            host: process.env.DB_HOST,
+            user: 'root',
+            password: process.env.MYSQL_ROOT_PASSWORD
+        });
         
-        await conn.execute(`
+        await conn.query(`CREATE DATABASE IF NOT EXISTS ${process.env.DB_NAME}`);
+        
+        await conn.query(`
+            CREATE USER IF NOT EXISTS '${process.env.DB_USER}'@'%' IDENTIFIED BY '${process.env.DB_PASSWORD}'
+        `);
+        
+        await conn.query(`
+            GRANT ALL PRIVILEGES ON ${process.env.DB_NAME}.* TO '${process.env.DB_USER}'@'%'
+        `);
+        
+        await conn.query('FLUSH PRIVILEGES');
+        
+        await conn.changeUser({
+            database: process.env.DB_NAME
+        });
+        
+        await conn.query(`
             CREATE TABLE IF NOT EXISTS objekte (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 typ VARCHAR(255) NOT NULL,
@@ -323,13 +351,13 @@ async function initializeDatabase() {
             )
         `);
         
-        const [columns] = await conn.execute("SHOW COLUMNS FROM objekte LIKE 'copyright'");
+        const [columns] = await conn.query("SHOW COLUMNS FROM objekte LIKE 'copyright'");
         if (columns.length === 0) {
-            await conn.execute("ALTER TABLE objekte ADD COLUMN copyright VARCHAR(255)");
+            await conn.query("ALTER TABLE objekte ADD COLUMN copyright VARCHAR(255)");
             console.log('Copyright-Spalte zur objekte-Tabelle hinzugefügt.');
         }
         
-        await conn.execute(`
+        await conn.query(`
             CREATE TABLE IF NOT EXISTS sessions (
                 id VARCHAR(36) PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
@@ -338,7 +366,7 @@ async function initializeDatabase() {
             )
         `);
         
-        await conn.execute(`
+        await conn.query(`
             CREATE TABLE IF NOT EXISTS vorlagen (
                 id VARCHAR(36) PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
@@ -347,8 +375,9 @@ async function initializeDatabase() {
         `);
         
         console.log('Datenbankstruktur überprüft und aktualisiert.');
+        console.log('Datenbankbenutzer erstellt und Berechtigungen erteilt.');
         
-        conn.release();
+        await conn.end();
     } catch (error) {
         console.error('Fehler bei der Datenbankinitialisierung:', error);
         process.exit(1);

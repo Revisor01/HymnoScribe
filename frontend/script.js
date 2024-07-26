@@ -2183,9 +2183,9 @@ async function generatePDF(format) {
                     let isHeading = false;
                     let isCopyright = element.classList.contains('copyright-info');
                     
-                    if (element.tagName === 'H1') { fontSize = globalConfig.fontSize * 2; isHeading = true; }
-                    if (element.tagName === 'H2') { fontSize = globalConfig.fontSize * 1.8; isHeading = true; }
-                    if (element.tagName === 'H3') { fontSize = globalConfig.fontSize * 1.5; isHeading = true; }
+                    if (element.tagName === 'H1') { fontSize = globalConfig.fontSize * 1.8; isHeading = true; }
+                    if (element.tagName === 'H2') { fontSize = globalConfig.fontSize * 1.6; isHeading = true; }
+                    if (element.tagName === 'H3') { fontSize = globalConfig.fontSize * 1.4; isHeading = true; }
                     if (isCopyright) { fontSize = 8; }
                     
                     let options = {
@@ -2695,9 +2695,11 @@ function getPageDimensionsForFormat(format) {
 function getOutputPageSize(format) {
     switch (format) {
         case 'a5':
+            return [841.89, 595.28]; // A4 Querformat
         case 'dl':
+            return [841.89, 595.28]; // A4 Querformat
         case 'a4-schmal':
-            return [595.28, 841.89]; // A4 Querformat
+            return [595.28, 841.89]; // A4 Hochformat
         case 'a3-schmal':
             return [841.89, 1190.55]; // A3 Querformat
         default:
