@@ -220,7 +220,7 @@ apiRouter.post('/set-password', async (req, res) => {
         }
         
         const hashedPassword = await bcrypt.hash(newPassword, 10);
-        await pool.query('UPDATE users SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?', [hashedPassword, users[0].id]);
+        await pool.query('UPDATE users SET password = ?, email_verified = TRUE, reset_token = NULL, reset_token_expires = NULL WHERE id = ?', [hashedPassword, users[0].id]);
         
         res.json({ message: 'Passwort erfolgreich festgelegt' });
     } catch (error) {
@@ -734,7 +734,7 @@ apiRouter.post('/upload-custom-image', uploadCustomImage.single('customImage'), 
 
 apiRouter.get('/user/info', authenticateToken, async (req, res) => {
     try {
-        const [users] = await pool.query('SELECT id, username, role, institution_id, email FROM users WHERE id = ?', [req.user.id]);
+        const [users] = await pool.query('SELECT id, username, role, institution_id, email, email_verified FROM users WHERE id = ?', [req.user.id]);
         
         if (users.length === 0) {
             return res.status(404).json({ error: 'Benutzer nicht gefunden' });

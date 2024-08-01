@@ -148,9 +148,20 @@ function displayUserInfo(userInfo) {
     const userInfoDiv = document.getElementById('user-info');
     userInfoDiv.innerHTML = `
         <p><strong>Benutzername:</strong> ${userInfo.username}</p>
-        <p><strong>E-Mail:</strong> ${userInfo.email || 'Nicht angegeben'}</p>
+        <p><strong>E-Mail:</strong> ${userInfo.email || 'Nicht angegeben'} <em>(${translateMail(userInfo.email_verified)})</em></p>
         <p><strong>Rolle:</strong> ${userInfo.role}</p>
     `;
+}
+
+function translateMail(mail) {
+    switch (String(mail)) { // Convert mail to string for comparison
+        case '0':
+            return 'nicht verifiziert';
+        case '1':
+            return 'verifiziert';
+        default:
+            return mail;
+    }
 }
 
 async function loadInstitutions() {
