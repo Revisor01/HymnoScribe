@@ -22,11 +22,11 @@ WORKDIR /app
 # Kopieren der gebauten Anwendung aus dem Build-Stage
 COPY --from=build /app/backend ./backend
 COPY --from=build /app/frontend ./frontend
-COPY --from=build /app/init.sql ./
+COPY --from=build /app/init.sql /docker-entrypoint-initdb.d/
 
 WORKDIR /app/backend
 RUN npm install --only=production
 
 EXPOSE 9615
 
-CMD ["node", "backend/server.js"]
+CMD ["node", "server.js"]

@@ -1,27 +1,159 @@
+import {
+    checkAuthToken,
+    logout,
+    translateRole,
+    authenticatedFetch,
+    customAlert,
+    customConfirm,
+    getImagePath,
+    updateUIBasedOnUserRole,
+    customPrompt
+} from './utils.js';
+
 let quill;
 let strophenEditors = [];
 let alleObjekte = [];
+let currentUser = null;
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', initializeApp);
+
+async function initializeApp() {
+    try {
+        await checkAuthToken();
+        currentUser = await loadUserInfo();
+        if (!currentUser) {
+            throw new Error('Benutzerinformationen konnten nicht geladen werden');
+        }
+        
+        setupEventListeners();
+        await loadObjekte();
+        toggleLiedFelder();
+        initializeQuillEditor();
+        updateUIBasedOnUserRole();
+    } catch (error) {
+        console.error('Fehler beim Initialisieren der Seite:', error);
+        await customAlert(`Fehler beim Initialisieren der Seite: ${error.message}`);
+        window.location.href = 'index.html';
+    }
+}
+function setupEventListeners() {
     document.getElementById('typ').addEventListener('change', toggleLiedFelder);
     document.getElementById('addStrophe').addEventListener('click', addStrophe);
     document.getElementById('objektForm').addEventListener('submit', handleFormSubmit);
     document.getElementById('resetForm').addEventListener('click', resetForm);
     document.getElementById('filterTyp').addEventListener('change', filterObjekte);
-    
-    document.getElementById('titel').addEventListener('input', updatePreview);
-    document.getElementById('typ').addEventListener('change', updatePreview);
-    document.getElementById('showNotes').addEventListener('change', updatePreview);
-    document.querySelectorAll('input[name="noteType"]').forEach(radio => {
-        radio.addEventListener('change', updatePreview);
-    });
-    
     document.getElementById('objektSearch').addEventListener('input', filterObjekte);
-    
-    loadObjekte();
-    toggleLiedFelder.call(document.getElementById('typ'));
-});
+    document.getElementById('logout-btn').addEventListener('click', logout);
+}
+async function loadUserInfo() {
+    try {
+        const token = localStorage.getItem('token');
+        const user = await authenticatedFetch('/api/user/info');
+        const institutions = await authenticatedFetch('/api/admin/institutions');
+        const userInstitution = institutions.find(inst => inst.id === user.institution_id);
+        
+        if (!userInstitution) {
+            throw new Error('Keine passende Institution gefunden');
+        }
+        
+        updateUserInfoDisplay(user, userInstitution);
+        return { user, userInstitution };
+    } catch (error) {
+        console.error('Fehler beim Laden der Benutzerinformationen:', error);
+        await customAlert('Fehler beim Laden der Benutzerinformationen. Bitte laden Sie die Seite neu.');
+        return null;
+    }
+}
 
+function updateUserInfoDisplay(user, userInstitution) {
+    const userInfoContainer = document.getElementById('userInfoContainer');
+    if (userInfoContainer) {
+        userInfoContainer.innerHTML = `
+            <span>Angemeldet als: <strong>${user.username}</strong></span>
+            <span>Rolle: <strong>${translateRole(user.role)}</strong></span>
+            <span>Institution: <strong>${userInstitution.name}</strong></span>
+        `;
+    }
+}
+
+async function checkAuthorization() {
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    
+    if (!token || !role) {
+        console.log('Kein Token oder keine Rolle gefunden');
+        window.location.href = 'index.html';
+        return false;
+    }
+    
+    if (role !== 'admin' && role !== 'super-admin') {
+        console.log('Unzureichende Berechtigungen');
+        window.location.href = 'dashboard.html';
+        return false;
+    }
+    
+    try {
+        const response = await fetch('/api/verify-token', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        if (!response.ok) {
+            throw new Error('Token ungültig');
+        }
+        return true;
+    } catch (error) {
+        console.error('Autorisierungsfehler:', error);
+        localStorage.removeItem('token');
+        localStorage.removeItem('role');
+        window.location.href = 'index.html';
+        return false;
+    }
+}
+
+function checkUserRole() {
+    const role = localStorage.getItem('role');
+    if (role !== 'admin' && role !== 'super-admin') {
+        window.location.href = 'dashboard.html';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        const isAuthorized = await checkAuthorization();
+        if (!isAuthorized) {
+            return;
+        }
+        
+        currentUser = await loadUserInfo();
+        if (!currentUser) {
+            throw new Error('Benutzerinformationen konnten nicht geladen werden');
+        }
+        
+        const typSelect = safeGetElement('typ');
+        const addStropheButton = safeGetElement('addStrophe');
+        const objektForm = safeGetElement('objektForm');
+        const resetFormButton = safeGetElement('resetForm');
+        
+        if (typSelect) typSelect.addEventListener('change', toggleLiedFelder);
+        if (addStropheButton) addStropheButton.addEventListener('click', addStrophe);
+        if (objektForm) objektForm.addEventListener('submit', handleFormSubmit);
+        if (resetFormButton) resetFormButton.addEventListener('click', resetForm);
+        
+        await loadObjekte();
+        if (typSelect) toggleLiedFelder.call(typSelect);
+        
+        const typ = typSelect ? typSelect.value : null;
+        if (typ !== 'Lied' && typ !== 'Liturgie') {
+            initializeQuillEditor();
+        }
+    } catch (error) {
+        console.error('Fehler beim Initialisieren der Seite:', error);
+        await customAlert(`Fehler beim Initialisieren der Seite: ${error.message}`);
+        window.location.href = 'index.html';
+    }
+});
+    
 function applyGlobalConfigToPreview() {
     const preview = document.getElementById('preview');
     const config = JSON.parse(localStorage.getItem('liedblattConfig')) || {
@@ -52,11 +184,13 @@ function filterObjekte() {
         const objektDiv = document.createElement('div');
         objektDiv.className = 'objekt-item';
         objektDiv.innerHTML = `
-            <div class="buttons">
-                <button onclick="editObjekt(${objekt.id})" class="btn btn-small">Bearbeiten</button>
-                <button onclick="deleteObjekt(${objekt.id})" class="btn btn-small delete-strophe">Löschen</button>
+            <div class="objekt-content">
+                <h3>${objekt.titel} (${objekt.typ})</h3>
+                <div class="objekt-buttons">
+                    <button onclick="editObjekt(${objekt.id})" class="btn btn-small">Bearbeiten</button>
+                    <button onclick="deleteObjekt(${objekt.id})" class="btn btn-small delete-strophe">Löschen</button>
+                </div>
             </div>
-            <h3>${objekt.titel} (${objekt.typ})</h3>
         `;
         objektListe.appendChild(objektDiv);
     });
@@ -239,7 +373,16 @@ function updateStrophenNumbers() {
 }
 
 async function handleFormSubmit(e) {
+    console.log('Form submit initiated'); // Debugging log
     e.preventDefault();
+    
+    if (!currentUser || !currentUser.institution_id) {
+        await customAlert('Fehler: Benutzerinformationen nicht verfügbar oder unvollständig. Bitte laden Sie die Seite neu.');
+        return;
+    }
+    
+    console.log('Prevented default submit'); // Debugging log
+    
     const objektId = document.getElementById('objektId').value;
     
     const objektData = {
@@ -249,7 +392,8 @@ async function handleFormSubmit(e) {
         strophen: null,
         notenbild: null,
         notenbildMitText: null,
-        copyright: document.getElementById('copyright').value || null
+        copyright: document.getElementById('copyright').value || null,
+        institution_id: currentUser.user.institution_id
     };
     
     console.log('Initial objektData:', JSON.stringify(objektData));
@@ -267,6 +411,7 @@ async function handleFormSubmit(e) {
     try {
         const url = objektId ? `/api/objekte/${objektId}` : '/api/objekte';
         const method = objektId ? 'PUT' : 'POST';
+        const token = localStorage.getItem('token');
         
         const formData = new FormData();
         Object.keys(objektData).forEach(key => {
@@ -275,6 +420,9 @@ async function handleFormSubmit(e) {
                 console.log(`Appending to formData: ${key} = ${objektData[key]}`);
             }
         });
+        
+        // Fügen Sie die institution_id hinzu
+        formData.append('institution_id', currentUser.institution_id);
         
         const notenbildFile = document.getElementById('notenbild').files[0];
         if (notenbildFile) {
@@ -292,6 +440,9 @@ async function handleFormSubmit(e) {
         
         const response = await fetch(url, {
             method: method,
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
             body: formData
         });
         
@@ -352,24 +503,57 @@ function updatePreview() {
 }
 
 function resetForm() {
-    document.getElementById('objektForm').reset();
-    document.getElementById('objektId').value = '';
-    document.getElementById('copyright').value = '';
-    document.getElementById('strophenContainer').innerHTML = '';
+    const objektForm = safeGetElement('objektForm');
+    if (objektForm) objektForm.reset();
+    
+    const objektIdInput = safeGetElement('objektId');
+    if (objektIdInput) objektIdInput.value = '';
+    
+    const copyrightInput = safeGetElement('copyright');
+    if (copyrightInput) copyrightInput.value = '';
+    
+    const strophenContainer = safeGetElement('strophenContainer');
+    if (strophenContainer) strophenContainer.innerHTML = '';
+    
     strophenEditors = [];
-    document.getElementById('currentNotenbild').style.display = 'none';
-    document.getElementById('currentNotenbildMitText').style.display = 'none';
-    toggleLiedFelder.call(document.getElementById('typ'));
+    
+    const currentNotenbild = safeGetElement('currentNotenbild');
+    if (currentNotenbild) currentNotenbild.style.display = 'none';
+    
+    const currentNotenbildMitText = safeGetElement('currentNotenbildMitText');
+    if (currentNotenbildMitText) currentNotenbildMitText.style.display = 'none';
+    
+    if (quill) {
+        quill.setText('');
+    }
+    
+    const typSelect = safeGetElement('typ');
+    if (typSelect) toggleLiedFelder.call(typSelect);
+    
     updatePreview();
+}
+
+function safeGetElement(id) {
+    const element = document.getElementById(id);
+    if (!element) {
+        console.warn(`Element mit ID "${id}" nicht gefunden`);
+    }
+    return element;
 }
 
 async function loadObjekte() {
     try {
-        const response = await fetch('/api/objekte');
+        const token = localStorage.getItem('token');
+        const response = await fetch('/api/objekte', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
         if (!response.ok) {
             throw new Error('Fehler beim Abrufen der Objekte');
         }
         alleObjekte = await response.json();
+        console.log('Geladene Objekte:', alleObjekte); // Debugging
         filterObjekte();
     } catch (error) {
         console.error('Fehler:', error);
@@ -377,27 +561,6 @@ async function loadObjekte() {
     }
 }
 
-function filterObjekte() {
-    const filterTyp = document.getElementById('filterTyp').value;
-    const searchTerm = document.getElementById('objektSearch').value.toLowerCase();
-    const filteredObjekte = alleObjekte.filter(objekt => 
-        (filterTyp === 'all' || objekt.typ === filterTyp) &&
-        objekt.titel.toLowerCase().includes(searchTerm)
-    );
-    
-    const objektListe = document.getElementById('objektListe');
-    objektListe.innerHTML = '';
-    filteredObjekte.forEach(objekt => {
-        const objektDiv = document.createElement('div');
-        objektDiv.className = 'objekt-item';
-        objektDiv.innerHTML = `
-            <h3>${objekt.titel} (${objekt.typ})</h3>
-            <button onclick="editObjekt(${objekt.id})" class="btn btn-small">Bearbeiten</button>
-            <button onclick="deleteObjekt(${objekt.id})" class="btn btn-small delete-strophe">Löschen</button>
-        `;
-        objektListe.appendChild(objektDiv);
-    });
-}
 
 function editObjekt(id) {
     const objekt = alleObjekte.find(obj => obj.id === id);
@@ -477,72 +640,15 @@ function editObjekt(id) {
     updatePreview();
 }
 
-function getImagePath(objekt, imageType) {
-    const basePath = '';
-    let imagePath;
-    
-    if (imageType === 'notenbild') {
-        imagePath = objekt.notenbild;
-    } else if (imageType === 'notenbildMitText') {
-        imagePath = objekt.notenbildMitText;
-    } else if (imageType === 'logo') {
-        imagePath = objekt.churchLogo;
-    }
-    
-    if (!imagePath) return null;
-    
-    // Entfernen Sie führende Schrägstriche
-    imagePath = imagePath.replace(/^\/+/, '');
-    
-    // Wenn der Pfad bereits vollständig ist, geben wir ihn direkt zurück
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-        return imagePath;
-    }
-    
-    // Ansonsten fügen wir den Basispfad hinzu
-    return basePath + imagePath;
-}
-
-function customAlert(message) {
-    return new Promise((resolve) => {
-        const modal = document.getElementById('custom-modal');
-        document.getElementById('modal-message').textContent = message;
-        document.getElementById('modal-ok').textContent = 'OK';
-        document.getElementById('modal-cancel').style.display = 'none';
-        modal.style.display = 'block';
-        
-        document.getElementById('modal-ok').onclick = () => {
-            modal.style.display = 'none';
-            resolve();
-        };
-    });
-}
-
-function customConfirm(message) {
-    return new Promise((resolve) => {
-        const modal = document.getElementById('custom-modal');
-        document.getElementById('modal-message').textContent = message;
-        document.getElementById('modal-ok').textContent = 'Ja';
-        document.getElementById('modal-cancel').style.display = 'inline-block';
-        document.getElementById('modal-cancel').textContent = 'Nein';
-        modal.style.display = 'block';
-        
-        document.getElementById('modal-ok').onclick = () => {
-            modal.style.display = 'none';
-            resolve(true);
-        };
-        document.getElementById('modal-cancel').onclick = () => {
-            modal.style.display = 'none';
-            resolve(false);
-        };
-    });
-}
-
 async function deleteObjekt(id) {
     if (await customConfirm('Sind Sie sicher, dass Sie dieses Objekt löschen möchten?')) {
         try {
+            const token = localStorage.getItem('token');
             const response = await fetch(`/api/objekte/${id}`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
             });
             if (!response.ok) {
                 throw new Error('Fehler beim Löschen des Objekts');
@@ -562,4 +668,12 @@ document.addEventListener('DOMContentLoaded', function() {
         initializeQuillEditor();
     }
     toggleLiedFelder.call(document.getElementById('typ'));
+});
+
+window.editObjekt = editObjekt;
+window.deleteObjekt = deleteObjekt;
+
+window.addEventListener('error', function(event) {
+    console.error('Unerwarteter Fehler:', event.error);
+    customAlert('Ein unerwarteter Fehler ist aufgetreten. Bitte laden Sie die Seite neu.');
 });

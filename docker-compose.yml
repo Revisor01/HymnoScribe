@@ -11,6 +11,14 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-hymnoscribe9715}
       - DB_NAME=${DB_NAME:-hymnoscribe}
       - URL=${URL:-https://hymnoscripe.godsapp.de}
+      - SUPER_PASSWORD=${SUPER_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_USER=${EMAIL_USER}
+      - EMAIL_PASS=${EMAIL_PASS}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - FRONTEND_URL=${FRONTEND_URL}
     volumes:
       - ./backend/uploads:/app/backend/uploads
     depends_on:
@@ -29,3 +37,4 @@ services:
     
 volumes:
   hymnoscribe_db:
+  

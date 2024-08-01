@@ -1,0 +1,638 @@
+/* Grundlegende Stile */
+body {
+    font-family: 'Jost', sans-serif;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+}
+
+
+.left-panel, .middle-panel, .right-panel {
+    flex: 1;
+    transition: all 0.3s ease;
+}
+
+.super-admin-only {
+    display: none;
+}
+
+.admin-and-up {
+    display: none;
+}
+
+.container {
+    width: 95%;
+    margin: 0 auto;
+    padding: 20px;
+    display: flex;
+    justify-content: flex-start;
+    gap: 20px;
+    transition: justify-content 0.3s ease;
+}
+
+.session-management {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 10px 20px;
+    width: 100%;
+    justify-content: space-between;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    flex-wrap: wrap;
+}
+
+/* Header Styles */
+.main-header {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 10px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.main-header h1 {
+    margin: 0;
+    color: #333;
+    font-size: 24px;
+    font-weight: bold;
+}
+.logo  {
+width: 30%;
+}
+.logo-container {
+    width: auto;
+    height: 50px;
+    margin-right: 20px;
+}
+
+.logo-container svg {
+    width: 100%;
+    height: 100%;
+}
+
+.user-info {
+    font-size: 14px;
+    color: #666;
+    margin-right: auto;
+    margin-left: 20px;
+}
+
+.user-info strong {
+    color: #1a5f7a;
+}
+
+.header-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+/* Session Management */
+
+
+.session-management > * {
+    flex: 1 1 auto;
+    margin: 5px;
+    min-width: 100px;
+    max-width: 200px;
+}
+
+.notes-preview {
+    height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    margin: 10px 0;
+}
+
+.notes-preview img {
+    max-height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+}
+.session-management button,
+.session-management select {
+    width: 100%;
+    padding: 8px;
+    font-size: 14px;
+}
+
+#user-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+}
+
+#user-info {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+/* Panel Styles */
+.left-panel, .middle-panel, .right-panel {
+    flex: 1;
+    background-color: #ffffff;
+    padding: 15px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    overflow-y: auto;
+    max-height: calc(100vh - 120px);
+    height: 800px;
+}
+
+img {
+    width: 100%;
+}
+
+.middle-panel.trenner-default-img {
+    background-position: left;
+}
+.trenner-default-img {
+    background-image: url('/api/icons/default.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    width: 100%;
+    height: 24px;
+    display: inline-block;
+    margin: 10px auto; /* Zentriert das Icon horizontal */
+}
+/* Buttons and Form Elements */
+.btn, button {
+    background-color: #1a5f7a;
+    color: white;
+    padding: 8px 12px;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    margin: 5px 0;
+    border-radius: 4px;
+    font-family: 'Jost', sans-serif;
+    font-size: 14px;
+    transition: background-color 0.3s ease;
+}
+
+.btn:hover, button:hover {
+    background-color: #154c61;
+}
+
+.btn-small {
+    padding: 5px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.delete-strophe {
+    background-color: #dc3545;
+}
+
+.btn-danger {
+    background-color: #dc3545;
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+}
+
+select, input[type="text"], input[type="password"], textarea {
+    width: 97%;
+    padding: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: 'Jost', sans-serif;
+}
+
+/* Bibliothek Styles */
+.bibliothek-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.bibliothek-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.bibliothek-content {
+    display: flex;
+    gap: 20px;
+}
+
+.bibliothek-form,
+.bibliothek-preview {
+    flex: 1;
+}
+
+.bibliothek-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* Filter Container */
+.filter-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.filter-container select {
+    flex: 1;
+}
+
+.filter-container input[type="text"] {
+    flex: 2;
+    max-width: 200px;
+}
+
+/* Item Styles */
+.item, .selected-item, .objekt-item {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
+.strophe-container {
+    margin-bottom: 20px;
+}
+.objekt-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.objekt-content h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.objekt-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+.buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 5px;
+}
+
+/* Editor Styles */
+#editor-container, .strophe-editor {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    margin-bottom: 10px;
+    min-height: 150px;
+}
+
+.ql-editor {
+    min-height: 200px;
+    background-color: white;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+}
+
+/* Admin Styles */
+.admin-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.section {
+    background-color: #ffffff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    height: 100%;
+}
+
+#user-section, #admin-section, #super-admin-section {
+    display: none;
+}
+.standard-objects {
+height: auto !important;
+    padding: 0px;
+    box-shadow: 0 0px;
+}
+.admin-container .section {
+    padding: 20px;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+
+.institution-item, .user-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    margin-bottom: 10px;
+    gap: 5px;
+    background-color: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+}
+
+.institution-item span, .user-item span {
+    flex-grow: 1;
+}
+
+.institution-item .buttons, .user-item .buttons {
+    display: flex;
+    gap: 5px;
+}
+
+#user-section {
+    text-align: center;
+}
+
+#user-section .btn {
+    margin-top: 10px;
+}
+
+#institution-select {
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+/* Login Styles */
+.login-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    text-align: center;
+}
+
+.login-form {
+    background-color: #ffffff;
+    padding: 30px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    width: 300px;
+}
+
+.super-login-btn {
+    margin-top: 20px;
+    background-color: #f0ad4e;
+}
+
+.super-login-btn:hover {
+    background-color: #ec971f;
+}
+
+/* Footer Styles */
+footer {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-top: 1px solid #ccc;
+    text-align: center;
+    color: #666;
+}
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+    }
+    
+    .left-panel, .middle-panel, .right-panel {
+        max-height: none;
+    }
+
+    .session-management {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .session-management > * {
+        max-width: none;
+    }
+
+    .bibliothek-content {
+        flex-direction: column;
+    }
+
+    .admin-container {
+        flex-direction: column;
+    }
+}
+
+/* Admin-spezifische Stile */
+.user-management-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+#institution-select {
+    flex-grow: 1;
+    margin-right: 10px;
+}
+
+#add-user-btn {
+    white-space: nowrap;
+}
+
+#users-list, #institutions-list {
+    list-style-type: none;
+    padding: 0;
+}
+
+#new-role{
+    width: 30% !important;
+}
+#users-list li, #institutions-list li {
+    background-color: #f9f9f9;
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#role-info ul {
+    padding-left: 20px;
+}
+
+#role-info li {
+    margin-bottom: 10px;
+}
+
+/* Allgemeine Modal-Stile */
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
+    border-radius: 8px;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover,
+.close:focus {
+    color: #000;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* Formular-Stile */
+form input[type="text"],
+form input[type="email"],
+form input[type="password"],
+form select {
+    width: 96%;
+    padding: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+/* Button-Stile */
+.btn-primary {
+    background-color: #1a5f7a;
+    color: white;
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+
+.btn-danger {
+    background-color: #dc3545;
+    color: white;
+}
+
+.reset-password-container {
+    max-width: 300px;
+    margin: 50px auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+.login-sub-container {
+    max-width: 300px;
+    margin: 50px auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.login-sub-container input {
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.login-sub-container button {
+    width: 100%;
+    padding: 10px;
+    background-color: #1a5f7a;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.login-sub-container button:hover {
+    background-color: #154c61;
+}
+
+.reset-password-container h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.reset-password-container input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.reset-password-container button {
+    width: 100%;
+    padding: 10px;
+    background-color: #1a5f7a;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.reset-password-container button:hover {
+    background-color: #154c61;
+}
