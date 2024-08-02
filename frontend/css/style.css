@@ -64,6 +64,8 @@ body {
 }
 .logo  {
 width: 30%;
+margin-left: auto;
+    margin-right: auto;
 }
 .logo-container {
     width: auto;
@@ -77,6 +79,7 @@ width: 30%;
 }
 
 .user-info {
+    display:none;
     font-size: 14px;
     color: #666;
     margin-right: auto;
@@ -291,7 +294,11 @@ select, input[type="text"], input[type="password"], textarea {
     justify-content: flex-end;
     gap: 5px;
 }
-
+.pdfgen {
+display: block;
+width: 100%;
+margin-top: 20px;
+}
 /* Editor Styles */
 #editor-container, .strophe-editor {
     background-color: #fff;
@@ -635,4 +642,212 @@ form select {
 
 .reset-password-container button:hover {
     background-color: #154c61;
+}
+
+/* Hamburger Menu Styles */
+.hamburger-menu {
+    display: none;
+}
+
+.hamburger-icon {
+    cursor: pointer;
+    display: inline-block;
+    padding: 10px;
+}
+
+.hamburger-icon span {
+    background: #333;
+    display: block;
+    height: 2px;
+    margin: 5px 0;
+    width: 25px;
+}
+
+.menu-items {
+    display: none;
+    position: absolute;
+    top: 60px;
+    right: 0;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    padding: 10px;
+}
+
+.menu-items a, .menu-items button {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    text-align: left;
+    background: none;
+    border: none;
+    color: #333;
+    font-size: 16px;
+}
+
+.menu-items a:hover, .menu-items button:hover {
+    background: #f0f0f0;
+}
+
+/* Fügen Sie diese Medienaabfragen am Ende Ihrer style.css-Datei hinzu */
+
+@media screen and (max-width: 768px) {
+    /* Grundlegende Anpassungen */
+    
+    .header-buttons {
+        display: none;
+    }
+    
+    .hamburger-menu {
+        display: block;
+    }
+    
+    .menu-items.active {
+        display: block;
+    }
+
+    body {
+        font-size: 14px;
+    }
+    
+    .user-info {
+        font-size: 8px;
+            margin: auto;
+            padding-left: 10px;
+    }
+    
+    .login-container {
+        height: unset;
+    }
+    .logo {
+        width: 100%;
+        margin: auto;
+    }
+    .login-sub-container {
+    max-width: unset;
+    margin: unset;
+    padding: unset;
+    background-color: unset;
+        border-radius: unset;
+        box-shadow: unset;
+    }
+    .container {
+        width: 100%;
+        padding: 0px;
+        flex-direction: column;
+    }
+    
+    /* Header Anpassungen */
+    .main-header {
+        /* flex-direction: column;*/
+        align-items: center;
+        padding: 10px;
+    }
+    
+    .logo-container {
+        width: 100%;
+        height: auto;
+        margin: auto;
+    }
+    
+    .header-buttons {
+        flex-direction: column;
+        width: 100%;
+        gap: 0px;
+    }
+    
+    .header-buttons .btn {
+        margin: 5px 0;
+    }
+    
+    /* Session Management */
+    .session-management {
+        flex-direction: column;
+        padding: 10px;
+        width: unset;
+    }
+    .pdfgen {
+    display: block;
+    width: 95%;
+    margin: auto;
+    }
+    .session-management > * {
+        width: 100%;
+        max-width: none;
+        margin: 5px 0;
+    }
+    
+    /* Panel Anpassungen */
+    
+    
+    .left-panel, .middle-panel, .right-panel {
+
+        max-height: none;
+        height: auto;
+        margin-bottom: 20px;
+    }
+    
+    /* Formular Elemente */
+    select, input[type="text"], input[type="password"], textarea {
+        width: 95%;
+    }
+    
+    /* Modal Anpassungen */
+    .modal-content {
+        width: 90%;
+        margin: 10% auto;
+        padding: 15px;
+    }
+    
+    /* Button Anpassungen */
+    .btn, button {
+        text-align: center;
+        margin: 5px 0;
+    }
+    
+    /* Objekt-Item Anpassungen */
+    .item, .selected-item, .objekt-item {
+        padding: 5px;
+    }
+    
+    .objekt-content {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .objekt-buttons {
+        margin-top: 10px;
+    }
+    
+    /* Admin Bereich */
+    .admin-container {
+        grid-template-columns: 1fr;
+    }
+    
+    /* Login Bereich */
+    .login-container {
+        width: 90%;
+        padding: 15px;
+    }
+    
+    .login-form {
+        width: 100%;
+    }
+}
+
+/* Zusätzliche Anpassungen für sehr kleine Bildschirme */
+@media screen and (max-width: 480px) {
+    body {
+        font-size: 12px;
+    }
+    
+    .logo-container {
+        width: 40%;
+        margin-left: 0px;
+    }
+    .modal-content {
+        width: 90%;
+        padding: 10px;
+    }
 }

@@ -1,6 +1,6 @@
 import {
     checkAuthToken,
-    logout,
+    //logout,
     translateRole,
     authenticatedFetch,
     customAlert,
@@ -15,6 +15,15 @@ let strophenEditors = [];
 let alleObjekte = [];
 let currentUser = null;
 
+function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    window.location.href = 'index.html';
+}
+
+// Fügen Sie einen Event-Listener für den Logout-Button hinzu
+document.getElementById('logout-btn').addEventListener('click', logout);
+document.getElementById('logout-btnHam').addEventListener('click', logout);
 async function loadUserInfo() {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -127,6 +136,22 @@ function checkUserRole() {
         window.location.href = 'dashboard.html';
     }
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    const hamburgerIcon = document.querySelector('.hamburger-icon');
+    const menuItems = document.querySelector('.menu-items');
+    
+    hamburgerIcon.addEventListener('click', function() {
+        menuItems.classList.toggle('active');
+    });
+    
+    // Schließe das Menü, wenn außerhalb geklickt wird
+    document.addEventListener('click', function(event) {
+        if (!hamburgerIcon.contains(event.target) && !menuItems.contains(event.target)) {
+            menuItems.classList.remove('active');
+        }
+    });
+});
 
 document.addEventListener('DOMContentLoaded', async function() {
     try {

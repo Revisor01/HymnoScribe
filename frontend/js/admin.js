@@ -1,4 +1,8 @@
 document.addEventListener('DOMContentLoaded', function() {
+    initializeApp();
+});
+
+function initializeApp() {
     const token = localStorage.getItem('token');
     if (!token) {
         window.location.href = 'index.html';
@@ -6,14 +10,19 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     checkUserRole();
-    
-    document.getElementById('logout-btn').addEventListener('click', logout);
+    setupEventListeners();
+    initializeHamburgerMenu();
+}
+
+function setupEventListeners() {
+    // Formular und Button Listener
     document.getElementById('add-user-form').addEventListener('submit', addUser);
     document.getElementById('add-institution-form').addEventListener('submit', addInstitution);
     document.getElementById('change-password-btn').addEventListener('click', changePassword);
     document.getElementById('change-email-btn').addEventListener('click', changeEmail);
+    document.getElementById('resend-verification-btn').addEventListener('click', handleResendVerification);
     
-    // Modal-bezogene Event-Listener
+    // Modal Listener
     document.querySelectorAll('.close').forEach(elem => {
         elem.addEventListener('click', () => closeAllModals());
     });
@@ -21,14 +30,60 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('modal-cancel').addEventListener('click', closeAllModals);
     document.getElementById('add-user-btn').addEventListener('click', () => openModal('add-user-modal'));
     document.getElementById('add-institution-btn').addEventListener('click', () => openModal('add-institution-modal'));
+    
+    // Institution Select Listener
+    document.getElementById('institution-select').addEventListener('change', function() {
+        const selectedInstitutionId = this.value;
+        if (selectedInstitutionId) {
+            loadUsersForInstitution(selectedInstitutionId);
+        }
+    });
+    
+    // Users List Listener
+    document.getElementById('users-list').addEventListener('click', handleUserActions);
+    
+    // Logout Listener
+    document.getElementById('logout-btn').addEventListener('click', logout);
+    document.getElementById('logout-btnHam').addEventListener('click', logout);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const hamburgerIcon = document.querySelector('.hamburger-icon');
+    const menuItems = document.querySelector('.menu-items');
+    
+    hamburgerIcon.addEventListener('click', function() {
+        menuItems.classList.toggle('active');
+    });
+    
+    // Schließe das Menü, wenn außerhalb geklickt wird
+    document.addEventListener('click', function(event) {
+        if (!hamburgerIcon.contains(event.target) && !menuItems.contains(event.target)) {
+            menuItems.classList.remove('active');
+        }
+    });
 });
 
-document.getElementById('institution-select').addEventListener('change', function() {
-    const selectedInstitutionId = this.value;
-    if (selectedInstitutionId) {
-        loadUsersForInstitution(selectedInstitutionId);
+
+function handleUserActions(event) {
+    const target = event.target;
+    if (target.classList.contains('change-password')) {
+        const userId = target.getAttribute('data-userid');
+        changeUserPassword(userId);
+    } else if (target.classList.contains('change-email')) {
+        const userId = target.getAttribute('data-userid');
+        changeUserEmail(userId);
+    } else if (target.classList.contains('delete-user')) {
+        const userId = target.getAttribute('data-userid');
+        const username = target.getAttribute('data-username');
+        deleteUser(userId, username);
     }
-});
+}
+
+function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    window.location.href = 'index.html';
+}
 
 async function checkUserRole() {
     try {
@@ -99,12 +154,6 @@ async function loadInstitutionForAdmin() {
     }
 }
 
-function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
-    window.location.href = 'index.html';
-}
-
 async function fetchWithLogging(url, options = {}) {
     try {
         const response = await fetch(url, options);
@@ -149,8 +198,24 @@ function displayUserInfo(userInfo) {
     userInfoDiv.innerHTML = `
         <p><strong>Benutzername:</strong> ${userInfo.username}</p>
         <p><strong>E-Mail:</strong> ${userInfo.email || 'Nicht angegeben'} <em>(${translateMail(userInfo.email_verified)})</em></p>
-        <p><strong>Rolle:</strong> ${userInfo.role}</p>
+        <p><strong>Rolle:</strong> ${translateRole(userInfo.role)}</p>
     `;
+    
+  const resendVerificationBtn = document.getElementById('resend-verification-btn');
+  if (resendVerificationBtn) {
+      resendVerificationBtn.style.display = userInfo.email_verified ? 'none' : 'inline-block';
+}
+}
+
+function translateRole(role) {
+    switch (role) {
+        case 'admin':
+            return 'Admin';
+        case 'user':
+            return 'Nutzer:in';
+        default:
+            return role;
+    }
 }
 
 function translateMail(mail) {
@@ -288,9 +353,9 @@ function displayUsers(users) {
             userDiv.innerHTML = `
                 <span>${user.username} - ${user.email} (${user.role})</span>
                 <div class="buttons">
-                    <button onclick="changeUserPassword(${user.id})" class="btn btn-small">Passwort ändern</button>
-                    <button onclick="changeUserEmail(${user.id})" class="btn btn-small">E-Mail ändern</button>
-                    <button onclick="deleteUser(${user.id}, '${user.username}')" class="btn btn-danger btn-small">Löschen</button>
+                    <button class="btn btn-small change-password" data-userid="${user.id}">Passwort ändern</button>
+                    <button class="btn btn-small change-email" data-userid="${user.id}">E-Mail ändern</button>
+                    <button class="btn btn-danger btn-small delete-user" data-userid="${user.id}" data-username="${user.username}">Löschen</button>
                 </div>
             `;
             usersList.appendChild(userDiv);
@@ -299,6 +364,7 @@ function displayUsers(users) {
         usersList.innerHTML += '<p>Keine Benutzer gefunden oder Fehler beim Laden der Benutzer.</p>';
     }
 }
+
 
 async function addUser(event) {
     event.preventDefault();
@@ -353,6 +419,44 @@ async function deleteUser(id, username) {
         'Nutzer/in löschen',
         'delete'
     );
+}
+
+async function handleResendVerification() {
+    try {
+        // Hole aktuelle Benutzerinformationen vom Server
+        const userInfo = await fetchWithLogging('/api/user/info', {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        
+        if (!userInfo.email) {
+            throw new Error('Keine E-Mail-Adresse für diesen Benutzer gefunden.');
+        }
+        
+        if (userInfo.email_verified) {
+            showModal('Ihre E-Mail-Adresse ist bereits verifiziert.', null, 'Information');
+            return;
+        }
+        
+        const response = await fetchWithLogging('/api/request-email-verification', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({ email: userInfo.email })
+        });
+        
+        if (response.message) {
+            showModal(response.message, null, 'Erfolg');
+            // Aktualisiere die Benutzerinformationen nach erfolgreicher Anforderung
+            loadUserInfo();
+        } else {
+            throw new Error(response.error || 'Ein unerwarteter Fehler ist aufgetreten.');
+        }
+    } catch (error) {
+        console.error('Fehler beim Senden der Verifizierungs-E-Mail:', error);
+        showModal(`Fehler: ${error.message}`, null, 'Fehler');
+    }
 }
 
 async function changeUserPassword(userId) {

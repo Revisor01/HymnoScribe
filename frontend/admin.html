@@ -110,7 +110,17 @@
         <div class="header-buttons">
             <a href="dashboard.html" class="btn">Zurück zum Dashboard</a>
             <button id="logout-btn" class="btn">Abmelden</button>
-
+        </div>
+        <div class="hamburger-menu">
+            <div class="hamburger-icon">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <nav class="menu-items">
+                <a href="dashboard.html" class="btn">Dashboard</a>
+                <button id="logout-btnHam" class="btn">Abmelden</button>
+            </nav>
         </div>
     </header>
 
@@ -118,6 +128,7 @@
         <div id="user-section" class="section">
             <h2>Mein Profil</h2>
             <div id="user-info"></div>
+            <button id="resend-verification-btn">Verifizierungs-E-Mail erneut senden</button>
             <button id="change-password-btn" class="btn">Passwort ändern</button>
             <button id="change-email-btn" class="btn">E-Mail ändern</button>
         </div>
@@ -149,7 +160,21 @@
             </div>
         </div>
     </div>
-
+    <div id="alert-modal" class="modal">
+        <div class="modal-content">
+            <p id="alert-message"></p>
+            <button id="alert-ok">OK</button>
+        </div>
+    </div>
+    
+    <div id="prompt-modal" class="modal">
+        <div class="modal-content">
+            <p id="prompt-message"></p>
+            <input type="text" id="prompt-input">
+            <button id="prompt-ok">OK</button>
+            <button id="prompt-cancel">Abbrechen</button>
+        </div>
+    </div>
     <div id="add-user-modal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
@@ -177,7 +202,7 @@
             </form>
         </div>
     </div>
+    <script type="module" src="./js/admin.js"></script>
 
-    <script src="/js/admin.js"></script>
 </body>
 </html>

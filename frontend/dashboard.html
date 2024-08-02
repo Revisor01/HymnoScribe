@@ -113,6 +113,19 @@
             </div>
 <!--        <h1>HymnoScribe</h1>-->
             <div id="userInfoContainer" class="user-info"></div>
+            <div class="hamburger-menu">
+                <div class="hamburger-icon">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                <nav class="menu-items">
+                    <a href="admin.html" id="admin-link" class="btn">User-Portal</a>
+                    <a href="bibliothek.html" class="btn">Bibliothek</a>
+                    <button onclick="showConfigModal()" class="btn">Layout</button>
+                    <button id="logout-btnHam" class="btn">Abmelden</button>
+                </nav>
+            </div>
             <div class="header-buttons">
                 <a href="admin.html" id="admin-link"  class="btn">User-Portal</a>
                 <a href="bibliothek.html" class="btn">Bibliothek</a>
@@ -182,7 +195,7 @@
             </div>
         </div>
 
-        <button onclick="document.getElementById('pdf-modal').style.display='block'"style="width: 100%;margin-top: 20px;">PDF erstellen</button>
+        <button class="pdfgen" onclick="document.getElementById('pdf-modal').style.display='block'">PDF erstellen</button>
         
         <div id="config-modal" class="modal">
             <div class="modal-content">

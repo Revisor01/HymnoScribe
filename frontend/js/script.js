@@ -177,7 +177,33 @@ async function loadUserInfo() {
         return null;
     }
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    const hamburgerIcon = document.querySelector('.hamburger-icon');
+    const menuItems = document.querySelector('.menu-items');
     
+    hamburgerIcon.addEventListener('click', function() {
+        menuItems.classList.toggle('active');
+    });
+    
+    // Schließe das Menü, wenn außerhalb geklickt wird
+    document.addEventListener('click', function(event) {
+        if (!hamburgerIcon.contains(event.target) && !menuItems.contains(event.target)) {
+            menuItems.classList.remove('active');
+        }
+    });
+});
+
+function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    window.location.href = 'index.html';
+}
+
+// Fügen Sie einen Event-Listener für den Logout-Button hinzu
+document.getElementById('logout-btn').addEventListener('click', logout);
+document.getElementById('logout-btnHam').addEventListener('click', logout);
+
 function translateRole(role) {
     switch (role) {
         case 'admin':
@@ -396,15 +422,6 @@ async function checkAuthToken() {
         window.location.href = 'index.html';
     }
 }
-
-function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
-    window.location.href = 'index.html';
-}
-
-// Fügen Sie einen Event-Listener für den Logout-Button hinzu
-document.getElementById('logout-btn').addEventListener('click', logout);
 
 function isSuperAdmin() {
     return localStorage.getItem('role') === 'super-admin';
