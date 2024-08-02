@@ -1,4 +1,5 @@
 # HymnoScribe
+![Logo](https://github.com/Revisor01/HymnoScribe/blob/master/frontend/img/Logo-hymnoscribe.png)
 
 [![Docker](https://github.com/Revisor01/HymnoScribe/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/Revisor01/HymnoScribe/actions/workflows/docker-publish.yml)
 
@@ -112,14 +113,41 @@ HymnoScribe verwendet ein rollenbasiertes Berechtigungssystem:
 2. **Kann ich HymnoScribe selbst hosten?**
    Ja, HymnoScribe kann auf Ihrem eigenen Server gehostet werden. Folgen Sie unserer Installationsanleitung.
 
-3. **Woher kommen die Noten?**
-   Sie können eigene Noten hochladen oder aus unserer Bibliothek wählen. Wir arbeiten mit verschiedenen Verlagen zusammen.
+3. **Wie funktioniert die PDF-Generierung?**
+   HymnoScribe nutzt die PDFLib-Bibliothek, um PDFs direkt im Browser zu erstellen. Sie können verschiedene Formate wie A5, DIN Lang, A4 schmal und A3 schmal wählen.
 
-4. **Wo werden meine Daten gespeichert?**
-   Ihre Daten werden sicher auf Servern in Deutschland gespeichert und unterliegen den strengen europäischen Datenschutzrichtlinien.
+4. **Kann ich eigene Bilder und Logos hochladen?**
+   Ja, Sie können eigene Bilder und Logos hochladen und in Ihre Liedblätter integrieren.
 
-5. **Wie funktioniert die Benutzerverwaltung?**
-   Der Super-Admin kann Institutionen anlegen und hat vollen Zugriff auf alle Nutzer:innen. Der Super-Admin hat keinen Zugriff auf die Objekte innerhalb einer Institution. Administratoren können Benutzer innerhalb ihrer Institution erstellen und verwalten. Jeder Benutzer muss seine E-Mail-Adresse verifizieren.
+5. **Wie funktioniert das Session-Management?**
+   Sie können Ihre Arbeit als Session speichern und später fortsetzen. Sessions sind benutzerspezifisch und bleiben erhalten, bis Sie sie löschen.
 
-6. **Was passiert mit den Objekten, wenn ein Benutzer gelöscht wird?**
-   Objekte bleiben der Institution erhalten, auch wenn der erstellende Benutzer gelöscht wird.
+6. **Gibt es eine Begrenzung für die Anzahl der Objekte, die ich erstellen kann?**
+   Nein, es gibt keine feste Begrenzung. Die Kapazität hängt von Ihrem Hosting-Plan und den Serverressourcen ab.
+
+7. **Wie sicher sind meine Daten?**
+   Wir setzen auf verschlüsselte Verbindungen (HTTPS) und sichere Passwort-Hashing-Methoden. Ihre Daten werden in einer sicheren Datenbank gespeichert.
+
+8. **Kann ich HymnoScribe offline nutzen?**
+   HymnoScribe ist eine webbasierte Anwendung und benötigt eine Internetverbindung. Eine Offline-Version ist derzeit nicht verfügbar.
+
+9. **Wie kann ich Fehler melden oder Verbesserungsvorschläge einreichen?**
+   Bitte nutzen Sie den Issues-Bereich auf GitHub, um Fehler zu melden oder Verbesserungsvorschläge einzureichen.
+
+10. **Gibt es eine mobile App für HymnoScribe?**
+    Aktuell gibt es keine separate mobile App. Die Webanwendung ist jedoch responsiv und kann auf mobilen Geräten genutzt werden.
+
+11. **Wie oft werden Updates veröffentlicht?**
+    Wir streben regelmäßige Updates an, um neue Features hinzuzufügen und Fehler zu beheben. Die Häufigkeit variiert je nach Entwicklungsfortschritt.
+
+12. **Kann ich HymnoScribe in meine bestehende Webseite integrieren?**
+    Eine direkte Integration ist nicht vorgesehen. Sie können jedoch Links zu Ihrer HymnoScribe-Instanz auf Ihrer Webseite platzieren.
+
+13. **Wie funktioniert die Benutzerverwaltung?**
+    Der Super-Admin kann Institutionen anlegen und hat vollen Zugriff auf alle Nutzer:innen. Der Super-Admin hat keinen Zugriff auf die Objekte innerhalb einer Institution. Administratoren können Benutzer innerhalb ihrer Institution erstellen und verwalten. Jeder Benutzer muss seine E-Mail-Adresse verifizieren.
+
+14. **Was passiert mit den Objekten, wenn ein Benutzer gelöscht wird?**
+    Objekte bleiben der Institution erhalten, auch wenn der erstellende Benutzer gelöscht wird.
+
+15. **Gibt es eine API für HymnoScribe?**
+    Aktuell bieten wir keine öffentliche API an. Bei Bedarf können Sie sich für zukünftige Entwicklungen an uns wenden.
