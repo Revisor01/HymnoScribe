@@ -197,8 +197,15 @@
                             <label for="melodie">Melodie:</label>
                             <input type="text" id="melodie">
                         </div>
-                        <div id="strophenContainer"></div>
-                        <button type="button" id="addStrophe">Strophe hinzufügen</button>
+                        <div id="strophenContainer">
+                            <button type="button" id="addStropheBtn">Strophe hinzufügen</button>
+                            <button type="button" id="addRefrainBtn">Refrain hinzufügen</button>
+                            <div id="strophenList"></div>
+                        </div>
+                        <div id="refrainContainer" style="display:none;">
+                            <h4>Refrain</h4>
+                            <div id="refrainEditor"></div>
+                        </div>
                     </div>
                     <div id="editor-container"></div>
                     <button type="submit" id="saveObject">Objekt speichern</button>

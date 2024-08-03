@@ -12,6 +12,7 @@ import {
 
 let quill;
 let strophenEditors = [];
+let refrainEditor;
 let alleObjekte = [];
 let currentUser = null;
 
@@ -188,7 +189,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.location.href = 'index.html';
     }
 });
-    
+
 function applyGlobalConfigToPreview() {
     const preview = document.getElementById('preview');
     const config = JSON.parse(localStorage.getItem('liedblattConfig')) || {
@@ -258,6 +259,7 @@ document.addEventListener('DOMContentLoaded', function() {
 document.addEventListener('DOMContentLoaded', function() {
     applyGlobalConfigToPreview();
 });
+
 function toggleLiedFelder() {
     const liedFelder = document.getElementById('liedFelder');
     const copyrightField = document.getElementById('copyrightField');
@@ -272,19 +274,37 @@ function toggleLiedFelder() {
         if (melodieField) melodieField.style.display = 'block';
         if (editorContainer) editorContainer.style.display = 'none';
         if (strophenContainer) {
-            strophenContainer.innerHTML = '';
-            if (strophenEditors.length === 0) {
-                addStrophe();
-            }
+            strophenContainer.innerHTML = `
+                <button type="button" id="addStropheBtn">Strophe hinzufügen</button>
+                <button type="button" id="addRefrainBtn">Refrain hinzufügen</button>
+                <div id="strophenList"></div>
+                <div id="refrainContainer" style="display: none;"></div>
+            `;
+            document.getElementById('addStropheBtn').addEventListener('click', addStrophe);
+            document.getElementById('addRefrainBtn').addEventListener('click', addRefrain);
         }
     } else {
         if (liedFelder) liedFelder.style.display = 'none';
         if (copyrightField) copyrightField.style.display = 'none';
         if (melodieField) melodieField.style.display = 'none';
         if (strophenContainer) strophenContainer.innerHTML = '';
-        strophenEditors = [];
-        initializeQuillEditor();
+        if (editorContainer) {
+            editorContainer.style.display = 'block';
+            if (!quill) {
+                initializeQuillEditor();
+            }
+        }
     }
+    
+    const titelInput = document.getElementById('titel');
+    const melodieInput = document.getElementById('melodie');
+    const copyrightInput = document.getElementById('copyright');
+    
+    [titelInput, melodieInput, copyrightInput].forEach(input => {
+        if (input) {
+            input.addEventListener('input', updatePreview);
+        }
+    });
     updatePreview();
 }
 
@@ -306,16 +326,9 @@ function initializeQuillEditor() {
         modules: {
             toolbar: [
                 [{ 'header': [1, 2, 3, false] }],
-                ['bold', 'italic', 'underline', 'strike'],
-                ['blockquote', 'code-block'],
-                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                [{ 'script': 'sub'}, { 'script': 'super' }],
+                ['bold', 'italic', 'underline'],
                 [{ 'indent': '-1'}, { 'indent': '+1' }],
-                [{ 'direction': 'rtl' }],
-                [{ 'size': ['small', false, 'large', 'huge'] }],
-                [{ 'color': [] }, { 'background': [] }],
-                [{ 'font': [] }],
-                [{ 'align': [] }],
+                //[{ 'size': ['small', false, 'large', 'huge'] }],
                 ['clean']
             ]
         }
@@ -341,13 +354,13 @@ function indentText(direction) {
 }
 
 function addStrophe() {
-    const container = document.getElementById('strophenContainer');
-    const strophenAnzahl = container.children.length + 1;
-    const newStropheDiv = document.createElement('div');
-    newStropheDiv.className = 'form-group strophe-container';
-    newStropheDiv.innerHTML = `
+    const strophenList = document.getElementById('strophenList');
+    const strophenAnzahl = strophenList.children.length + 1;
+    const stropheContainer = document.createElement('div');
+    stropheContainer.className = 'strophe-container';
+    stropheContainer.innerHTML = `
         <div class="strophe-header">
-            <label for="strophe${strophenAnzahl}">Strophe ${strophenAnzahl}:</label>
+            <h4>Strophe ${strophenAnzahl}</h4>
             <div class="strophe-buttons">
                 <button type="button" class="move-up btn-small">↑</button>
                 <button type="button" class="move-down btn-small">↓</button>
@@ -356,46 +369,70 @@ function addStrophe() {
         </div>
         <div id="strophe${strophenAnzahl}" class="strophe-editor"></div>
     `;
-    container.appendChild(newStropheDiv);
+    strophenList.appendChild(stropheContainer);
     
     const editor = new Quill(`#strophe${strophenAnzahl}`, {
         theme: 'snow',
         modules: {
             toolbar: [
                 ['bold', 'italic', 'underline'],
-                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
                 ['clean']
             ]
         }
     });
-    strophenEditors.push(editor);
     editor.on('text-change', updatePreview);
     
-    newStropheDiv.querySelector('.move-up').addEventListener('click', () => moveStrophe(newStropheDiv, -1));
-    newStropheDiv.querySelector('.move-down').addEventListener('click', () => moveStrophe(newStropheDiv, 1));
-    newStropheDiv.querySelector('.delete-strophe').addEventListener('click', () => deleteStrophe(newStropheDiv));
+    stropheContainer.querySelector('.move-up').addEventListener('click', () => moveStrophe(stropheContainer, -1));
+    stropheContainer.querySelector('.move-down').addEventListener('click', () => moveStrophe(stropheContainer, 1));
+    stropheContainer.querySelector('.delete-strophe').addEventListener('click', () => deleteStrophe(stropheContainer));
     
     updateStrophenNumbers();
-    updatePreview();
+    return editor;
 }
 
-function moveStrophe(stropheDiv, direction) {
-    const container = document.getElementById('strophenContainer');
-    const strophen = Array.from(container.children);
-    const index = strophen.indexOf(stropheDiv);
+
+function addRefrain() {
+    const refrainContainer = document.getElementById('refrainContainer');
+    refrainContainer.style.display = 'block';
+    if (!refrainContainer.querySelector('.ql-editor')) {
+        refrainContainer.innerHTML = `
+<div class="strophe-header">
+            <h4>Refrain</h4>
+            <div class="strophe-buttons">
+                <button type="button" class="delete-strophe btn-small">×</button>
+            </div>
+        </div>
+            <div id="refrainEditor"></div>
+        `;
+        const editor = new Quill('#refrainEditor', {
+            theme: 'snow',
+            modules: {
+                toolbar: [
+                    ['bold', 'italic', 'underline'],
+                    ['clean']
+                ]
+            }
+        });
+        editor.on('text-change', updatePreview);
+        
+        refrainContainer.querySelector('.delete-strophe').addEventListener('click', () => deleteRefrain(refrainContainer));
+        return editor;
+    }
+    return Quill.find(document.querySelector('#refrainEditor'));
+}
+
+function moveStrophe(stropheContainer, direction) {
+    const strophenList = document.getElementById('strophenList');
+    const strophen = Array.from(strophenList.children);
+    const index = strophen.indexOf(stropheContainer);
     const newIndex = index + direction;
     
     if (newIndex >= 0 && newIndex < strophen.length) {
         if (direction === -1) {
-            container.insertBefore(stropheDiv, strophen[newIndex]);
+            strophenList.insertBefore(stropheContainer, strophen[newIndex]);
         } else {
-            container.insertBefore(stropheDiv, strophen[newIndex].nextSibling);
+            strophenList.insertBefore(stropheContainer, strophen[newIndex].nextSibling);
         }
-        
-        const tempEditor = strophenEditors[index];
-        strophenEditors[index] = strophenEditors[newIndex];
-        strophenEditors[newIndex] = tempEditor;
-        
         updateStrophenNumbers();
         updatePreview();
     }
@@ -414,24 +451,25 @@ function deleteNotes(type) {
     updatePreview();
 }
 
-function deleteStrophe(stropheDiv) {
-    const container = document.getElementById('strophenContainer');
-    const index = Array.from(container.children).indexOf(stropheDiv);
-    
-    container.removeChild(stropheDiv);
-    strophenEditors.splice(index, 1);
-    
+function deleteStrophe(stropheContainer) {
+    stropheContainer.remove();
     updateStrophenNumbers();
     updatePreview();
 }
 
+function deleteRefrain(refrainContainer) {
+    refrainContainer.remove();
+    updatePreview();
+}
+
 function updateStrophenNumbers() {
-    const container = document.getElementById('strophenContainer');
-    Array.from(container.children).forEach((stropheDiv, index) => {
-        const label = stropheDiv.querySelector('label');
-        label.textContent = `Strophe ${index + 1}:`;
-        label.setAttribute('for', `strophe${index + 1}`);
-        stropheDiv.querySelector('.strophe-editor').id = `strophe${index + 1}`;
+    const strophenList = document.getElementById('strophenList');
+    const strophen = strophenList.children;
+    Array.from(strophen).forEach((strophe, index) => {
+        const header = strophe.querySelector('h4');
+        if (header) {
+            header.textContent = `Strophe ${index + 1}`;
+        }
     });
 }
 
@@ -450,6 +488,7 @@ async function handleFormSubmit(e) {
         titel: document.getElementById('titel').value,
         inhalt: null,
         strophen: null,
+        refrain: null,
         notenbild: null,
         notenbildMitText: null,
         copyright: document.getElementById('copyright').value || null,
@@ -459,11 +498,20 @@ async function handleFormSubmit(e) {
     console.log('Initial objektData:', JSON.stringify(objektData));
     
     if (objektData.typ === 'Lied' || objektData.typ === 'Liturgie') {
-        const strophen = strophenEditors.map(editor => editor.root.innerHTML);
-        objektData.strophen = JSON.stringify(strophen);
-        objektData.inhalt = JSON.stringify({typ: objektData.typ});
-    } else {
-        objektData.inhalt = quill ? quill.root.innerHTML : '';
+        const strophenList = document.getElementById('strophenList');
+        if (strophenList) {
+            objektData.strophen = JSON.stringify(Array.from(strophenList.children).map(strophe => {
+                const editorElement = strophe.querySelector('.ql-editor');
+                return editorElement ? editorElement.innerHTML : '';
+            }));
+        }
+        
+        const refrainEditorElement = document.querySelector('#refrainEditor .ql-editor');
+        if (refrainEditorElement) {
+            objektData.refrain = refrainEditorElement.innerHTML;
+        }
+    } else if (quill) {
+        objektData.inhalt = quill.root.innerHTML;
     }
     
     console.log('Prepared objektData:', JSON.stringify(objektData));
@@ -501,8 +549,14 @@ async function handleFormSubmit(e) {
             body: formData
         });
         
-console.log('Gespeichertes Objekt:', response);
-
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Unbekannter Fehler beim Speichern');
+        }
+        
+        const result = await response.json();
+        console.log('Gespeichertes Objekt:', result);
+        
         await customAlert('Objekt erfolgreich gespeichert');
         resetForm();
         loadObjekte();
@@ -512,16 +566,27 @@ console.log('Gespeichertes Objekt:', response);
     }
 }
 
+
 function updatePreview() {
     const previewDiv = document.getElementById('preview');
     if (!previewDiv) return;
     
     const typ = document.getElementById('typ').value;
     const titel = document.getElementById('titel').value;
+    const melodie = document.getElementById('melodie').value;
+    const copyright = document.getElementById('copyright').value;
     
     let previewContent = `<h3>${titel}</h3>`;
     
     if (typ === 'Lied' || typ === 'Liturgie') {
+        if (melodie || copyright) {
+            previewContent += '<p class="small-info">';
+            if (melodie) previewContent += `Melodie: ${melodie}`;
+            if (melodie && copyright) previewContent += ' | ';
+            if (copyright) previewContent += `© ${copyright}`;
+            previewContent += '</p>';
+        }
+        
         const showNotes = document.getElementById('showNotes')?.checked;
         const noteType = document.querySelector('input[name="noteType"]:checked')?.value;
         
@@ -532,9 +597,20 @@ function updatePreview() {
             }
         }
         
-        strophenEditors.forEach((editor, index) => {
-            previewContent += `<p><strong>Strophe ${index + 1}:</strong><br>${editor.root.innerHTML}</p>`;
-        });
+        const strophenList = document.getElementById('strophenList');
+        if (strophenList) {
+            Array.from(strophenList.children).forEach((strophe, index) => {
+                const editorElement = strophe.querySelector('.ql-editor');
+                if (editorElement) {
+                    previewContent += `<p><strong>Strophe ${index + 1}:</strong><br>${editorElement.innerHTML}</p>`;
+                }
+            });
+        }
+        
+        const refrainEditorElement = document.querySelector('#refrainEditor .ql-editor');
+        if (refrainEditorElement && refrainEditorElement.textContent.trim()) {
+            previewContent += `<p><strong>Refrain:</strong><br>${refrainEditorElement.innerHTML}</p>`;
+        }
     } else if (quill) {
         previewContent += quill.root.innerHTML;
     }
@@ -558,7 +634,12 @@ function resetForm() {
     const strophenContainer = safeGetElement('strophenContainer');
     if (strophenContainer) strophenContainer.innerHTML = '';
     
+    strophenEditors.forEach(editor => editor.setText(''));
     strophenEditors = [];
+    
+    if (refrainEditor) {
+        refrainEditor.setText('');
+    }
     
     const currentNotenbild = safeGetElement('currentNotenbild');
     if (currentNotenbild) currentNotenbild.style.display = 'none';
@@ -615,7 +696,6 @@ function editObjekt(id) {
     }
     console.log('Gefundenes Objekt:', objekt);
     
-    
     const objektIdElement = document.getElementById('objektId');
     const typElement = document.getElementById('typ');
     const titelElement = document.getElementById('titel');
@@ -634,40 +714,52 @@ function editObjekt(id) {
         console.log('Lied oder Liturgie erkannt');
         const strophenContainer = document.getElementById('strophenContainer');
         if (strophenContainer) {
-            strophenContainer.innerHTML = '';
-            strophenEditors = [];
+            strophenContainer.innerHTML = `
+                <button type="button" id="addStropheBtn">Strophe hinzufügen</button>
+                <button type="button" id="addRefrainBtn">Refrain hinzufügen</button>
+                <div id="strophenList"></div>
+                <div id="refrainContainer" style="display: none;"></div>
+            `;
+            document.getElementById('addStropheBtn').addEventListener('click', addStrophe);
+            document.getElementById('addRefrainBtn').addEventListener('click', addRefrain);
+            
             const strophen = typeof objekt.strophen === 'string' ? JSON.parse(objekt.strophen) : objekt.strophen;
-            strophen.forEach((strophe, index) => {
-                addStrophe();
-                strophenEditors[index].root.innerHTML = strophe;
-            });
+            if (Array.isArray(strophen)) {
+                strophen.forEach((strophe, index) => {
+                    addStrophe();
+                    const stropheEditor = document.querySelector(`#strophe${index + 1} .ql-editor`);
+                    if (stropheEditor) {
+                        stropheEditor.innerHTML = strophe;
+                    }
+                });
+            }
+            
+            if (objekt.refrain) {
+                addRefrain();
+                const refrainEditor = document.querySelector('#refrainEditor .ql-editor');
+                if (refrainEditor) {
+                    refrainEditor.innerHTML = objekt.refrain;
+                }
+            }
         }
         
         const showNotesElement = document.getElementById('showNotes');
         if (showNotesElement) {
             showNotesElement.checked = objekt.notenbild || objekt.notenbildMitText;
-            console.log('showNotes Checkbox gesetzt:', showNotesElement.checked);
-            showNotesElement.dispatchEvent(new Event('change')); // Trigger change event
-        } else {
-            console.error('showNotes Element nicht gefunden');
+            showNotesElement.dispatchEvent(new Event('change'));
         }
+        
         const notesWithoutTextElement = document.getElementById('notesWithoutText');
         const notesWithTextElement = document.getElementById('notesWithText');
         const currentNotenbildElement = document.getElementById('currentNotenbild');
         const currentNotenbildMitTextElement = document.getElementById('currentNotenbildMitText');
-        
-        if (showNotesElement) {
-            showNotesElement.checked = objekt.notenbild || objekt.notenbildMitText;
-            showNotesElement.dispatchEvent(new Event('change')); // Trigger change event
-        }
         
         if (notesWithoutTextElement && objekt.notenbild) {
             notesWithoutTextElement.checked = true;
         } else if (notesWithTextElement && objekt.notenbildMitText) {
             notesWithTextElement.checked = true;
         }
-        console.log('Notenbild:', objekt.notenbild);
-        console.log('NotenbildMitText:', objekt.notenbildMitText);
+        
         if (currentNotenbildElement) {
             if (objekt.notenbild) {
                 currentNotenbildElement.src = getImagePath(objekt, 'notenbild');
@@ -686,67 +778,67 @@ function editObjekt(id) {
             }
         }
         
-        // Zeige die entsprechenden Noten-Optionen an
         const noteTypeDiv = document.querySelector('.form-group:has(#notesWithoutText)');
-        if (noteTypeDiv) {
-            const display = showNotesElement.checked ? 'block' : 'none';
-            noteTypeDiv.style.display = display;
-            console.log('Noten-Optionen Display:', display);
-        } else {
-            console.error('Noten-Optionen Container nicht gefunden');
+        if (noteTypeDiv && showNotesElement) {
+            noteTypeDiv.style.display = showNotesElement.checked ? 'block' : 'none';
         }
     } else {
-        initializeQuillEditor();
         if (quill) {
             quill.root.innerHTML = objekt.inhalt || '';
+        } else {
+            initializeQuillEditor();
+            if (quill) {
+                quill.root.innerHTML = objekt.inhalt || '';
+            }
         }
     }
     
     updatePreview();
 }
+
 async function deleteObjekt(id) {
-    if (await customConfirm('Sind Sie sicher, dass Sie dieses Objekt löschen möchten?')) {
-        try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`/api/objekte/${id}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`
+        if (await customConfirm('Sind Sie sicher, dass Sie dieses Objekt löschen möchten?')) {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch(`/api/objekte/${id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error('Fehler beim Löschen des Objekts');
                 }
-            });
-            if (!response.ok) {
-                throw new Error('Fehler beim Löschen des Objekts');
+                await customAlert('Objekt erfolgreich gelöscht');
+                loadObjekte();
+            } catch (error) {
+                console.error('Fehler:', error);
+                await customAlert('Fehler beim Löschen des Objekts');
             }
-            await customAlert('Objekt erfolgreich gelöscht');
-            loadObjekte();
-        } catch (error) {
-            console.error('Fehler:', error);
-            await customAlert('Fehler beim Löschen des Objekts');
         }
     }
-}
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM fully loaded');
-    const typ = document.getElementById('typ').value;
-    if (typ !== 'Lied' && typ !== 'Liturgie') {
-        initializeQuillEditor();
-    }
-    toggleLiedFelder.call(document.getElementById('typ'));
-    const showNotesCheckbox = document.getElementById('showNotes');
-    if (showNotesCheckbox) {
-        showNotesCheckbox.addEventListener('change', function() {
-            const noteTypeDiv = document.querySelector('.form-group:has(#notesWithoutText)');
-            if (noteTypeDiv) {
-                noteTypeDiv.style.display = this.checked ? 'block' : 'none';
-            }
-        });
-    }
-});
-window.editObjekt = editObjekt;
-window.deleteObjekt = deleteObjekt;
-window.deleteNotes = deleteNotes;
-
-window.addEventListener('error', function(event) {
-    console.error('Unerwarteter Fehler:', event.error);
-    customAlert('Ein unerwarteter Fehler ist aufgetreten. Bitte laden Sie die Seite neu.');
-});
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM fully loaded');
+        const typ = document.getElementById('typ').value;
+        if (typ !== 'Lied' && typ !== 'Liturgie') {
+            initializeQuillEditor();
+        }
+        toggleLiedFelder.call(document.getElementById('typ'));
+        const showNotesCheckbox = document.getElementById('showNotes');
+        if (showNotesCheckbox) {
+            showNotesCheckbox.addEventListener('change', function() {
+                const noteTypeDiv = document.querySelector('.form-group:has(#notesWithoutText)');
+                if (noteTypeDiv) {
+                    noteTypeDiv.style.display = this.checked ? 'block' : 'none';
+                }
+            });
+        }
+    });
+    window.editObjekt = editObjekt;
+    window.deleteObjekt = deleteObjekt;
+    window.deleteNotes = deleteNotes;
+    
+    window.addEventListener('error', function(event) {
+        console.error('Unerwarteter Fehler:', event.error);
+        customAlert('Ein unerwarteter Fehler ist aufgetreten. Bitte laden Sie die Seite neu.');
+    });

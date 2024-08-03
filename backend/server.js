@@ -368,7 +368,7 @@ apiRouter.delete('/admin/user/:id', authenticateToken, checkRole(['admin', 'supe
         await conn.query('DELETE FROM users WHERE id = ?', [id]);
         
         await conn.commit();
-        res.json({ message: 'Benutzer erfolgreich gelöscht', username: user.username });
+        res.json({ message: 'Benutzer erfolgreich gelöscht', username: user.username, institution_id: user.institution_id });
     } catch (error) {
         await conn.rollback();
         console.error('Fehler beim Löschen des Benutzers:', error);
@@ -466,7 +466,14 @@ apiRouter.post('/admin/user', authenticateToken, checkRole(['admin', 'super-admi
             [institution_id, username, email, role, resetToken, Date.now() + 3600000, '']
         );
         
-        await sendNewUserWelcomeEmail(email, username, resetToken);
+        try {
+            await sendNewUserWelcomeEmail(email, username, resetToken);
+        } catch (emailError) {
+            console.error('Fehler beim Senden der Willkommens-E-Mail:', emailError);
+            // Lösche den Benutzer wieder, wenn die E-Mail nicht gesendet werden konnte
+            await pool.query('DELETE FROM users WHERE id = ?', [result.insertId]);
+            return res.status(500).json({ error: 'Fehler beim Senden der Willkommens-E-Mail. Benutzer wurde nicht erstellt.' });
+        }
         
         res.status(201).json({ message: 'Benutzer erfolgreich erstellt', id: result.insertId });
     } catch (error) {
@@ -566,8 +573,25 @@ apiRouter.put('/admin/user/:id/change-email', authenticateToken, checkRole(['adm
     const { id } = req.params;
     const { newEmail } = req.body;
     try {
-        await pool.query('UPDATE users SET email = ? WHERE id = ?', [newEmail, id]);
-        res.json({ message: 'E-Mail-Adresse erfolgreich geändert' });
+        // Prüfen, ob die neue E-Mail-Adresse bereits existiert
+        const [existingUser] = await pool.query('SELECT * FROM users WHERE email = ? AND id != ?', [newEmail, id]);
+        if (existingUser.length > 0) {
+            return res.status(400).json({ error: 'Diese E-Mail-Adresse wird bereits verwendet' });
+        }
+        
+        const verificationToken = crypto.randomBytes(20).toString('hex');
+        await pool.query('UPDATE users SET pending_email = ?, verification_token = ? WHERE id = ?', [newEmail, verificationToken, id]);
+        
+        try {
+            await sendChangeEmailVerification(newEmail, verificationToken);
+            res.json({ message: 'E-Mail-Adresse erfolgreich geändert. Eine Verifizierungs-E-Mail wurde gesendet.' });
+        } catch (emailError) {
+            console.error('Fehler beim Senden der Verifizierungs-E-Mail:', emailError);
+            res.json({ 
+                message: 'E-Mail-Adresse erfolgreich geändert, aber die Verifizierungs-E-Mail konnte nicht gesendet werden. Bitte kontaktieren Sie den Administrator.',
+                emailSendFailed: true
+            });
+        }
     } catch (error) {
         console.error('Fehler beim Ändern der E-Mail-Adresse:', error);
         res.status(500).json({ error: 'Interner Serverfehler' });
@@ -594,10 +618,16 @@ apiRouter.put('/user/change-email', authenticateToken, async (req, res) => {
         const verificationToken = crypto.randomBytes(20).toString('hex');
         await pool.query('UPDATE users SET pending_email = ?, verification_token = ? WHERE id = ?', [newEmail, verificationToken, req.user.id]);
         
-        // Verwenden Sie die einheitliche E-Mail-Sende-Funktion
-        await sendChangeEmailVerification(newEmail, verificationToken);
-        
-        res.json({ message: 'Bitte überprüfen Sie Ihr E-Mail-Postfach zur Verifizierung Ihrer neuen E-Mail-Adresse.' });
+        try {
+            await sendChangeEmailVerification(newEmail, verificationToken);
+            res.json({ message: 'Bitte überprüfen Sie Ihr E-Mail-Postfach zur Verifizierung Ihrer neuen E-Mail-Adresse.' });
+        } catch (emailError) {
+            console.error('Fehler beim Senden der Verifizierungs-E-Mail:', emailError);
+            res.json({ 
+                message: 'E-Mail-Adresse erfolgreich geändert, aber die Verifizierungs-E-Mail konnte nicht gesendet werden. Bitte kontaktieren Sie den Administrator.',
+                emailSendFailed: true
+            });
+        }
     } catch (error) {
         console.error('Fehler beim Ändern der E-Mail-Adresse:', error);
         res.status(500).json({ error: 'Interner Serverfehler', details: error.message });
@@ -824,7 +854,7 @@ apiRouter.post('/objekte', authenticateToken, checkRole(['admin']), upload.field
     try {
         console.log('Received object data:', req.body);
         console.log('Received files:', req.files);
-        const { typ, titel, inhalt, strophen, copyright, melodie, institution_id } = req.body;
+        const { typ, titel, inhalt, strophen, copyright, melodie, refrain, institution_id } = req.body;
         const notenbild = req.files && req.files['notenbild'] 
         ? `/api/uploads/${path.relative(path.join(__dirname, 'uploads'), req.files['notenbild'][0].path)}`
         : null;
@@ -838,9 +868,10 @@ apiRouter.post('/objekte', authenticateToken, checkRole(['admin']), upload.field
         const safeStrophen = strophen === undefined ? null : strophen;
         
         const [result] = await pool.query(
-            'INSERT INTO objekte (typ, titel, inhalt, notenbild, notenbildMitText, strophen, copyright, melodie, institution_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [typ, titel, safeInhalt, notenbild, notenbildMitText, safeStrophen, copyright, melodie, institution_id]
+            'INSERT INTO objekte (typ, titel, inhalt, notenbild, notenbildMitText, strophen, copyright, melodie, refrain, institution_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [typ, titel, safeInhalt, notenbild, notenbildMitText, safeStrophen, copyright, melodie, refrain, institution_id]
         );
+        
         
         console.log('Database insert result:', result);
         
@@ -874,7 +905,7 @@ apiRouter.put('/objekte/:id', authenticateToken, checkRole(['admin']), upload.fi
 ]), async (req, res) => {
     try {
         const { id } = req.params;
-        const { typ, titel, inhalt, strophen, copyright, melodie } = req.body;
+        const { typ, titel, inhalt, strophen, copyright, melodie, refrain } = req.body;
         
         console.log('Empfangene Daten:', { id, typ, titel, inhalt, strophen, copyright, melodie });
         
@@ -894,8 +925,8 @@ apiRouter.put('/objekte/:id', authenticateToken, checkRole(['admin']), upload.fi
             notenbildMitText = `/api/uploads/${path.relative(path.join(__dirname, 'uploads'), req.files['notenbildMitText'][0].path)}`;
         }
         
-        const query = 'UPDATE objekte SET typ = ?, titel = ?, inhalt = ?, strophen = ?, notenbild = ?, notenbildMitText = ?, copyright = ?, melodie = ? WHERE id = ?';
-        const params = [typ, titel, inhalt || null, strophen || null, notenbild, notenbildMitText, copyright, melodie || null, id];
+        const query = 'UPDATE objekte SET typ = ?, titel = ?, inhalt = ?, strophen = ?, notenbild = ?, notenbildMitText = ?, copyright = ?, melodie = ?, refrain = ? WHERE id = ?';
+        const params = [typ, titel, inhalt || null, strophen || null, notenbild, notenbildMitText, copyright, melodie || null, refrain || null, id];
         
         console.log('SQL Query:', query);
         console.log('SQL Params:', params);
@@ -1061,7 +1092,6 @@ async function initializeDatabase() {
                 name VARCHAR(255) NOT NULL UNIQUE
             )
         `);
-        
         await conn.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -1305,12 +1335,18 @@ async function sendNewUserWelcomeEmail(email, username, resetToken) {
         ButtonUrl: `${process.env.FRONTEND_URL}/set-password.html?token=${resetToken}`
     });
     
-    await transporter.sendMail({
-        from: process.env.EMAIL_FROM,
-        to: email,
-        subject: 'Willkommen bei HymnoScribe',
-        html: renderedTemplate
-    });
+    try {
+        await transporter.sendMail({
+            from: process.env.EMAIL_FROM,
+            to: email,
+            subject: 'Willkommen bei HymnoScribe',
+            html: renderedTemplate
+        });
+        console.log('Welcome email sent successfully');
+    } catch (error) {
+        console.error('Error sending welcome email:', error);
+        throw error;
+    }
 }
 
 async function cleanupUnusedImages() {

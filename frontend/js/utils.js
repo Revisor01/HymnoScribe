@@ -171,12 +171,23 @@ export function getImagePath(objekt, imageType) {
 export function customAlert(message) {
     return new Promise((resolve) => {
         const modal = document.getElementById('custom-modal');
-        document.getElementById('modal-message').textContent = message;
-        document.getElementById('modal-ok').textContent = 'OK';
-        document.getElementById('modal-cancel').style.display = 'none';
+        const messageEl = document.getElementById('modal-message');
+        const okButton = document.getElementById('modal-ok');
+        const cancelButton = document.getElementById('modal-cancel');
+        
+        if (!modal || !messageEl || !okButton || !cancelButton) {
+            console.error('Modal elements not found');
+            alert(message);  // Fallback to native alert
+            resolve();
+            return;
+        }
+        
+        messageEl.textContent = message;
+        okButton.textContent = 'OK';
+        cancelButton.style.display = 'none';
         modal.style.display = 'block';
         
-        document.getElementById('modal-ok').onclick = () => {
+        okButton.onclick = () => {
             modal.style.display = 'none';
             resolve();
         };
@@ -186,17 +197,28 @@ export function customAlert(message) {
 export function customConfirm(message) {
     return new Promise((resolve) => {
         const modal = document.getElementById('custom-modal');
-        document.getElementById('modal-message').textContent = message;
-        document.getElementById('modal-ok').textContent = 'Ja';
-        document.getElementById('modal-cancel').style.display = 'inline-block';
-        document.getElementById('modal-cancel').textContent = 'Nein';
+        const messageEl = document.getElementById('modal-message');
+        const okButton = document.getElementById('modal-ok');
+        const cancelButton = document.getElementById('modal-cancel');
+        
+        if (!modal || !messageEl || !okButton || !cancelButton) {
+            console.error('Modal elements not found');
+            const result = confirm(message);  // Fallback to native confirm
+            resolve(result);
+            return;
+        }
+        
+        messageEl.textContent = message;
+        okButton.textContent = 'Ja';
+        cancelButton.style.display = 'inline-block';
+        cancelButton.textContent = 'Nein';
         modal.style.display = 'block';
         
-        document.getElementById('modal-ok').onclick = () => {
+        okButton.onclick = () => {
             modal.style.display = 'none';
             resolve(true);
         };
-        document.getElementById('modal-cancel').onclick = () => {
+        cancelButton.onclick = () => {
             modal.style.display = 'none';
             resolve(false);
         };

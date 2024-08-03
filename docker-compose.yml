@@ -21,6 +21,8 @@ services:
       - FRONTEND_URL=${FRONTEND_URL}
     volumes:
       - ./backend/uploads:/app/backend/uploads
+      - ./migrations:/app/migrations
+    command: sh -c "/app/run-migrations.sh && node server.js"
     depends_on:
       - db
 

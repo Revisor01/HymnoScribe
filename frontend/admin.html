@@ -139,10 +139,10 @@
             <div id="institutions-list"></div>
 
         </div>
-        
+    
         <div id="admin-section" class="section">
             <h2>Benutzer:innenverwaltung</h2>
-            <select id="institution-select"></select>
+<!--        <select id="institution-select"></select>-->
             <button id="add-user-btn" class="btn">Benutzer:innen hinzufügen</button>
             <div id="users-list"></div>
 
@@ -180,18 +180,26 @@
             <span class="close">&times;</span>
             <h2>Benutzer:in hinzufügen</h2>
             <form id="add-user-form">
+                <select id="institution-select" style="display: none;">
+                    <option value="">Institution auswählen</option>
+                </select>
                 <input type="text" id="new-username" placeholder="Benutzername" required>
-                <input type="password" id="new-password" placeholder="Passwort" required>
                 <input type="email" id="new-email" placeholder="E-Mail" required>
-                <select id="new-role">
+                <select id="new-role" required>
                     <option value="user">User</option>
                     <option value="admin">Admin</option>
                 </select>
-                <button type="submit" class="btn">Hinzufügen</button>
+                <button type="submit">Hinzufügen</button>
             </form>
         </div>
     </div>
-
+    <div id="custom-modal" class="modal">
+        <div class="modal-content">
+            <p id="modal-message"></p>
+            <button id="modal-ok" class="btn btn-primary">OK</button>
+            <button id="modal-cancel" class="btn btn-secondary" style="display:none;">Abbrechen</button>
+        </div>
+    </div>
     <div id="add-institution-modal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>

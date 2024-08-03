@@ -71,6 +71,9 @@ async function generatePDF(format) {
         lineHeight: parseFloat(config.lineHeight || 1.5),
         textAlign: config.textAlign || 'left',
         format: config.format || 'a5',
+        refrainSpaceBefore: 0.4, // Abstand vor dem Refrain als Faktor der Schriftgröße
+        refrainSpaceAfter: 0.4,  // Abstand nach dem Refrain als Faktor der Schriftgröße
+        
         churchLogo: config.churchLogo
     };
     console.log("Global config for PDF generation:", globalConfig);
@@ -171,7 +174,7 @@ async function generatePDF(format) {
     }
     
     async function drawText(text, x, y, fontSize, maxWidth, options = {}) {
-        const { bold, italic, underline, alignment, indent, isCopyright } = options;
+        const { bold, italic, underline, alignment, indent, isCopyright, isRefrain } = options;
         let font;
         if (bold && italic) {
             font = fonts.boldItalic;
@@ -446,6 +449,7 @@ async function generatePDF(format) {
                     let fontSize = globalConfig.fontSize;
                     let isHeading = false;
                     let isCopyright = element.classList.contains('copyright-info');
+                    let isRefrain = element.classList.contains('refrain');
                     
                     if (element.tagName === 'H1') { fontSize = globalConfig.fontSize * 1.6; isHeading = true; }
                     if (element.tagName === 'H2') { fontSize = globalConfig.fontSize * 1.4; isHeading = true; }
@@ -454,11 +458,12 @@ async function generatePDF(format) {
                     
                     let options = {
                         bold: element.tagName === 'STRONG' || window.getComputedStyle(element).fontWeight === 'bold' || parseInt(window.getComputedStyle(element).fontWeight) >= 700,
-                        italic: element.tagName === 'EM' || window.getComputedStyle(element).fontStyle === 'italic',
+                        italic: isRefrain || element.tagName === 'EM' || window.getComputedStyle(element).fontStyle === 'italic',
                         underline: element.tagName === 'U' || window.getComputedStyle(element).textDecoration.includes('underline'),
                         alignment: window.getComputedStyle(element).textAlign || globalConfig.textAlign,
                         indent: parseFloat(window.getComputedStyle(element).paddingLeft) || 0,
-                        isCopyright: isCopyright
+                        isCopyright: isCopyright,
+                        isRefrain: isRefrain
                     };
                     
                     let textContent = element.innerText;
@@ -476,13 +481,13 @@ async function generatePDF(format) {
                     y -= textHeight;
                     
                     if (isHeading) {
-                        y -= fontSize * 0.4; // Sehr geringer Abstand nach Überschriften
+                        y -= fontSize * 0.5; // Sehr geringer Abstand nach Überschriften
                         lastElementType = 'heading';
                     } else if (isCopyright) {
-                        y -= fontSize * 0.1; // Geringer Abstand nach Copyright
+                        y -= fontSize * 0.3; // Geringer Abstand nach Copyright
                         lastElementType = 'copyright';
                     } else if (lastElementWasStrophe) {
-                        y -= fontSize * 0.3; // Etwas größerer Abstand nach Strophen
+                        y -= fontSize * 0.5; // Etwas größerer Abstand nach Strophen
                         lastElementType = 'strophe';
                     } else {
                         y -= fontSize * 0.4; // Standardabstand zwischen Absätzen

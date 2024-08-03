@@ -55,3 +55,9 @@ CREATE TABLE IF NOT EXISTS vorlagen (
     institution_id INT,
     FOREIGN KEY (institution_id) REFERENCES institutions(id)
 );
+
+CREATE TABLE IF NOT EXISTS migrations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

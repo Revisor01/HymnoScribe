@@ -25,6 +25,11 @@ export async function saveSession(name) {
                 objekt.noteType = noteTypeRadio ? noteTypeRadio.value : null;
                 objekt.selectedStrophen = Array.from(liedOptions.querySelectorAll('.strophen-container input:checked'))
                 .map(cb => parseInt(cb.value));
+                objekt.refrainOptions = Array.from(liedOptions.querySelectorAll('.strophe-option'))
+                .map(stropheOption => {
+                    const refrainSelect = stropheOption.querySelector('select');
+                    return refrainSelect ? refrainSelect.value : 'none';
+                });
             }
         }
         
@@ -85,38 +90,6 @@ export async function deleteSession(id) {
     }
 }
 
-//export async function loadSessionList() {
-//  console.log("loadSessionList aufgerufen");
-//  const sessionList = document.getElementById('session-list');
-//  if (!sessionList) {
-//      console.warn("Element 'session-list' nicht gefunden. Versuche erneut in 100ms.");
-//      setTimeout(loadSessionList, 100);
-//      return;
-//  }
-//  try {
-//      const response = await authenticatedFetch('/api/sessions', {
-//          method: 'GET',
-//      });
-//      sessionList.innerHTML = '';
-//      sessions.forEach(session => {
-//          const li = document.createElement('li');
-//          li.textContent = `${session.name} (${new Date(session.created_at).toLocaleString()})`;
-//          const loadBtn = document.createElement('button');
-//          loadBtn.textContent = 'Laden';
-//          loadBtn.onclick = () => loadSession(session.id);
-//          const deleteBtn = document.createElement('button');
-//          deleteBtn.textContent = 'Löschen';
-//          deleteBtn.onclick = () => deleteSession(session.id);
-//          li.appendChild(loadBtn);
-//          li.appendChild(deleteBtn);
-//          sessionList.appendChild(li);
-//      });
-//  } catch (error) {
-//      console.error('Fehler:', error);
-//      await customAlert('Fehler beim Laden der Sessions: ' + error.message);
-//  }
-//}
-
 export function saveSessionToLocalStorage() {
     const selectedItems = document.querySelectorAll('.selected-item');
     const sessionData = Array.from(selectedItems).map(item => {
@@ -140,6 +113,11 @@ export function saveSessionToLocalStorage() {
                 objekt.noteType = noteTypeRadio ? noteTypeRadio.value : null;
                 objekt.selectedStrophen = Array.from(liedOptions.querySelectorAll('.strophen-container input:checked'))
                 .map(cb => parseInt(cb.value));
+                objekt.refrainOptions = Array.from(liedOptions.querySelectorAll('.strophe-option'))
+                .map(stropheOption => {
+                    const refrainSelect = stropheOption.querySelector('select');
+                    return refrainSelect ? refrainSelect.value : 'none';
+                });
             }
         }
         
@@ -193,9 +171,16 @@ export function applySessionData(sessionData) {
                     strophenCheckboxes.forEach((checkbox, index) => {
                         checkbox.checked = objekt.selectedStrophen && objekt.selectedStrophen.includes(index);
                     });
+                    if (objekt.refrainOptions && Array.isArray(objekt.refrainOptions)) {
+                        const refrainSelects = liedOptions.querySelectorAll('.strophe-option select');
+                        refrainSelects.forEach((select, index) => {
+                            if (objekt.refrainOptions[index]) {
+                                select.value = objekt.refrainOptions[index];
+                            }
+                        });
+                    }
                 }
             }
-            
             const alternativePrefixInput = itemElement.querySelector('.alternative-title-input');
             if (alternativePrefixInput) {
                 alternativePrefixInput.value = objekt.alternativePrefix || '';
@@ -234,6 +219,11 @@ export async function saveVorlage(name) {
                 objekt.noteType = noteTypeRadio ? noteTypeRadio.value : null;
                 objekt.selectedStrophen = Array.from(liedOptions.querySelectorAll('.strophen-container input:checked'))
                 .map(cb => parseInt(cb.value));
+                objekt.refrainOptions = Array.from(liedOptions.querySelectorAll('.strophe-option'))
+                .map(stropheOption => {
+                    const refrainSelect = stropheOption.querySelector('select');
+                    return refrainSelect ? refrainSelect.value : 'none';
+                });
             }
         }
         

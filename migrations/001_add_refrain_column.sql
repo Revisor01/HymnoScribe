@@ -1,0 +1,1 @@
+ALTER TABLE objekte ADD COLUMN refrain TEXT;

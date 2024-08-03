@@ -182,6 +182,9 @@ export function createLiedOptions(lied) {
     }
     
     strophen.forEach((strophe, index) => {
+        const stropheDiv = document.createElement('div');
+        stropheDiv.classList.add('strophe-option');
+        
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.id = `strophe-${lied.id}-${index}`;
@@ -191,12 +194,27 @@ export function createLiedOptions(lied) {
         label.htmlFor = checkbox.id;
         label.textContent = `Strophe ${index + 1}`;
         
-        strophenContainer.appendChild(checkbox);
-        strophenContainer.appendChild(label);
-        strophenContainer.appendChild(document.createElement('br'));
+        const refrainSelect = document.createElement('select');
+        refrainSelect.id = `refrain-${lied.id}-${index}`;
+        refrainSelect.innerHTML = `
+            <option value="none">Kein Refrain</option>
+            <option value="full">Vollständiger Refrain</option>
+            <option value="short">Verweis Refrain</option>
+        `;
+        refrainSelect.style.display = lied.refrain ? 'inline-block' : 'none';
+        
+        // Setze den gespeicherten Refrain-Wert, falls vorhanden
+        if (lied.refrainOptions && lied.refrainOptions[index]) {
+            refrainSelect.value = lied.refrainOptions[index];
+        }
+        
+        stropheDiv.appendChild(checkbox);
+        stropheDiv.appendChild(label);
+        stropheDiv.appendChild(refrainSelect);
+        strophenContainer.appendChild(stropheDiv);
     });
     
-    [showNotesCheckbox, noteTypeRadio1, noteTypeRadio2, ...strophenContainer.querySelectorAll('input')].forEach(el => {
+    [showNotesCheckbox, noteTypeRadio1, noteTypeRadio2, ...strophenContainer.querySelectorAll('input, select')].forEach(el => {
         el.addEventListener('change', updateLiedblatt);
     });
     
@@ -333,6 +351,65 @@ export function updateLiedblatt() {
                     
                     // Füge das stropheDiv zum content hinzu
                     content.appendChild(stropheDiv);
+                    // Refrain nach der Strophe einfügen, wenn ausgewählt
+                    const refrainSelect = selected.querySelector(`select[id="refrain-${objekt.id}-${index}"]`);
+                    const refrainType = refrainSelect ? refrainSelect.value : 'none';
+                    
+                    if (refrainType !== 'none' && objekt.refrain) {
+                        const refrainDiv = document.createElement('div');
+                        refrainDiv.classList.add('refrain');
+                        
+                        if (refrainType === 'full') {
+                            // Erstelle ein temporäres div-Element, um den HTML-Inhalt zu parsen
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = objekt.refrain;
+                            
+                            // Erstelle das erste p-Element mit "Refrain:" und dem ersten Inhalt
+                            const firstP = document.createElement('p');
+                            firstP.style.fontStyle = 'italic';
+                            
+                            if (tempDiv.childNodes.length > 0) {
+                                // Kombiniere "Refrain:" mit dem ersten Inhalt
+                                if (tempDiv.firstChild.nodeType === Node.TEXT_NODE) {
+                                    firstP.textContent = "Refrain: " + tempDiv.firstChild.textContent.trim();
+                                    tempDiv.removeChild(tempDiv.firstChild);
+                                } else {
+                                    firstP.innerHTML = "Refrain: " + tempDiv.firstChild.innerHTML;
+                                    tempDiv.removeChild(tempDiv.firstChild);
+                                }
+                            } else {
+                                firstP.textContent = "Refrain:";
+                            }
+                            refrainDiv.appendChild(firstP);
+                            
+                            // Verarbeite die restlichen Elemente
+                            Array.from(tempDiv.children).forEach(child => {
+                                const newP = document.createElement('p');
+                                newP.style.fontStyle = 'italic';
+                                newP.innerHTML = child.innerHTML;
+                                refrainDiv.appendChild(newP);
+                            });
+                            
+                            // Falls es noch restlichen Text gibt, füge diesen auch hinzu
+                            if (tempDiv.childNodes.length > 0) {
+                                const textContent = tempDiv.childNodes[0].textContent.trim();
+                                if (textContent) {
+                                    const newP = document.createElement('p');
+                                    newP.style.fontStyle = 'italic';
+                                    newP.textContent = textContent;
+                                    refrainDiv.appendChild(newP);
+                                }
+                            }
+                        } else {
+                            // Nur ein einzelnes "Refrain" für den Verweis
+                            const shortRefrain = document.createElement('p');
+                            shortRefrain.style.fontStyle = 'italic';
+                            shortRefrain.textContent = 'Refrain';
+                            refrainDiv.appendChild(shortRefrain);
+                        }
+                        
+                        content.appendChild(refrainDiv);
+                    }
                 });
             }
             else {
@@ -722,11 +799,7 @@ export function addToSelected(objekt) {
                 toolbar: [
                     [{ 'header': [1, 2, 3, false] }],
                     ['bold', 'italic', 'underline'],
-                    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
                     [{ 'indent': '-1'}, { 'indent': '+1' }],
-                    [{ 'direction': 'rtl' }],
-                    [{ 'color': [] }, { 'background': [] }],
-                    [{ 'align': [] }],
                     ['clean']
                 ]
             }

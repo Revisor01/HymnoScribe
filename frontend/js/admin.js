@@ -1,5 +1,14 @@
+import {
+  authenticatedFetch,
+  customAlert,
+  customConfirm,
+  customPrompt,
+  getImagePath
+} from './utils.js';
+
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
+    loadInstitutions();
 });
 
 function initializeApp() {
@@ -11,7 +20,6 @@ function initializeApp() {
     
     checkUserRole();
     setupEventListeners();
-    initializeHamburgerMenu();
 }
 
 function setupEventListeners() {
@@ -19,6 +27,8 @@ function setupEventListeners() {
     document.getElementById('add-user-form').addEventListener('submit', addUser);
     document.getElementById('add-institution-form').addEventListener('submit', addInstitution);
     document.getElementById('change-password-btn').addEventListener('click', changePassword);
+    document.getElementById('change-email-btn').addEventListener('click', changeEmail);
+    document.getElementById('change-email-btn').addEventListener('click', changeEmail);
     document.getElementById('change-email-btn').addEventListener('click', changeEmail);
     document.getElementById('resend-verification-btn').addEventListener('click', handleResendVerification);
     
@@ -65,18 +75,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 function handleUserActions(event) {
-    const target = event.target;
-    if (target.classList.contains('change-password')) {
-        const userId = target.getAttribute('data-userid');
-        changeUserPassword(userId);
-    } else if (target.classList.contains('change-email')) {
-        const userId = target.getAttribute('data-userid');
-        changeUserEmail(userId);
-    } else if (target.classList.contains('delete-user')) {
-        const userId = target.getAttribute('data-userid');
-        const username = target.getAttribute('data-username');
-        deleteUser(userId, username);
-    }
+  const target = event.target;
+  if (target.classList.contains('change-password')) {
+    const userId = target.getAttribute('data-userid');
+    changeUserPassword(userId);
+  } else if (target.classList.contains('change-email')) {
+    const userId = target.getAttribute('data-userid');
+    changeUserEmail(userId);
+  } else if (target.classList.contains('delete-user')) {
+    const userId = target.getAttribute('data-userid');
+    const username = target.getAttribute('data-username');
+    const institutionId = target.getAttribute('data-institutionid');
+    deleteUser(userId, username, institutionId);
+  }
 }
 
 function logout() {
@@ -230,52 +241,57 @@ function translateMail(mail) {
 }
 
 async function loadInstitutions() {
-    try {
-        const response = await fetchWithLogging('/api/admin/institutions', {
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-        });
-        if (Array.isArray(response)) {
-            displayInstitutions(response);
-            updateInstitutionSelect(response);
-        } else {
-            console.error('Unerwartetes Antwortformat:', response);
-            showModal('Fehler beim Laden der Institutionen: Unerwartetes Datenformat');
-        }
-    } catch (error) {
-        console.error('Fehler:', error);
-        showModal('Fehler beim Laden der Institutionen: ' + error.message);
+  try {
+    const response = await fetchWithLogging('/api/admin/institutions', {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    });
+    if (Array.isArray(response) && response.length > 0) {
+      displayInstitutions(response);
+      updateInstitutionSelect(response);
+    } else {
+      console.warn('Keine Institutionen gefunden oder leere Antwort erhalten');
+      displayInstitutions([]);
+      updateInstitutionSelect([]);
     }
+  } catch (error) {
+    console.error('Fehler beim Laden der Institutionen:', error);
+    await customAlert('Fehler beim Laden der Institutionen: ' + error.message);
+  }
 }
 
 function displayInstitutions(institutions) {
-    const list = document.getElementById('institutions-list');
-    list.innerHTML = '';
-    institutions.forEach(institution => {
-        const li = document.createElement('div');
-        li.className = 'institution-item';
-        li.innerHTML = `
-            <span>${institution.name}</span>
-            <div class="buttons">
-                <button onclick="loadUsersForInstitution(${institution.id})" class="btn btn-small">Benutzer anzeigen</button>
-                <button onclick="deleteInstitution(${institution.id}, '${institution.name}')" class="btn btn-danger btn-small">Löschen</button>
-            </div>
-        `;
-        list.appendChild(li);
-    });
+  const list = document.getElementById('institutions-list');
+  list.innerHTML = '<h3>Institutionen</h3>';
+  institutions.forEach(institution => {
+    const li = document.createElement('div');
+    li.className = 'institution-item';
+    li.innerHTML = `
+      <span class="institution-name" onclick="loadUsersForInstitution(${institution.id})">${institution.name}</span>
+      <div class="buttons">
+        <button onclick="deleteInstitution(${institution.id}, '${institution.name}')" class="btn btn-danger btn-small">Löschen</button>
+      </div>
+    `;
+    list.appendChild(li);
+  });
 }
 
 function updateInstitutionSelect(institutions) {
-    const select = document.getElementById('institution-select');
-    if (!select) return;
+  const selects = document.querySelectorAll('#institution-select');
+  if (selects.length === 0) {
+    console.warn('Kein Element mit der ID "institution-select" gefunden');
+    return;
+  }
+  selects.forEach(select => {
     select.innerHTML = '<option value="">Institution auswählen</option>';
     institutions.forEach(institution => {
-        const option = document.createElement('option');
-        option.value = institution.id;
-        option.textContent = institution.name;
-        select.appendChild(option);
+      const option = document.createElement('option');
+      option.value = institution.id;
+      option.textContent = institution.name;
+      select.appendChild(option);
     });
+  });
 }
 
 async function addInstitution(event) {
@@ -328,97 +344,121 @@ async function deleteInstitution(id, name) {
 }
 
 async function loadUsersForInstitution(institutionId) {
-    try {
-        const response = await fetchWithLogging(`/api/admin/users/${institutionId}`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-        if (Array.isArray(response)) {
-            displayUsers(response);
-        } else {
-            throw new Error('Unerwartetes Antwortformat');
-        }
-    } catch (error) {
-        console.error('Fehler beim Laden der Benutzer:', error);
-        showModal('Fehler beim Laden der Benutzer: ' + error.message);
+  try {
+    const response = await fetchWithLogging(`/api/admin/users/${institutionId}`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    });
+    if (Array.isArray(response)) {
+      displayUsers(response);
+    } else {
+      throw new Error('Unerwartetes Antwortformat');
     }
+  } catch (error) {
+    console.error('Fehler beim Laden der Benutzer:', error);
+    await customAlert('Fehler beim Laden der Benutzer: ' + error.message);
+  }
 }
 
 function displayUsers(users) {
-    const usersList = document.getElementById('users-list');
-    usersList.innerHTML = '<h3>Benutzer:innen</h3>';
-    if (Array.isArray(users)) {
-        users.forEach(user => {
-            const userDiv = document.createElement('div');
-            userDiv.className = 'user-item';
-            userDiv.innerHTML = `
-                <span>${user.username} - ${user.email} (${user.role})</span>
-                <div class="buttons">
-                    <button class="btn btn-small change-password" data-userid="${user.id}">Passwort ändern</button>
-                    <button class="btn btn-small change-email" data-userid="${user.id}">E-Mail ändern</button>
-                    <button class="btn btn-danger btn-small delete-user" data-userid="${user.id}" data-username="${user.username}">Löschen</button>
-                </div>
-            `;
-            usersList.appendChild(userDiv);
-        });
-    } else {
-        usersList.innerHTML += '<p>Keine Benutzer gefunden oder Fehler beim Laden der Benutzer.</p>';
-    }
+  const usersList = document.getElementById('users-list');
+  usersList.innerHTML = '<h3>Benutzer:innen</h3>';
+  if (Array.isArray(users)) {
+    users.forEach(user => {
+      const userDiv = document.createElement('div');
+      userDiv.className = 'user-item';
+      userDiv.innerHTML = `
+        <span>${user.username} - ${user.email} (${user.role})</span>
+        <div class="buttons">
+          <button class="btn btn-small change-password" data-userid="${user.id}">Passwort ändern</button>
+          <button class="btn btn-small change-email" data-userid="${user.id}">E-Mail ändern</button>
+          <button class="btn btn-danger btn-small delete-user" data-userid="${user.id}" data-username="${user.username}" data-institutionid="${user.institution_id}">Löschen</button>
+        </div>
+      `;
+      usersList.appendChild(userDiv);
+    });
+  } else {
+    usersList.innerHTML += '<p>Keine Benutzer gefunden oder Fehler beim Laden der Benutzer.</p>';
+  }
 }
 
-
 async function addUser(event) {
-    event.preventDefault();
-    const username = document.getElementById('new-username').value;
-    const password = document.getElementById('new-password').value;
-    const email = document.getElementById('new-email').value;
-    const role = document.getElementById('new-role').value;
-    const institution_id = document.getElementById('institution-select').value;
-    
-    try {
-        const response = await fetchWithLogging('/api/admin/user', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify({ institution_id, username, password, email, role })
-        });
-        if (response.error) {
-            throw new Error(response.error);
-        }
-        closeAllModals();
-        loadUsersForInstitution(institution_id);
-        showModal('Nutzer/in erfolgreich angelegt.', null, 'Erfolg');
-    } catch (error) {
-        console.error('Fehler:', error);
-        showModal('Fehler beim Anlegen des/der Nutzers/in: ' + error.message, null, 'Fehler');
+  event.preventDefault();
+  const username = document.getElementById('new-username').value;
+  const email = document.getElementById('new-email').value;
+  const role = document.getElementById('new-role').value;
+  let institution_id;
+  
+  const userRole = localStorage.getItem('role');
+  if (userRole === 'admin') {
+    // Für normale Admins verwenden wir ihre eigene Institution
+    const userInfo = await fetchWithLogging('/api/user/info', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    });
+    institution_id = userInfo.institution_id;
+  } else {
+    // Für Superadmins verwenden wir die ausgewählte Institution
+    institution_id = document.getElementById('institution-select').value;
+  }
+  
+  if (!institution_id) {
+    await customAlert('Bitte wählen Sie eine Institution aus oder stellen Sie sicher, dass Sie einer Institution zugeordnet sind.');
+    return;
+  }
+  
+  try {
+    const response = await fetchWithLogging('/api/admin/user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({ institution_id, username, email, role })
+    });
+    if (response.error) {
+      throw new Error(response.error);
     }
+    closeAllModals();
+    if (userRole === 'admin') {
+      loadUsersForInstitution(institution_id);
+    } else {
+      loadUsersForInstitution(institution_id);
+    }
+    showModal('Nutzer/in erfolgreich angelegt.', null, 'Erfolg');
+  } catch (error) {
+    console.error('Fehler:', error);
+    showModal('Fehler beim Anlegen des/der Nutzers/in: ' + error.message, null, 'Fehler');
+  }
 }
 
 async function deleteUser(id, username) {
-    showModal(
-        `Sind Sie sicher, dass Sie den/die Nutzer/in <b>${username}</b> löschen möchten? Alle Sessions des/der Nutzer/in werden gelöscht. Erstellte Vorlagen bleiben erhalten.`,
-        async () => {
-            try {
-                const response = await fetchWithLogging(`/api/admin/user/${id}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    }
-                });
-                if (response.error) {
-                    throw new Error(response.error);
-                }
-                loadUsersForInstitution(document.getElementById('institution-select').value);
-                showModal(`Nutzer/in ${username} erfolgreich gelöscht`, null, 'Erfolg');
-            } catch (error) {
-                console.error('Fehler:', error);
-                showModal(error.message, null, 'Fehler beim Löschen');
-            }
-        },
-        'Nutzer/in löschen',
-        'delete'
-    );
+  console.log(`Attempting to delete user: ID=${id}, Username=${username}`);
+  showModal(
+    `Sind Sie sicher, dass Sie den/die Nutzer/in <b>${username}</b> löschen möchten? Alle Sessions des/der Nutzer/in werden gelöscht. Erstellte Vorlagen bleiben erhalten.`,
+    async () => {
+      try {
+        const response = await fetchWithLogging(`/api/admin/user/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        console.log('Delete user response:', response);
+        
+        if (response.error) {
+          throw new Error(response.error);
+        }
+        showModal(`Nutzer/in ${username} erfolgreich gelöscht`, null, 'Erfolg');
+        console.log(`Reloading users for institution: ${response.institution_id}`);
+        await loadUsersForInstitution(response.institution_id);
+      } catch (error) {
+        console.error('Fehler:', error);
+        showModal(error.message, null, 'Fehler beim Löschen');
+      }
+    },
+    'Nutzer/in löschen',
+    'delete'
+  );
 }
 
 async function handleResendVerification() {
@@ -508,24 +548,28 @@ async function changeUserEmail(userId) {
         async () => {
             const newEmail = document.getElementById('new-user-email').value;
             
-            try {
-                const response = await fetchWithLogging(`/api/admin/user/${userId}/change-email`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({ newEmail })
-                });
-                if (response.error) {
-                    throw new Error(response.error);
-                }
-                showModal('E-Mail-Adresse erfolgreich geändert.', null, 'Erfolg');
-                loadUsersForInstitution(document.getElementById('institution-select').value);
-            } catch (error) {
-                console.error('Fehler:', error);
-                showModal('Fehler beim Ändern der E-Mail-Adresse: ' + error.message, null, 'Fehler');
+          try {
+            const response = await fetchWithLogging(`/api/admin/user/${userId}/change-email`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+              },
+              body: JSON.stringify({ newEmail })
+            });
+            if (response.error) {
+              throw new Error(response.error);
             }
+            if (response.emailSendFailed) {
+              showModal(response.message, null, 'Warnung');
+            } else {
+              showModal(response.message, null, 'Erfolg');
+            }
+            loadUsersForInstitution(document.getElementById('institution-select').value);
+          } catch (error) {
+            console.error('Fehler:', error);
+            showModal('Fehler beim Ändern der E-Mail-Adresse: ' + error.message, null, 'Fehler');
+          }
         },
         'Benutzer-E-Mail ändern'
     );
@@ -584,24 +628,28 @@ function changeEmail() {
             const newEmail = document.getElementById('new-email').value;
             const password = document.getElementById('password').value;
             
-            try {
-                const response = await fetchWithLogging('/api/user/change-email', {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({ newEmail, password })
-                });
-                if (response.error) {
-                    throw new Error(response.error);
-                }
-                showModal('E-Mail-Adresse erfolgreich geändert. Wir haben Ihnen eine e-Mail gesendet. Bitte verifizieren sie ihre Adresse.', null, 'Erfolg');
-                loadUserInfo();
-            } catch (error) {
-                console.error('Fehler:', error);
-                showModal('Fehler beim Ändern der E-Mail-Adresse: ' + error.message, null, 'Fehler');
+          try {
+            const response = await fetchWithLogging('/api/user/change-email', {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+              },
+              body: JSON.stringify({ newEmail, password })
+            });
+            if (response.error) {
+              throw new Error(response.error);
             }
+            if (response.emailSendFailed) {
+              showModal(response.message, null, 'Warnung');
+            } else {
+              showModal(response.message, null, 'Erfolg');
+            }
+            loadUserInfo();
+          } catch (error) {
+            console.error('Fehler:', error);
+            showModal('Fehler beim Ändern der E-Mail-Adresse: ' + error.message, null, 'Fehler');
+          }
         },
         'E-Mail ändern'
     );
@@ -658,10 +706,20 @@ function closeAllModals() {
 }
 
 function openModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.style.display = 'block';
+  const modal = document.getElementById(modalId);
+  if (modal) {
+    modal.style.display = 'block';
+    if (modalId === 'add-user-modal') {
+      const userRole = localStorage.getItem('role');
+      const institutionSelect = document.getElementById('institution-select');
+      if (userRole === 'admin') {
+        institutionSelect.style.display = 'none';
+      } else {
+        institutionSelect.style.display = 'block';
+        loadInstitutions(); // Dies wird das Dropdown füllen
+      }
     }
+  }
 }
 
 // Schließen des Modals, wenn außerhalb geklickt wird
@@ -670,3 +728,6 @@ window.onclick = function(event) {
         event.target.style.display = 'none';
     }
 };
+
+window.deleteInstitution = deleteInstitution;
+window.loadUsersForInstitution = loadUsersForInstitution;
