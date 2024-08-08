@@ -14,6 +14,7 @@ import {
     loadVorlage,
     deleteVorlage,
     loadVorlagenList,
+    loadConfigFromLocalStorage,
     updateSessionSelect,
     updateVorlageSelect,
     updateSessionsList,
@@ -61,16 +62,24 @@ let alleObjekte = [];
 let globalConfig = {
     fontFamily: 'Jost',
     fontSize: 12,
-    textAlign: 'left',
+    textAlign: 'center',
     lineHeight: 1.5,
     format: 'a5',
-    churchLogo: null // Wird als Base64-String gespeichert
+    churchLogo: null
 };
+
+export function applyGlobalConfig(element) {
+    element.style.setProperty('--font-family', globalConfig.fontFamily);
+    element.style.setProperty('--font-size', `${globalConfig.fontSize}px`);
+    element.style.setProperty('--line-height', globalConfig.lineHeight);
+    element.style.setProperty('--text-align', globalConfig.textAlign);
+}
 
 // Initialisierungsfunktionen
 async function initializeApp() {
     try {
         await checkAuthToken();
+        loadConfigFromLocalStorage();
         loadLastSession();
         await loadObjekte();
         await updateSessionSelect();
@@ -78,6 +87,8 @@ async function initializeApp() {
         initializeDragAndDrop();
         await loadVorlagenList();
         updateUIBasedOnUserRole();
+        applyGlobalConfig(document.getElementById('liedblatt-content'));
+        updateLiedblatt();
         
         // Rufen Sie loadObjekte alle 5 Minuten auf
         setInterval(loadObjekte, 5 * 60 * 1000);
@@ -93,7 +104,6 @@ async function initializeApp() {
             e.target.value = ''; // Reset dropdown nach dem Laden
         }
     });
-    
     document.getElementById('vorlage-select').addEventListener('change', async (e) => {
         const vorlageId = e.target.value;
         if (vorlageId) {
@@ -101,22 +111,6 @@ async function initializeApp() {
             e.target.value = ''; // Reset dropdown nach dem Laden
         }
     });
-}
-
-function loadConfigFromLocalStorage() {
-    const savedConfig = localStorage.getItem('liedblattConfig');
-    if (savedConfig) {
-        try {
-            const parsedConfig = JSON.parse(savedConfig);
-            globalConfig = { ...globalConfig, ...parsedConfig };
-            console.log("Loaded config from localStorage:", globalConfig);
-            updateLiedblattStyle();
-        } catch (error) {
-            console.error("Error parsing saved config:", error);
-        }
-    } else {
-        console.log("No saved config found in localStorage");
-    }
 }
 
 async function loadUserInfo() {
@@ -217,17 +211,24 @@ function translateRole(role) {
 
 function updateUIBasedOnUserRole() {
     const role = localStorage.getItem('role');
-    const bibliothekButton = document.querySelector('a[href="bibliothek.html"]');
+    console.log('User role from localStorage:', role);
+    
+    const bibliothekButton = document.querySelector('#bibliothek-link');
+    console.log('Bibliothek button found:', bibliothekButton);
     
     if (bibliothekButton) {
         if (role === 'admin' || role === 'super-admin') {
             bibliothekButton.style.display = 'inline-block';
+            console.log('Bibliothek button displayed');
         } else {
             bibliothekButton.style.display = 'none';
+            console.log('Bibliothek button hidden');
         }
+        console.log('Current display style:', window.getComputedStyle(bibliothekButton).display);
+    } else {
+        console.log('Bibliothek button not found in the DOM');
     }
 }
-
 // Event Listener Laden der Konfig beim Seitenladen
 document.addEventListener('DOMContentLoaded', loadConfigFromLocalStorage);
 
@@ -546,8 +547,8 @@ window.onclick = function(event) {
 }
 
 export { 
-    globalConfig,
     alleObjekte,
+    globalConfig,
     getImagePath
 };
 

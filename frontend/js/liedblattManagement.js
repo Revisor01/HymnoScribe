@@ -1,6 +1,6 @@
 // liedblattManagement.js
 import { saveSessionToLocalStorage } from './sessionManagement.js';
-import { globalConfig, getImagePath } from './script.js';
+import { globalConfig, getImagePath, applyGlobalConfig } from './script.js';
 import { authenticatedFetch, customAlert, customConfirm, customPrompt } from './utils.js';
 
 export function getTrennerIconClass(type) {
@@ -229,6 +229,9 @@ export function createLiedOptions(lied) {
 export function updateLiedblatt() {
     const liedblattContent = document.getElementById('liedblatt-content');
     liedblattContent.innerHTML = "";
+    
+    applyGlobalConfig(liedblattContent);
+    
     const selectedItems = document.querySelectorAll('.selected-item');
     
     selectedItems.forEach((selected, index) => {
@@ -239,28 +242,29 @@ export function updateLiedblatt() {
         const uniqueId = `liedblatt-item-${index}-${Date.now()}`; 
         content.setAttribute('data-liedblatt-id', uniqueId);
         content.setAttribute('data-original-id', objekt.id);
+        content.classList.add('liedblatt-item'); // Add this class to all items
         selected.setAttribute('data-unique-id', uniqueId);
         
         const showTitleCheckbox = selected.querySelector('input[id^="showTitle"]');
         const showTitle = showTitleCheckbox ? showTitleCheckbox.checked : true;
         
-        // Store the unique ID in the selected item for later reference
-        
         if (showTitle) {
             const title = document.createElement('h3');
             title.textContent = objekt.alternativePrefix || objekt.titel;
+            title.style.fontSize = `${globalConfig.fontSize * 1.2}px`;
+            title.classList.add('item-title'); // Add this class to titles
             content.appendChild(title);
         }
+        
         if (objekt.typ === 'Seitenumbruch') {
             const pageBreak = document.createElement('div');
             pageBreak.classList.add('page-break');
-            pageBreak.innerHTML = '<hr style="border-top: 2px dashed #888; margin: 20px 0;">';
+            pageBreak.style.borderTop = '2px dashed #888';
+            pageBreak.style.margin = '20px 0';
             liedblattContent.appendChild(pageBreak);
-            return; // Fügen Sie nichts weiteres für den Seitenumbruch hinzu
+            return;
         }
-        if (objekt.typ === 'Psalm') {
-            //content.style.textAlign = 'left';
-        }
+        
         if (objekt.typ === 'CustomImage') {
             const imgSrc = getImagePath(objekt, 'customImage');
             if (imgSrc) {
@@ -268,24 +272,29 @@ export function updateLiedblatt() {
                 imgElement.src = imgSrc;
                 imgElement.alt = "Benutzerdefiniertes Bild";
                 imgElement.style.maxWidth = '100%';
+                imgElement.style.marginBottom = '15px';
+                imgElement.classList.add('item-image'); // Add this class to images
                 content.appendChild(imgElement);
             }
         }
+        
         if (objekt.typ === 'Trenner') {
             const trennerIcon = document.createElement('i');
             trennerIcon.className = getTrennerIconClass(objekt.inhalt);
             trennerIcon.style.fontSize = '24px';
-            trennerIcon.style.color = '#888';
+            trennerIcon.style.color = 'var(--text-color)';
             trennerIcon.style.display = 'block';
             trennerIcon.style.textAlign = 'center';
-            trennerIcon.style.margin = '10px 0';
+            trennerIcon.style.margin = '15px 0';
             content.appendChild(trennerIcon);
-        } else if (objekt.typ === 'Lied' || objekt.typ === 'Liturgie') {
-            const selectedStrophen = Array.from(selected.querySelectorAll('.strophen-container input:checked')).map(cb => parseInt(cb.value));
-            const showNotes = selected.querySelector('input[type="checkbox"]').checked;
-            const noteType = selected.querySelector('input[name^="noteType"]:checked')?.value;
+        } else if (objekt.typ === 'CustomImage' || objekt.typ === 'Lied' || objekt.typ === 'Liturgie') {
+            content.classList.add('image-content'); // Add this class to image-containing items
+            
             if (objekt.copyright || objekt.melodie) {
-                const copyrightElement = document.createElement('span');
+                const copyrightElement = document.createElement('p');
+                copyrightElement.classList.add('copyright-info');
+                copyrightElement.style.fontSize = '8px';
+                copyrightElement.style.marginBottom = `${globalConfig.fontSize}px`;
                 
                 if (objekt.copyright) {
                     copyrightElement.innerHTML = `© ${objekt.copyright}`;
@@ -299,19 +308,25 @@ export function updateLiedblatt() {
                     }
                 }
                 
-                copyrightElement.style.fontSize = '8pt';
-                copyrightElement.classList.add('copyright-info');
-                copyrightElement.style.marginTop = '0';
                 content.appendChild(copyrightElement);
             }
-            
+        
+        
+            const showNotes = selected.querySelector('input[type="checkbox"]').checked;
+            const noteType = selected.querySelector('input[name^="noteType"]:checked')?.value;
             if (showNotes && noteType) {
                 const imgSrc = noteType === 'with' ? getImagePath(objekt, 'notenbildMitText') : getImagePath(objekt, 'notenbild');
                 if (imgSrc) {
-                    content.innerHTML += `<img src="${imgSrc}" alt="Noten">`;
+                    const imgElement = document.createElement('img');
+                    imgElement.src = imgSrc;
+                    imgElement.alt = "Noten";
+                    imgElement.style.maxWidth = '100%';
+                    imgElement.style.marginBottom = '15px';
+                    content.appendChild(imgElement);
                 }
             }
             
+            const selectedStrophen = Array.from(selected.querySelectorAll('.strophen-container input:checked')).map(cb => parseInt(cb.value));
             let strophen = objekt.strophen;
             if (typeof strophen === 'string') {
                 try {
@@ -328,19 +343,16 @@ export function updateLiedblatt() {
                 selectedStrophen.forEach((index, arrayIndex) => {
                     const stropheDiv = document.createElement('div');
                     stropheDiv.classList.add('strophe');
+                    stropheDiv.style.marginBottom = `${globalConfig.fontSize * 0.5}px`;
                     
-                    // Ersetze <p> Tags durch <br> Tags und entferne die schließenden </p> Tags
                     let strophenText = strophen[index].replace(/<p>/g, '').replace(/<\/p>/g, '<br>');
-                    
-                    // Teile den Strophentext an den <br> Tags
                     let strophenTextArray = strophenText.split('<br>');
                     
-                    // Erstelle den ersten <p> Tag mit der Nummerierung und dem ersten Teil der Strophe
                     const pElementWithNumber = document.createElement('p');
+                    pElementWithNumber.classList.add('strophe');
                     pElementWithNumber.innerHTML = `<span class="strophenum">${index + 1}.</span> ${strophenTextArray[0]}`;
                     stropheDiv.appendChild(pElementWithNumber);
                     
-                    // Füge die restlichen Teile des Strophentexts in eigene <p> Tags ein
                     for (let i = 1; i < strophenTextArray.length; i++) {
                         if (strophenTextArray[i].trim() !== '') {
                             const pElement = document.createElement('p');
@@ -349,9 +361,8 @@ export function updateLiedblatt() {
                         }
                     }
                     
-                    // Füge das stropheDiv zum content hinzu
                     content.appendChild(stropheDiv);
-                    // Refrain nach der Strophe einfügen, wenn ausgewählt
+                    
                     const refrainSelect = selected.querySelector(`select[id="refrain-${objekt.id}-${index}"]`);
                     const refrainType = refrainSelect ? refrainSelect.value : 'none';
                     
@@ -360,16 +371,14 @@ export function updateLiedblatt() {
                         refrainDiv.classList.add('refrain');
                         
                         if (refrainType === 'full') {
-                            // Erstelle ein temporäres div-Element, um den HTML-Inhalt zu parsen
                             const tempDiv = document.createElement('div');
                             tempDiv.innerHTML = objekt.refrain;
                             
-                            // Erstelle das erste p-Element mit "Refrain:" und dem ersten Inhalt
                             const firstP = document.createElement('p');
                             firstP.style.fontStyle = 'italic';
+                            firstP.classList.add('refrain');
                             
                             if (tempDiv.childNodes.length > 0) {
-                                // Kombiniere "Refrain:" mit dem ersten Inhalt
                                 if (tempDiv.firstChild.nodeType === Node.TEXT_NODE) {
                                     firstP.textContent = "Refrain: " + tempDiv.firstChild.textContent.trim();
                                     tempDiv.removeChild(tempDiv.firstChild);
@@ -382,15 +391,14 @@ export function updateLiedblatt() {
                             }
                             refrainDiv.appendChild(firstP);
                             
-                            // Verarbeite die restlichen Elemente
                             Array.from(tempDiv.children).forEach(child => {
                                 const newP = document.createElement('p');
                                 newP.style.fontStyle = 'italic';
+                                newP.classList.add('refrain');
                                 newP.innerHTML = child.innerHTML;
                                 refrainDiv.appendChild(newP);
                             });
                             
-                            // Falls es noch restlichen Text gibt, füge diesen auch hinzu
                             if (tempDiv.childNodes.length > 0) {
                                 const textContent = tempDiv.childNodes[0].textContent.trim();
                                 if (textContent) {
@@ -401,7 +409,6 @@ export function updateLiedblatt() {
                                 }
                             }
                         } else {
-                            // Nur ein einzelnes "Refrain" für den Verweis
                             const shortRefrain = document.createElement('p');
                             shortRefrain.style.fontStyle = 'italic';
                             shortRefrain.textContent = 'Refrain';
@@ -415,25 +422,39 @@ export function updateLiedblatt() {
             else {
                 content.innerHTML += '';
             }
+            
         } else if (objekt.typ === 'Titel' || objekt.typ === 'Freitext') {
             if (quillInstances[objekt.id]) {
-                const editorContent = document.createElement('div');
-                let editorHTML = quillInstances[objekt.id].root.innerHTML;
-                editorHTML = formatQuillHTML(editorHTML); // Formatierung anwenden
-                editorContent.innerHTML = editorHTML;
-                content.appendChild(editorContent);
+                const editorContent = quillInstances[objekt.id].root.innerHTML;
+                // Überprüfen, ob der Editor tatsächlich Inhalt hat
+                if (editorContent.trim() !== '' && editorContent !== '<p><br></p>') {
+                    const editorDiv = document.createElement('div');
+                    let formattedHTML = editorContent.replace(/<h1>/g, '<h1 class="isQuillHeading">')
+                    .replace(/<h2>/g, '<h2 class="isQuillHeading">')
+                    .replace(/<h3>/g, '<h3 class="isQuillHeading">')
+                    .replace(/<p>/g, '<p class="isQuill">');
+                    formattedHTML = formatQuillHTML(formattedHTML);
+                    editorDiv.innerHTML = formattedHTML;
+                    content.appendChild(editorDiv);
+                }
             }
         } else {
-            //Layout für Psalm
             let objektContent = objekt.inhalt;
             if (objektContent) {
                 if (globalConfig.textAlign === 'center') {
-                    objektContent = objektContent.replace(/<p class="ql-indent-1">/g, '<p style="font-weight: bold;">')
-                    .replace(/<p class="ql-indent-2">/g, '<p style="padding-left: 4em;">')
-                    .replace(/<p class="ql-indent-3">/g, '<p style="padding-left: 6em;">');
+                    objektContent = objektContent.replace(/<h1>/g, '<h1 class="isQuillHeading">')
+                    .replace(/<h2>/g, '<h2 class="isQuillHeading">')
+                    .replace(/<h3>/g, '<h3 class="isQuillHeading">')
+                    .replace(/<p class="ql-indent-1">/g, '<p class="isQuillHeading" style="font-weight: bold;">')
+                    .replace(/<p class="ql-indent-2">/g, '<p class="isQuillHeading" style="padding-left: 4em;">')
+                    .replace(/<p class="ql-indent-3">/g, '<p class="isQuillHeading" style="padding-left: 6em;">');
                     content.innerHTML += objektContent;
                 } else if (globalConfig.textAlign === 'left'){
-                    objektContent = objektContent.replace(/<p class="ql-indent-1">/g, '<p style="padding-left: 2em;">')
+                    objektContent = objektContent.replace(/<h1>/g, '<h1 class="isQuillHeading">')
+                    .replace(/<h2>/g, '<h2 class="isQuillHeading">')
+                    .replace(/<h3>/g, '<h3 class="isQuillHeading">')
+                    .replace(/<p>/g, '<p class="isQuillHeading">')
+                    .replace(/<p class="ql-indent-1">/g, '<p style="padding-left: 2em;">')
                     .replace(/<p class="ql-indent-2">/g, '<p style="padding-left: 4em;">')
                     .replace(/<p class="ql-indent-3">/g, '<p style="padding-left: 6em;">');
                     content.innerHTML += objektContent;
@@ -445,7 +466,7 @@ export function updateLiedblatt() {
     });
     saveSessionToLocalStorage();
 }
-
+    
 export function formatQuillHTML(htmlContent) {
     // Ersetze <strong> durch <span style="font-weight: bold;">
     htmlContent = htmlContent.replace(/<strong>/g, '<p style="font-weight: bold;">')
@@ -759,7 +780,7 @@ export function addToSelected(objekt) {
             }
             
             copyrightDiv.style.fontSize = '10px';
-            copyrightDiv.style.color = '#666';
+            copyrightDiv.style.color = 'var(--text-color)';
             newItem.appendChild(copyrightDiv);
         }
         if (objekt.noteType) {
