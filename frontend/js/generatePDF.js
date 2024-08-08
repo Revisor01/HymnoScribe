@@ -1,11 +1,41 @@
-
 // generatePDF.js
 
 import { globalConfig } from './script.js';
+const { PDFDocument, rgb } = PDFLib;
 
 window.generatePDF = generatePDF;
 
+// Konstanten für skalierbare Faktoren
+const BASE_FONT_SIZE = 14; // Grundschriftgröße in Punkten
+const HEADING_1_SCALE = 1.6; // Skalierungsfaktor für Überschrift 1
+const HEADING_2_SCALE = 1.4; // Skalierungsfaktor für Überschrift 2
+const HEADING_3_SCALE = 1.2; // Skalierungsfaktor für Überschrift 3
+const COPYRIGHT_FONT_SIZE = 12; // Schriftgröße für Copyright-Informationen
+const ICON_SIZE = 20; // Größe der Icons in Pixeln
+const ICON_MARGIN = 25; // Abstand nach Icons in Punkten
+const DEFAULT_OBJECT_SPACING = 15; // Neuer fixer Abstand nach jedem Objekt in Punkten
+const IMAGE_MARGIN_TOP = -10; // Abstand vor Bildern in Punkten
+const IMAGE_MARGIN_BOTTOM = 15; // Abstand nach Bildern in Punkten
+const STROPHE_SPACING = 8; // Abstand nach Strophen in Punkten
+
+// Neue Konstanten für Quill-Überschriften
+const QUILL_H1_MARGIN_TOP = 0;
+const QUILL_H1_MARGIN_BOTTOM = 12;
+const QUILL_H2_MARGIN_TOP = 5;
+const QUILL_H2_MARGIN_BOTTOM = 10;
+const QUILL_H3_MARGIN_TOP = 5;
+const QUILL_H3_MARGIN_BOTTOM = 5;
+const COPYRIGHT_MARGIN_TOP = -5;
+const COPYRIGHT_MARGIN_BOTTOM = -5;
+
+// Funktion zum Skalieren der Werte basierend auf der globalen Schriftgröße
+function scaleValue(value, globalFontSize) {
+    return (value / BASE_FONT_SIZE) * globalFontSize;
+}
+
 const mmToPt = (mm) => mm * 2.83465;
+const PX_TO_PT_RATIO = 0.75;
+const pxToPt = (px) => px * PX_TO_PT_RATIO;
 
 const pageSizes = {
     'a5': { width: mmToPt(148), height: mmToPt(210) },
@@ -14,19 +44,13 @@ const pageSizes = {
     'a3-schmal': { width: mmToPt(148), height: mmToPt(420) }
 };
 
-const PX_TO_PT_RATIO = 0.75;
-const pxToPt = (px) => px * PX_TO_PT_RATIO;
-
-const baseFontSize = 12; // Basis-Schriftgröße, von der wir ausgehen
-const scaleFactor = globalConfig.fontSize / baseFontSize;
-
+// Anpassen der headingStyles
 const headingStyles = {
-    title: { fontSize: globalConfig.fontSize * 2, bold: true, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 3 },
-    subtitle: { fontSize: globalConfig.fontSize * 1.7, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 10},
-    heading: { fontSize: globalConfig.fontSize * 1.5, bold: true, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 10 },
-    bodyText: { fontSize: globalConfig.fontSize, lineHeight: 1.2, spacingBefore: 10, spacingAfter: 10 }
+    title: { fontSize: BASE_FONT_SIZE * HEADING_1_SCALE, bold: true, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 3 },
+    subtitle: { fontSize: BASE_FONT_SIZE * HEADING_2_SCALE, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 10},
+    heading: { fontSize: BASE_FONT_SIZE * HEADING_3_SCALE, bold: true, lineHeight: 1.1, spacingBefore: 10, spacingAfter: 10 },
+    bodyText: { fontSize: BASE_FONT_SIZE, lineHeight: 1.2, spacingBefore: 10, spacingAfter: 10 }
 };
-
 
 async function generatePDF(format) {
     const progressContainer = document.getElementById('pdf-progress-container');
@@ -71,24 +95,21 @@ async function generatePDF(format) {
         lineHeight: parseFloat(config.lineHeight || 1.5),
         textAlign: config.textAlign || 'left',
         format: config.format || 'a5',
-        refrainSpaceBefore: 0.4, // Abstand vor dem Refrain als Faktor der Schriftgröße
-        refrainSpaceAfter: 0.4,  // Abstand nach dem Refrain als Faktor der Schriftgröße
-        
         churchLogo: config.churchLogo
     };
+    
+    const scaledFontSize = globalConfig.fontSize;
+    const scaledIconSize = scaleValue(ICON_SIZE, scaledFontSize);
+    const scaledIconMargin = scaleValue(ICON_MARGIN, scaledFontSize);
+    const scaledDefaultObjectSpacing = scaleValue(DEFAULT_OBJECT_SPACING, scaledFontSize);
+    const scaledStropheSpacing = scaleValue(STROPHE_SPACING, scaledFontSize);
+    
     console.log("Global config for PDF generation:", globalConfig);
     
     console.log("Loading selected font...");
     showProgress(10, "Lade ausgewählte Schriftart");
     const fonts = await fetchAndEmbedFont(doc, config.fontFamily);
     console.log("Font loaded:", config.fontFamily);
-    
-    const pageSizes = {
-        'a5': { width: mmToPt(148), height: mmToPt(210) },
-        'dl': { width: mmToPt(99), height: mmToPt(210) },
-        'a4-schmal': { width: mmToPt(105), height: mmToPt(297) },
-        'a3-schmal': { width: mmToPt(148), height: mmToPt(420) }
-    };
     
     const { width, height } = pageSizes[format];
     const margin = { top: 30, right: 20, bottom: 20, left: 20 };
@@ -146,21 +167,20 @@ async function generatePDF(format) {
     
     function addLogoToPage(page) {
         if (logoImage) {
-            const pageWidth = page.getWidth();
-            const pageHeight = page.getHeight();
+            const { width, height } = page.getSize();
             const logoHeight = 30; // Fixed height of 30px
             const aspectRatio = logoImage.width / logoImage.height;
             const logoWidth = logoHeight * aspectRatio;
             
             page.drawImage(logoImage, {
-                x: pageWidth - logoWidth - 20, // 20px from right edge
-                y: pageHeight - logoHeight - 20, // 20px from top edge
+                x: width - logoWidth - 20,
+                y: height - logoHeight - 20,
                 width: logoWidth,
                 height: logoHeight,
                 opacity: 0.3
             });
         }
-    }
+    }   
     
     // Add logo to the first page
     addLogoToPage(page);
@@ -174,7 +194,11 @@ async function generatePDF(format) {
     }
     
     async function drawText(text, x, y, fontSize, maxWidth, options = {}) {
-        const { bold, italic, underline, alignment, indent, isCopyright, isRefrain } = options;
+        const { 
+            bold, italic, underline, alignment, indent, isCopyright, isRefrain, isStrophe, 
+            isLastElement, isHeading, isQuillHeading, afterIcon, isFirstOnPage 
+        } = options;
+        
         let font;
         if (bold && italic) {
             font = fonts.boldItalic;
@@ -187,17 +211,20 @@ async function generatePDF(format) {
         }
         if (!font) {
             console.error(`Required font style not found for ${globalConfig.fontFamily}`);
-            font = fonts.regular || Object.values(fonts)[0];  // Fallback zur ersten verfügbaren Schrift
+            font = fonts.regular || Object.values(fonts)[0];
         }
         
-        console.log("Drawing text:", { text: text.substring(0, 20) + "...", x, y, fontSize, bold, italic, underline, alignment, indent, isCopyright });
+        console.log("Drawing text:", { text: text.substring(0, 20) + "...", x, y, fontSize, bold, italic, underline, alignment, indent, isCopyright, isRefrain, isStrophe, isHeading, isQuillHeading });
         
-        if (options.isCopyright) {
-            fontSize = 8; // Feste Größe von 8pt für Copyright
-        }
-        // Hier können Sie die Schriftgröße für fette Schrift anpassen
-        const actualFontSize = bold ? fontSize * 0.9 : fontSize;
+        const actualFontSize = bold ? fontSize * 1 : fontSize;
         
+        const lineHeight = (isRefrain || isStrophe) 
+        ? globalConfig.lineHeight * 1
+        : globalConfig.lineHeight;
+        
+        console.log("Element-Typ:", { isStrophe, isRefrain });
+        console.log("Verwendete lineHeight:", lineHeight);  
+                
         const lines = await splitTextToLines(text, font, fontSize, maxWidth - indent);
         let currentY = y;
         
@@ -214,7 +241,7 @@ async function generatePDF(format) {
                 xPos = x + maxWidth - await font.widthOfTextAtSize(line, fontSize);
             } else if (alignment === 'justify' && line !== lines[lines.length - 1]) {
                 await drawJustifiedText(line, x + indent, currentY, fontSize, maxWidth - indent, { bold, italic, underline });
-                currentY -= fontSize * globalConfig.lineHeight;
+                currentY -= fontSize * lineHeight;
                 continue;
             }
             
@@ -223,7 +250,7 @@ async function generatePDF(format) {
                 y: currentY,
                 size: fontSize,
                 font: font,
-                lineHeight: globalConfig.lineHeight,
+                lineHeight: lineHeight,
                 maxWidth: maxWidth - indent
             });
             
@@ -236,7 +263,23 @@ async function generatePDF(format) {
                 });
             }
             
-            currentY -= fontSize * globalConfig.lineHeight;
+            currentY -= fontSize * lineHeight;
+        }
+        
+        // Anwenden des Abstands nach der Überschrift
+        if (isHeading) {
+            console.log("Current spacing after heading:", currentSpacing.after);
+            currentY -= currentSpacing.after;
+        }
+        
+        // Füge Abstand für Strophen und Refrains hinzu
+        if (isStrophe || isRefrain) {
+            currentY -= STROPHE_SPACING;
+        }
+        if (isLastElement) {
+            currentY -= 0;
+        } else {
+            y -= fontSize * 0; // Standardabstand zwischen Absätzen
         }
         
         return y - currentY;
@@ -294,6 +337,15 @@ async function generatePDF(format) {
             
             const scaledDims = img.scale(imgWidth / img.width);
             
+            // Überprüfe, ob das Bild auf die aktuelle Seite passt
+            if (y - scaledDims.height < margin.bottom) {
+                // Wenn nicht, füge eine neue Seite hinzu
+                ({ page, y } = addPage());
+            }
+            
+            // Berücksichtigen Sie den oberen Abstand
+            y -= scaleValue(IMAGE_MARGIN_TOP, scaledFontSize);
+            
             page.drawImage(img, {
                 x,
                 y: y - scaledDims.height,
@@ -301,10 +353,13 @@ async function generatePDF(format) {
                 height: scaledDims.height
             });
             
-            return scaledDims.height;
+            // Aktualisiere die Y-Position für den nächsten Inhalt
+            y = y - scaledDims.height - scaleValue(IMAGE_MARGIN_BOTTOM, scaledFontSize);
+            
+            return scaledDims.height + scaleValue(IMAGE_MARGIN_TOP, scaledFontSize) + scaleValue(IMAGE_MARGIN_BOTTOM, scaledFontSize);
         } catch (error) {
             console.error("Error embedding image:", error);
-            return 0;
+            return scaleValue(IMAGE_MARGIN_TOP, scaledFontSize) + scaleValue(IMAGE_MARGIN_BOTTOM, scaledFontSize);
         }
     }
     
@@ -392,18 +447,9 @@ async function generatePDF(format) {
     
     let lastItemType = null;
     
-    async function ensureSpace(requiredHeight) {
-        if (y - requiredHeight < margin.bottom) {
-            ({ page, y } = addPage());
-            return true;
-        }
-        return false;
-    }
-    
     showProgress(40, "Verarbeite Inhalte");
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        //const fonts = await fetchAndEmbedFont(doc, config.fontFamily);
         console.log("Processing item:", item.tagName, item.className);
         
         if (item.classList.contains('page-break')) {
@@ -411,8 +457,11 @@ async function generatePDF(format) {
             ({ page, y } = addPage());
             continue;
         }
+        
+        const isFirstOnPage = y === height - margin.top;
+        const afterIcon = items[i - 1] && items[i - 1].querySelector('.fas, .trenner-default-img');
+        
         if (item.querySelector('.fas, .trenner-default-img')) {
-            // Icon-Logik (bleibt unverändert)
             let iconType = 'default';
             const iconElement = item.querySelector('.fas, .trenner-default-img');
             if (iconElement.classList.contains('fa-heart')) iconType = 'herz';
@@ -420,41 +469,65 @@ async function generatePDF(format) {
             if (iconElement.classList.contains('fa-cross')) iconType = 'cross';
             if (iconElement.classList.contains('fa-dove')) iconType = 'dove';
             
-            const iconHeight = await drawIcon(iconType, margin.left, y, 24);
-            y -= iconHeight + 20; // Abstand nach Icons
-            lastItemType = 'icon'; // Setze den Typ des letzten Elements auf 'icon'
+            const iconHeight = await drawIcon(iconType, margin.left, y, scaledIconSize);
+            y -= iconHeight + scaledIconMargin;
         } else {
-            // Andere Elemente (Text, Überschriften, etc.)
             const elements = item.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
-            let lastElementWasStrophe = false;
-            let strophenCounter = 0;
-            let lastElementType = null;
             
-            for (const element of elements) {
-                // Überspringe alleinstehende Strophennummern
+            for (let j = 0; j < elements.length; j++) {
+                const element = elements[j];
+                
                 if (element.tagName === 'STRONG' && /^\d+\.$/.test(element.textContent.trim())) {
                     continue;
                 }
                 
                 if (element.tagName === 'IMG') {
-                    // Wenn das vorherige Element eine Überschrift oder Copyright war, verringern wir den Abstand
-                    if (lastElementType === 'heading' || lastElementType === 'copyright') {
-                        y += globalConfig.fontSize * 0.3; // Verringere den vorherigen Abstand
-                    }
                     const imgHeight = await drawImage(element.src, margin.left, y, contentWidth);
-                    y -= imgHeight + 15; // Zusätzlicher Abstand nach Bildern
-                    lastElementWasStrophe = false;
-                    lastElementType = 'image';
+                    y -= imgHeight;
                 } else {
-                    let fontSize = globalConfig.fontSize;
+                    let fontSize = scaledFontSize;
+                    let marginTop = 0;
+                    let marginBottom = 0;
                     let isHeading = false;
-                    let isCopyright = element.classList.contains('copyright-info');
-                    let isRefrain = element.classList.contains('refrain');
+                    let isQuillHeading = false;
+                    const isCopyright = element.classList.contains('copyright-info');
+                    const isRefrain = element.classList.contains('refrain');
                     
-                    if (element.tagName === 'H1') { fontSize = globalConfig.fontSize * 1.6; isHeading = true; }
-                    if (element.tagName === 'H2') { fontSize = globalConfig.fontSize * 1.4; isHeading = true; }
-                    if (element.tagName === 'H3') { fontSize = globalConfig.fontSize * 1.2; isHeading = true; }
-                    if (isCopyright) { fontSize = 8; }
+                    if (element.tagName === 'H1') {
+                        fontSize = scaledFontSize * HEADING_1_SCALE;
+                        if (element.classList.contains('isQuillHeading')) {
+                            marginTop = scaleValue(QUILL_H1_MARGIN_TOP, scaledFontSize);
+                            marginBottom = scaleValue(QUILL_H1_MARGIN_BOTTOM, scaledFontSize);
+                        }
+                    } else if (element.tagName === 'H2') {
+                        fontSize = scaledFontSize * HEADING_2_SCALE;
+                        if (element.classList.contains('isQuillHeading')) {
+                            marginTop = scaleValue(QUILL_H2_MARGIN_TOP, scaledFontSize);
+                            marginBottom = scaleValue(QUILL_H2_MARGIN_BOTTOM, scaledFontSize);
+                        }
+                    } else if (element.tagName === 'H3') {
+                        fontSize = scaledFontSize * HEADING_3_SCALE;
+                        if (element.classList.contains('isQuillHeading')) {
+                            marginTop = scaleValue(QUILL_H3_MARGIN_TOP, scaledFontSize);
+                            marginBottom = scaleValue(QUILL_H3_MARGIN_BOTTOM, scaledFontSize);
+                        }
+                    }
+                    
+                    if (isCopyright) { 
+                        fontSize = scaleValue(COPYRIGHT_FONT_SIZE, scaledFontSize);
+                        marginTop = scaleValue(COPYRIGHT_MARGIN_TOP, scaledFontSize);
+                        marginBottom = scaleValue(COPYRIGHT_MARGIN_BOTTOM, scaledFontSize);
+                    }
+                    const nextElement = elements[j + 1];
+                    const isNextCopyright = nextElement && nextElement.classList.contains('copyright-info');
+                    
+                    if (isHeading && isNextCopyright) {
+                        marginBottom = 1;
+                    }
+                    
+                    if (j !== 0 || !isFirstOnPage) {
+                        y -= marginTop;
+                    }
                     
                     let options = {
                         bold: element.tagName === 'STRONG' || window.getComputedStyle(element).fontWeight === 'bold' || parseInt(window.getComputedStyle(element).fontWeight) >= 700,
@@ -463,46 +536,41 @@ async function generatePDF(format) {
                         alignment: window.getComputedStyle(element).textAlign || globalConfig.textAlign,
                         indent: parseFloat(window.getComputedStyle(element).paddingLeft) || 0,
                         isCopyright: isCopyright,
-                        isRefrain: isRefrain
+                        isRefrain: isRefrain,
+                        isStrophe: element.classList.contains('strophe'),
+                        isLastElement: j === elements.length - 1,
+                        isHeading: isHeading,
+                        isQuillHeading: isQuillHeading,
+                        afterIcon: afterIcon,
+                        isFirstOnPage: isFirstOnPage
                     };
                     
-                    let textContent = element.innerText;
+                    console.log('isQuillHeading:', options.isQuillHeading, 'Item:', item);
                     
-                    // Wenn das vorherige Element eine Überschrift oder Copyright war, verringern wir den Abstand
-                    if (lastElementType === 'heading' && isCopyright) {
-                        y += globalConfig.fontSize * 0.8; // Verringere den vorherigen Abstand stark
-                    } else if ((lastElementType === 'heading' || lastElementType === 'copyright') && !isHeading && !isCopyright) {
-                        y += globalConfig.fontSize * 0.1; // Verringere den vorherigen Abstand leicht für andere Elemente
-                    }
-                    if (isHeading) {
-                        y -= fontSize * 0.1; // Verringerter Abstand vor Überschriften
-                    }
+                    let textContent = element.innerText;
                     const textHeight = await drawText(textContent, margin.left, y, fontSize, contentWidth, options);
                     y -= textHeight;
-                    
-                    if (isHeading) {
-                        y -= fontSize * 0.5; // Sehr geringer Abstand nach Überschriften
-                        lastElementType = 'heading';
-                    } else if (isCopyright) {
-                        y -= fontSize * 0.3; // Geringer Abstand nach Copyright
-                        lastElementType = 'copyright';
-                    } else if (lastElementWasStrophe) {
-                        y -= fontSize * 0.5; // Etwas größerer Abstand nach Strophen
-                        lastElementType = 'strophe';
-                    } else {
-                        y -= fontSize * 0.4; // Standardabstand zwischen Absätzen
-                        lastElementType = 'normal';
-                    }
+                    y += marginBottom;
                 }
                 
-                // Überprüfe, ob genug Platz für das nächste Element vorhanden ist
                 if (y < margin.bottom) {
                     ({ page, y } = addPage());
                 }
             }
         }
+        
+        // Füge den fixen Abstand nach jedem Objekt hinzu
+        y -= scaledDefaultObjectSpacing;
+
+        // Überprüfe, ob genug Platz für das nächste Element vorhanden ist
+        if (y < margin.bottom) {
+            ({ page, y } = addPage());
+        }
+        
         showProgress(40 + (i / items.length) * 50, "Generiere PDF-Inhalt");
     }
+    
+    ensureEvenPageCount(doc);
     
     console.log("PDF generation complete. Saving...");
     showProgress(90, "Finalisiere PDF");
@@ -522,9 +590,6 @@ async function generatePDF(format) {
             const tempDoc = await PDFDocument.load(pdfBytes);
             let pageCount = tempDoc.getPageCount();
             console.log(`Original page count: ${pageCount}`);
-            
-            // Entfernen Sie das Hinzufügen von leeren Seiten hier
-            // Stattdessen lassen Sie die createBrochure Funktion die Seitenanzahl handhaben
             
             console.log(`Final page count: ${pageCount}`);
             pdfBytes = await tempDoc.save();
@@ -547,12 +612,22 @@ async function generatePDF(format) {
     }
 }
 
+function ensureEvenPageCount(doc) {
+    const pageCount = doc.getPageCount();
+    if (pageCount % 2 !== 0) {
+        console.log("Ungerade Seitenzahl erkannt. Füge leere Seite hinzu.");
+        const { width, height } = doc.getPage(0).getSize();
+        const newPage = doc.addPage([width, height]);
+        addMinimalContent(newPage);
+    }
+}
+
 function addMinimalContent(page) {
-    // Füge minimalen Inhalt hinzu (ein kleiner, fast unsichtbarer Punkt)
     page.drawCircle({
         x: 1,
         y: 1,
-        size: 1
+        size: 0.1,
+        color: PDFLib.rgb(0.95, 0.95, 0.95)
     });
 }
 function findPageBreak(element) {
@@ -890,6 +965,7 @@ async function drawPageOnSheetForA5AndA4Schmal(inputPdf, outputPdf, newPage, pag
             width: scaledWidth,
             height: scaledHeight
         });
+        
         console.log(`Seite ${pageIndex + 1} erfolgreich zum Blatt hinzugefügt`);
     } catch (error) {
         console.error(`Fehler beim Einbetten oder Zeichnen der Seite ${pageIndex + 1}:`, error);

@@ -33,7 +33,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(cors({
-    origin: process.env.URL ? process.env.URL.split(',') : '*',
+    origin: process.env.URL ? process.env.URL.split(',') : ['*', 'https://hymnoscribe.de'],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -154,10 +154,6 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 app.use(express.static(path.join(__dirname, '../frontend')));
 
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/index.html'));
-});
-
 app.get('/admin.html', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/admin.html'));
 });
@@ -165,6 +161,63 @@ app.get('/admin.html', (req, res) => {
 app.get('/reset-password.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', '../frontend/admin.html'));
 });
+
+apiRouter.post('/contact', async (req, res) => {
+    const { name, email, subject, message, inquiryType, institution, purpose } = req.body;
+    
+    try {
+        let emailContent = `
+            <strong>Name:</strong> ${name}<br>
+            <strong>E-Mail:</strong> ${email}<br>
+            <strong>Anfragetyp:</strong> ${inquiryType}<br>
+            <strong>Betreff:</strong> ${subject}<br>
+            <strong>Nachricht:</strong> ${message}<br>
+        `;
+        
+        if (inquiryType === 'usage-request') {
+            emailContent += `
+            <strong>Institution/Organisation:</strong> ${institution}<br>
+            <strong>Einsatzzweck:</strong> ${purpose}<br>
+            `;
+        }
+        
+        await sendContactEmail(email, subject, emailContent);
+        
+        res.status(200).json({ message: 'Nachricht erfolgreich gesendet' });
+    } catch (error) {
+        console.error('Fehler beim Senden der Kontaktnachricht:', error);
+        res.status(500).json({ error: 'Interner Serverfehler beim Senden der Nachricht' });
+    }
+});
+
+async function sendContactEmail(senderEmail, subject, content) {
+    const transporter = createTransporter();
+    const template = getContactEmailTemplate(); // Neue Funktion zum Laden des Kontakt-Templates
+    
+    const renderedTemplate = renderEmailTemplate(template, {
+        Hauptinhalt: content,
+        ButtonText: 'Antworten',
+        ButtonUrl: `mailto:${senderEmail}`
+    });
+    
+    try {
+        await transporter.sendMail({
+            from: process.env.EMAIL_FROM,
+            to: process.env.CONTACT_EMAIL || process.env.EMAIL_FROM,
+            subject: `Neue Kontaktanfrage: ${subject}`,
+            html: renderedTemplate,
+            replyTo: senderEmail
+        });
+        console.log('Contact email sent successfully');
+    } catch (error) {
+        console.error('Error sending contact email:', error);
+        throw error;
+    }
+}
+
+function getContactEmailTemplate() {
+    return fs.readFileSync(path.join(__dirname, 'contact-email-template.html'), 'utf8');
+}
 
 // Anforderung zum Zurücksetzen des Passworts
 apiRouter.post('/request-password-reset', async (req, res) => {
@@ -1216,6 +1269,7 @@ function renderEmailTemplate(template, data) {
         const regex = new RegExp(`\\[${key}\\]`, 'g');
         renderedTemplate = renderedTemplate.replace(regex, data[key]);
     }
+    
     return renderedTemplate.replace('[LOGO_URL]', process.env.LOGO_URL);
 }
 

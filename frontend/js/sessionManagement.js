@@ -74,6 +74,20 @@ export async function loadSession(id) {
     }
 }
 
+export function loadConfigFromLocalStorage() {
+    const savedConfig = localStorage.getItem('liedblattConfig');
+    if (savedConfig) {
+        try {
+            const parsedConfig = JSON.parse(savedConfig);
+            Object.assign(globalConfig, parsedConfig);
+            console.log("Loaded config from localStorage:", globalConfig);
+        } catch (error) {
+            console.error("Error parsing saved config:", error);
+        }
+    } else {
+        console.log("No saved config found in localStorage");
+    }
+}
 
 export async function deleteSession(id) {
     const confirmed = await customConfirm('Sind Sie sicher, dass Sie diese Session löschen möchten?');

@@ -1,10 +1,134 @@
+:root {
+    --primary-color: #1a5f7a;
+    --secondary-color: #154c61;
+    --danger-color: #dc3545;
+    --danger-hover-color: #c82333;
+    --background-color: #f0f8ff;
+    --background-color-second: #ffffff;
+    --text-color: #333333;
+    --border-color: #b0c4de;
+}
+
+
+/* Styling für das */
+
+:root {
+    --base-font-size: 12px;
+    --base-line-height: 1.5;
+    --text-align: left;
+}
+
+#liedblatt-content {
+    font-family: var(--font-family, 'Jost');
+    font-size: var(--font-size, 12px);
+    line-height: var(--line-height, 1.5);
+    text-align: var(--text-align, left);
+    padding: 20px;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+#liedblatt-content h3 {
+    font-size: 1.2em;
+    margin-bottom: 0.5em;
+}
+
+#liedblatt-content .copyright-info {
+    font-size: 8px;
+    margin-bottom: 1em;
+}
+
+#liedblatt-content .strophe {
+    margin-bottom: 0.5em;
+}
+
+#liedblatt-content p {
+    margin: 0;
+    padding: 0;
+}
+
+/* Diese Regel simuliert Zeilenumbrüche anstelle von Absätzen */
+#liedblatt-content p + p {
+    margin-top: 0;
+    text-indent: 0;
+}
+
+#liedblatt-content img {
+    max-width: 100%;
+    height: auto;
+    margin-bottom: 15px;
+}
+
+#liedblatt-content .trenner-icon {
+    font-size: 24px;
+    margin: 15px 0;
+    text-align: center;
+}
+
+#liedblatt-content .strophe {
+    margin-bottom: 10px;
+}
+
+#liedblatt-content .refrain {
+    font-style: italic;
+    margin-bottom: 10px;
+}
+
+#liedblatt-content .page-break {
+    border-top: 2px dashed #888;
+    margin: 20px 0;
+}
+
+/* Styling für den Theme-Switcher */
+#theme-switcher {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-color: var(--background-color-second);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    cursor: pointer;
+    font-family: 'Jost', sans-serif;
+    font-size: 14px;
+    padding: 8px 12px;
+    width: auto;
+    min-width: 200px;
+    max-width: 100%;
+}
+
+#theme-switcher:hover {
+    border-color: var(--primary-color);
+}
+
+#theme-switcher:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--primary-color);
+}
+
+/* Pfeil-Icon für den Dropdown */
+#theme-switcher {
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23007CB2%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px top 50%;
+    background-size: 12px auto;
+    padding-right: 30px;
+}
+
+/* Positionierung des Theme-Switchers */
+.theme-switcher-container {
+    display: flex;
+    justify-content: flex-end;
+    margin: 10px;
+}
+
 /* Grundlegende Stile */
 body {
     font-family: 'Jost', sans-serif;
     line-height: 1.5;
     margin: 0;
     padding: 0;
-    background-color: #f4f4f4;
+    background-color: var(--background-color);
+    color: var(--text-color);
 }
 
 
@@ -35,7 +159,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background-color: #ffffff;
+    background-color: var(--background-color-second);
     border-bottom: 1px solid #e0e0e0;
     padding: 10px 20px;
     width: 100%;
@@ -46,7 +170,7 @@ body {
 
 /* Header Styles */
 .main-header {
-    background-color: #ffffff;
+    background-color: var(--background-color-second);
     border-bottom: 1px solid #e0e0e0;
     padding: 10px 20px;
     margin-bottom: 20px;
@@ -58,7 +182,7 @@ body {
 
 .main-header h1 {
     margin: 0;
-    color: #333;
+    color: var(--text-color);
     font-size: 24px;
     font-weight: bold;
 }
@@ -79,7 +203,6 @@ margin-left: auto;
 }
 
 .user-info {
-    display:none;
     font-size: 14px;
     color: #666;
     margin-right: auto;
@@ -87,7 +210,7 @@ margin-left: auto;
 }
 
 .user-info strong {
-    color: #1a5f7a;
+    color: var(--primary-color);
 }
 
 .header-buttons {
@@ -142,7 +265,7 @@ margin-left: auto;
 /* Panel Styles */
 .left-panel, .middle-panel, .right-panel {
     flex: 1;
-    background-color: #ffffff;
+    background-color: var(--background-color-second);
     padding: 15px;
     border-radius: 4px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
@@ -170,7 +293,7 @@ img {
 }
 /* Buttons and Form Elements */
 .btn, button {
-    background-color: #1a5f7a;
+    background-color: var(--primary-color);
     color: white;
     padding: 8px 12px;
     border: none;
@@ -185,7 +308,7 @@ img {
 }
 
 .btn:hover, button:hover {
-    background-color: #154c61;
+    background-color: var(--secondary-color);
 }
 
 .btn-small {
@@ -197,21 +320,20 @@ img {
 }
 
 .delete-strophe {
-    background-color: #dc3545;
+    background-color: var(--danger-color);
 }
 
 .btn-danger {
-    background-color: #dc3545;
+    background-color: var(--danger-color);
 }
 
 .btn-danger:hover {
-    background-color: #c82333;
+    background-color: var(--danger-hover-color);
 }
 
 select, input[type="text"], input[type="password"], textarea {
     width: 97%;
     padding: 8px;
-    margin-bottom: 10px;
     border: 1px solid #ddd;
     border-radius: 4px;
     font-family: 'Jost', sans-serif;
@@ -264,7 +386,7 @@ select, input[type="text"], input[type="password"], textarea {
 
 /* Item Styles */
 .item, .selected-item, .objekt-item {
-    background-color: #f9f9f9;
+    background-color: var(--background-color-second);
     border: 1px solid #ddd;
     padding: 10px;
     margin-bottom: 10px;
@@ -301,7 +423,7 @@ margin-top: 20px;
 }
 /* Editor Styles */
 #editor-container, .strophe-editor {
-    background-color: #fff;
+    background-color: var(--background-color-second);
     border: 1px solid #ddd;
     margin-bottom: 10px;
     min-height: 100px;
@@ -309,7 +431,7 @@ margin-top: 20px;
 
 .ql-editor {
     min-height: 100px;
-    background-color: white;
+    background-color: var(--background-color-second);
 }
 
 .strophe-header {
@@ -325,7 +447,7 @@ margin-top: 20px;
 
 .small-info {
     font-size: 0.8em;
-    color: #666;
+    color: var(--text-color);
     margin-top: -10px;
     margin-bottom: 10px;
 }
@@ -348,7 +470,7 @@ margin-top: 20px;
 }
 
 .modal-content {
-    background-color: #fefefe;
+    background-color: var(--background-color-second);
     margin: 15% auto;
     padding: 20px;
     border: 1px solid #888;
@@ -359,7 +481,7 @@ margin-top: 20px;
 }
 
 .close {
-    color: #aaa;
+    color: var(--text-color);
     float: right;
     font-size: 28px;
     font-weight: bold;
@@ -368,7 +490,7 @@ margin-top: 20px;
 
 .close:hover,
 .close:focus {
-    color: black;
+    color: var(--danger-color);
     text-decoration: none;
 }
 
@@ -382,7 +504,7 @@ margin-top: 20px;
 }
 
 .section {
-    background-color: #ffffff;
+    background-color: var(--background-color-second);
     padding: 20px;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -399,7 +521,7 @@ height: auto !important;
 }
 .admin-container .section {
     padding: 20px;
-    background-color: #ffffff;
+    background-color: var(--background-color-second);
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     margin-bottom: 20px;
@@ -410,7 +532,7 @@ height: auto !important;
 }
 
 .institution-name:hover {
-    color: #1a5f7a;
+    color: var(--primary-color);
 }
 
 .institution-item, .user-item {
@@ -420,8 +542,8 @@ height: auto !important;
     padding: 10px;
     margin-bottom: 10px;
     gap: 5px;
-    background-color: #f9f9f9;
-    border: 1px solid #e0e0e0;
+    background-color: var(--background-color-second);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
 }
 
@@ -458,7 +580,7 @@ height: auto !important;
 }
 
 .login-form {
-    background-color: #ffffff;
+    background-color: var(--background-color);
     padding: 30px;
     border-radius: 4px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
@@ -467,21 +589,21 @@ height: auto !important;
 
 .super-login-btn {
     margin-top: 20px;
-    background-color: #f0ad4e;
+    background-color: var(--primary-color);
 }
 
 .super-login-btn:hover {
-    background-color: #ec971f;
+    background-color: var(--secondary-color);
 }
 
 /* Footer Styles */
 footer {
     margin-top: 20px;
     padding: 10px;
-    background-color: #f9f9f9;
-    border-top: 1px solid #ccc;
+    background-color: var(--background-color-second);
+    border-top: 1px solid var(--border-color);
+    color: var(--text-color);
     text-align: center;
-    color: #666;
 }
 
 /* Responsive Styles */
@@ -538,7 +660,7 @@ footer {
     width: 30% !important;
 }
 #users-list li, #institutions-list li {
-    background-color: #f9f9f9;
+    background-color: var(--background-color);
     margin-bottom: 10px;
     padding: 10px;
     border-radius: 4px;
@@ -560,7 +682,7 @@ footer {
     background-color: #fefefe;
     margin: 15% auto;
     padding: 20px;
-    border: 1px solid #888;
+    border: 1px solid var(--border-color);
     width: 80%;
     max-width: 500px;
     border-radius: 8px;
@@ -576,7 +698,7 @@ footer {
 
 .close:hover,
 .close:focus {
-    color: #000;
+    color: var(--danger-color);
     text-decoration: none;
     cursor: pointer;
 }
@@ -595,17 +717,17 @@ form select {
 
 /* Button-Stile */
 .btn-primary {
-    background-color: #1a5f7a;
+    background-color: var(--primary-color);
     color: white;
 }
 
 .btn-secondary {
-    background-color: #6c757d;
+    background-color: var(--secondary-color);
     color: white;
 }
 
 .btn-danger {
-    background-color: #dc3545;
+    background-color: var(--danger-color);
     color: white;
 }
 
@@ -613,30 +735,55 @@ form select {
     max-width: 300px;
     margin: 50px auto;
     padding: 20px;
-    background-color: #f9f9f9;
+    background-color: var(--background-color-second);
     border-radius: 5px;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
 .login-sub-container {
     max-width: 300px;
-    margin: 50px auto;
-    padding: 20px;
-    background-color: #f9f9f9;
-    border-radius: 5px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+            margin-right: auto;
+            margin-bottom: 15px;
+            margin-left: auto;
+        padding: 20px;
+        background-color: var(--background-color-second);
+        border-radius: 5px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.version-sub-container {
+    width: 300px;
+        padding-top: 5px;
+        padding-right: 20px;
+        padding-bottom: 5px;
+        padding-left: 20px;
+        background-color: var(--background-color-second);
+        border-radius: 5px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        margin-right: auto;
+        margin-left: auto;
+        margin-bottom: 5px;
+        font-size: 12px;
+    
+}
+
+.version-sub-container a{
+    text-decoration: none;
+    color: var(--text-color);
 }
 
 .login-sub-container input {
     padding: 10px;
     margin-bottom: 10px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-color);
     border-radius: 4px;
 }
 
 .login-sub-container button {
     width: 100%;
     padding: 10px;
-    background-color: #1a5f7a;
+    background-color: var(--primary-color);
     color: white;
     border: none;
     border-radius: 4px;
@@ -644,7 +791,7 @@ form select {
 }
 
 .login-sub-container button:hover {
-    background-color: #154c61;
+    background-color: var(--secondary-color);
 }
 
 .reset-password-container h2 {
@@ -663,7 +810,7 @@ form select {
 .reset-password-container button {
     width: 100%;
     padding: 10px;
-    background-color: #1a5f7a;
+    background-color: var(--primary-color);
     color: white;
     border: none;
     border-radius: 4px;
@@ -671,7 +818,7 @@ form select {
 }
 
 .reset-password-container button:hover {
-    background-color: #154c61;
+    background-color: var(--secondary-color);
 }
 
 /* Hamburger Menu Styles */
@@ -686,7 +833,7 @@ form select {
 }
 
 .hamburger-icon span {
-    background: #333;
+    background: var(--text-color);
     display: block;
     height: 2px;
     margin: 5px 0;
@@ -698,8 +845,8 @@ form select {
     position: absolute;
     top: 60px;
     right: 0;
-    background: #fff;
-    border: 1px solid #ddd;
+    background: var(--background-color-second);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     padding: 10px;
@@ -712,12 +859,12 @@ form select {
     text-align: left;
     background: none;
     border: none;
-    color: #333;
+    color: var(--text-color);
     font-size: 16px;
 }
 
 .menu-items a:hover, .menu-items button:hover {
-    background: #f0f0f0;
+    background: var(--background-color);
 }
 
 /* Fügen Sie diese Medienaabfragen am Ende Ihrer style.css-Datei hinzu */

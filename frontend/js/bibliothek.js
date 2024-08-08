@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
         
         const typSelect = document.getElementById('typ');
-        const addStropheButton = document.getElementById('addStrophe');
+        const addStropheButton = document.getElementById('addStropheBtn');
         const objektForm = document.getElementById('objektForm');
         const resetFormButton = document.getElementById('resetForm');
         
@@ -167,12 +167,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
         
         const typSelect = safeGetElement('typ');
-        const addStropheButton = safeGetElement('addStrophe');
         const objektForm = safeGetElement('objektForm');
         const resetFormButton = safeGetElement('resetForm');
         
         if (typSelect) typSelect.addEventListener('change', toggleLiedFelder);
-        if (addStropheButton) addStropheButton.addEventListener('click', addStrophe);
         if (objektForm) objektForm.addEventListener('submit', handleFormSubmit);
         if (resetFormButton) resetFormButton.addEventListener('click', resetForm);
         
@@ -251,9 +249,7 @@ function initializeFilters() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    // ... andere Initialisierungen ...
     initializeFilters();
-    // ... 
 });
 
 document.addEventListener('DOMContentLoaded', function() {

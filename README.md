@@ -1,18 +1,23 @@
 # HymnoScribe
-![Logo](https://github.com/Revisor01/HymnoScribe/blob/master/frontend/img/Logo-hymnoscribe.png)
 
+![Logo](https://github.com/Revisor01/HymnoScribe/blob/master/frontend/img/Logo-hymnoscribe.png)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Docker](https://github.com/Revisor01/HymnoScribe/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/Revisor01/HymnoScribe/actions/workflows/docker-publish.yml)
 
 HymnoScribe ist ein umfassendes Tool zur Erstellung von Gottesdienst-Liedblättern. Es bietet eine benutzerfreundliche Oberfläche zum Erstellen, Bearbeiten und Verwalten von Gottesdienstobjekten sowie zur Generierung von PDF-Liedblättern.
 
 ## Inhaltsverzeichnis
 1. [Features](#features)
-2. [Installation und Nutzung](#installation-und-nutzung)
+2. [Nutzung und Lizenzierung](#nutzung-und-lizenzierung)
+3. [Installation](#installation)
    - [Docker Compose Setup](#docker-compose-setup)
    - [Reverse Proxy Setup](#reverse-proxy-setup)
-3. [Entwicklungsumgebung](#entwicklungsumgebung)
-4. [Benutzerrollen und Berechtigungen](#benutzerrollen-und-berechtigungen)
-5. [FAQ](#faq)
+4. [Entwicklungsumgebung](#entwicklungsumgebung)
+5. [Benutzerrollen und Berechtigungen](#benutzerrollen-und-berechtigungen)
+6. [FAQ](#faq)
+7. [Kontakt und Support](#kontakt-und-support)
+8. [Mitwirken](#mitwirken)
+9. [Lizenz](#lizenz)
 
 ## Features
 
@@ -25,11 +30,27 @@ HymnoScribe ist ein umfassendes Tool zur Erstellung von Gottesdienst-Liedblätte
 - Unterstützung für Noten-Bilder (mit und ohne Text)
 - Integration eigener Bilder und Logos
 - Responsives Design für Desktop- und mobile Nutzung
-- Benutzer- und Institutionsverwaltung
-- Rollenbasiertes Berechtigungssystem
+- Benutzer- und Institutionsverwaltung mit rollenbasiertem Berechtigungssystem
 - E-Mail-Verifizierung und Passwort-Zurücksetzung
+- Mehrere Ausgabeformate: A4, A3, DIN Lang (6er-Flyer)
+- Individuelle Anpassung des Layouts (Schriftart, -größe, Ausrichtung)
+- Möglichkeit zur Integration eines Kirchenlogos
 
-## Installation und Nutzung
+## Nutzung und Lizenzierung
+
+HymnoScribe ist ein Projekt, das die Arbeit von Gemeinden erleichtern und die Verkündigung des Evangeliums unterstützen soll. Wir bieten folgende Nutzungsmodelle an:
+
+- **Private Nutzung:** Kostenlos zum Selbsthosten oder über unsere Plattform (nach Anfrage).
+- **Gemeindliche Nutzung:** Für regelmäßige Nutzung auf unserer Plattform bitten wir um einen Beitrag von 5€ pro Monat.
+- **Organisationen/Unternehmen:** Bitte kontaktieren Sie uns für individuelle Lizenzvereinbarungen.
+
+Eine Testversion ist unter https://app.hymnoscribe.de verfügbar. Nutzen Sie die Zugangsdaten:
+- Admin (Passwort: demoAdmin)
+- User (Passwort: demoUser)
+
+Für die Selbsthosting-Option finden Sie alle Informationen in diesem Repository.
+
+## Installation
 
 ### Docker Compose Setup
 
@@ -76,6 +97,47 @@ server {
     }
 }
 ```
+```apache
+# HTTPS-Redirect
+RewriteEngine On
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# API-Anfragen
+<Location /api>
+# CORS-Header hinzufügen
+Header always set Access-Control-Allow-Origin "URL"
+Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
+Header always set Access-Control-Allow-Credentials "true"
+
+# Präflug-Anfragen behandeln
+RewriteEngine On
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ $1 [R=200,L]
+
+ProxyPass http://127.0.0.1:9615/api
+ProxyPassReverse http://127.0.0.1:9615/api
+</Location>
+
+# Frontend und alle anderen Anfragen
+<Location />
+ProxyPass http://127.0.0.1:9615/
+ProxyPassReverse http://127.0.0.1:9615/
+</Location>
+
+# ACME-Challenge von Proxy ausschließen
+<Location /.well-known/acme-challenge/>
+RewriteEngine off
+ProxyPass !
+</Location>
+
+# Websocket-Unterstützung (falls benötigt)
+RewriteEngine On
+RewriteCond %{HTTP:Upgrade} websocket [NC]
+RewriteCond %{HTTP:Connection} upgrade [NC]
+RewriteRule ^/?(.*) "ws://127.0.0.1:9615/$1" [P,L]
+```
 
 Ersetzen Sie `hymnoscribe.your-domain.com` mit Ihrer tatsächlichen Domain und passen Sie die Pfade zu Ihren SSL-Zertifikaten an.
 
@@ -113,41 +175,26 @@ HymnoScribe verwendet ein rollenbasiertes Berechtigungssystem:
 2. **Kann ich HymnoScribe selbst hosten?**
    Ja, HymnoScribe kann auf Ihrem eigenen Server gehostet werden. Folgen Sie unserer Installationsanleitung.
 
-3. **Wie funktioniert die PDF-Generierung?**
-   HymnoScribe nutzt die PDFLib-Bibliothek, um PDFs direkt im Browser zu erstellen. Sie können verschiedene Formate wie A5, DIN Lang, A4 schmal und A3 schmal wählen.
+3. **Woher kommen die Noten?**
+   Sie können eigene Noten hochladen oder aus unserer Bibliothek wählen. Wir arbeiten mit verschiedenen Verlagen zusammen.
 
-4. **Kann ich eigene Bilder und Logos hochladen?**
-   Ja, Sie können eigene Bilder und Logos hochladen und in Ihre Liedblätter integrieren.
+4. **Wo werden meine Daten gespeichert?**
+   Ihre Daten werden sicher auf Servern in Deutschland gespeichert und unterliegen den strengen europäischen Datenschutzrichtlinien.
 
-5. **Wie funktioniert das Session-Management?**
-   Sie können Ihre Arbeit als Session speichern und später fortsetzen. Sessions sind benutzerspezifisch und bleiben erhalten, bis Sie sie löschen.
+5. **Wie funktioniert die Benutzerverwaltung?**
+   Der Super-Admin kann Institutionen anlegen und hat vollen Zugriff auf alle Nutzer:innen. Der Super-Admin hat keinen Zugriff auf die Objekte innerhalb einer Institution. Administratoren können Benutzer innerhalb ihrer Institution erstellen und verwalten. Jeder Benutzer muss seine E-Mail-Adresse verifizieren.
 
-6. **Gibt es eine Begrenzung für die Anzahl der Objekte, die ich erstellen kann?**
-   Nein, es gibt keine feste Begrenzung. Die Kapazität hängt von Ihrem Hosting-Plan und den Serverressourcen ab.
+6. **Was passiert mit den Objekten, wenn ein Benutzer gelöscht wird?**
+   Objekte bleiben der Institution erhalten, auch wenn der erstellende Benutzer gelöscht wird.
 
-7. **Wie sicher sind meine Daten?**
-   Wir setzen auf verschlüsselte Verbindungen (HTTPS) und sichere Passwort-Hashing-Methoden. Ihre Daten werden in einer sicheren Datenbank gespeichert.
+## Kontakt und Support
 
-8. **Kann ich HymnoScribe offline nutzen?**
-   HymnoScribe ist eine webbasierte Anwendung und benötigt eine Internetverbindung. Eine Offline-Version ist derzeit nicht verfügbar.
+Für Fragen, Anregungen oder Unterstützung bei der Einrichtung kontaktieren Sie uns bitte über das [Kontaktformular auf unserer Website](https://hymnoscribe.de/#contact) oder erstellen Sie ein Issue in diesem GitHub-Repository.
 
-9. **Wie kann ich Fehler melden oder Verbesserungsvorschläge einreichen?**
-   Bitte nutzen Sie den Issues-Bereich auf GitHub, um Fehler zu melden oder Verbesserungsvorschläge einzureichen.
+## Mitwirken
 
-10. **Gibt es eine mobile App für HymnoScribe?**
-    Aktuell gibt es keine separate mobile App. Die Webanwendung ist jedoch responsiv und kann auf mobilen Geräten genutzt werden.
+Wir freuen uns über Beiträge zur Weiterentwicklung von HymnoScribe. Wenn Sie Ideen haben oder mitentwickeln möchten, erstellen Sie bitte einen Pull Request oder kontaktieren Sie uns direkt.
 
-11. **Wie oft werden Updates veröffentlicht?**
-    Wir streben regelmäßige Updates an, um neue Features hinzuzufügen und Fehler zu beheben. Die Häufigkeit variiert je nach Entwicklungsfortschritt.
+## Lizenz
 
-12. **Kann ich HymnoScribe in meine bestehende Webseite integrieren?**
-    Eine direkte Integration ist nicht vorgesehen. Sie können jedoch Links zu Ihrer HymnoScribe-Instanz auf Ihrer Webseite platzieren.
-
-13. **Wie funktioniert die Benutzerverwaltung?**
-    Der Super-Admin kann Institutionen anlegen und hat vollen Zugriff auf alle Nutzer:innen. Der Super-Admin hat keinen Zugriff auf die Objekte innerhalb einer Institution. Administratoren können Benutzer innerhalb ihrer Institution erstellen und verwalten. Jeder Benutzer muss seine E-Mail-Adresse verifizieren.
-
-14. **Was passiert mit den Objekten, wenn ein Benutzer gelöscht wird?**
-    Objekte bleiben der Institution erhalten, auch wenn der erstellende Benutzer gelöscht wird.
-
-15. **Gibt es eine API für HymnoScribe?**
-    Aktuell bieten wir keine öffentliche API an. Bei Bedarf können Sie sich für zukünftige Entwicklungen an uns wenden.
+HymnoScribe ist unter der [GNU Affero General Public License v3.0 (AGPL-3.0)](https://www.gnu.org/licenses/agpl-3.0) lizenziert.

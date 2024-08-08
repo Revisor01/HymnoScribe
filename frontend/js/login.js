@@ -1,5 +1,3 @@
-// login.js
-
 function showModal(modalId) {
     document.getElementById(modalId).style.display = 'block';
 }

@@ -73,7 +73,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-
 function handleUserActions(event) {
   const target = event.target;
   if (target.classList.contains('change-password')) {
@@ -124,6 +123,8 @@ function showRoleBasedView(role) {
     document.getElementById('admin-section').style.display = 'none';
     document.getElementById('super-admin-section').style.display = 'none';
     
+    const dashboardButton = document.querySelector('#dashboard-back');
+    
     switch(role) {
         case 'user':
             document.getElementById('user-section').style.display = 'block';
@@ -141,6 +142,9 @@ function showRoleBasedView(role) {
             document.getElementById('super-admin-section').style.display = 'block';
             loadUserInfo();
             loadInstitutions();
+          if (dashboardButton) {
+            dashboardButton.style.display = 'none';
+          }
             break;
     }
 }
