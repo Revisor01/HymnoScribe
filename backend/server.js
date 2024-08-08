@@ -203,7 +203,7 @@ async function sendContactEmail(senderEmail, content) {
         await transporter.sendMail({
             from: process.env.EMAIL_FROM,
             to: process.env.CONTACT_EMAIL || process.env.EMAIL_FROM,
-            subject: `Neue Kontaktanfrage: ${email}`,
+            subject: `Neue Kontaktanfrage: ${senderEmail}`,
             html: renderedTemplate,
             replyTo: senderEmail
         });
