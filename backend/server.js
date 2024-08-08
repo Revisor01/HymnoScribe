@@ -163,14 +163,13 @@ app.get('/reset-password.html', (req, res) => {
 });
 
 apiRouter.post('/contact', async (req, res) => {
-    const { name, email, subject, message, inquiryType, institution, purpose } = req.body;
+    const { name, email, message, inquiryType, institution, purpose } = req.body;
     
     try {
         let emailContent = `
             <strong>Name:</strong> ${name}<br>
             <strong>E-Mail:</strong> ${email}<br>
             <strong>Anfragetyp:</strong> ${inquiryType}<br>
-            <strong>Betreff:</strong> ${subject}<br>
             <strong>Nachricht:</strong> ${message}<br>
         `;
         
@@ -204,7 +203,7 @@ async function sendContactEmail(senderEmail, subject, content) {
         await transporter.sendMail({
             from: process.env.EMAIL_FROM,
             to: process.env.CONTACT_EMAIL || process.env.EMAIL_FROM,
-            subject: `Neue Kontaktanfrage: ${subject}`,
+            subject: `Neue Kontaktanfrage: ${email}`,
             html: renderedTemplate,
             replyTo: senderEmail
         });
