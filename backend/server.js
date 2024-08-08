@@ -180,7 +180,7 @@ apiRouter.post('/contact', async (req, res) => {
             `;
         }
         
-        await sendContactEmail(email, subject, emailContent);
+        await sendContactEmail(email, emailContent);
         
         res.status(200).json({ message: 'Nachricht erfolgreich gesendet' });
     } catch (error) {
@@ -189,7 +189,7 @@ apiRouter.post('/contact', async (req, res) => {
     }
 });
 
-async function sendContactEmail(senderEmail, subject, content) {
+async function sendContactEmail(senderEmail, content) {
     const transporter = createTransporter();
     const template = getContactEmailTemplate(); // Neue Funktion zum Laden des Kontakt-Templates
     
