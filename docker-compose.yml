@@ -1,7 +1,7 @@
 version: '3'
 services:
   hymnoscribe:
-    image: revisoren/hymnoscripe:latest
+    image: revisoren/hymnoscribe:latest
     ports:
       - "9615:3000"
     environment:
@@ -10,7 +10,7 @@ services:
       - DB_USER=${DB_USER:-hymnoscribe}
       - DB_PASSWORD=${DB_PASSWORD:-hymnoscribe9715}
       - DB_NAME=${DB_NAME:-hymnoscribe}
-      - URL=${URL:-https://hymnoscripe.godsapp.de}
+      - URL=${URL:-https://hymnoscribe.godsapp.de}
       - SUPER_PASSWORD=${SUPER_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
       - EMAIL_HOST=${EMAIL_HOST}
