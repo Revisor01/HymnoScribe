@@ -2,7 +2,7 @@ name: Docker
 
 on:
   push:
-    branches: [ master, loading-optimization ]
+    branches: [ master, Loading-Optimization ]
   pull_request:
     branches: [ master ]
 
@@ -33,6 +33,6 @@ jobs:
         tags: |
           revisoren/hymnoscribe:${{ steps.branch-name.outputs.current_branch }}
           ${{ github.ref == 'refs/heads/master' && 'revisoren/hymnoscribe:latest' || '' }}
-          ${{ github.ref == 'refs/heads/loading-optimization' && 'revisoren/hymnoscribe:beta' || '' }}
+          ${{ github.ref == 'refs/heads/Loading-Optimization' && 'revisoren/hymnoscribe:beta' || '' }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
