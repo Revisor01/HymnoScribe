@@ -59,7 +59,7 @@ const customImageStorage = multer.diskStorage({
 
 const uploadCustomImage = multer({ storage: customImageStorage });
 
-// Führe die Bereinigung stündlich aus
+// Führe die Bereinigung stündlich auss
 cron.schedule('0 * * * *', async () => {
     console.log('Führe geplante stündliche Bildbereinigung durch...');
     try {
