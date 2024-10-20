@@ -2,7 +2,7 @@ name: Docker
 
 on:
   push:
-    branches: [ master, optimize-performance ]
+    branches: [ master, Loading-Optimization ]
   pull_request:
     branches: [ master ]
 
