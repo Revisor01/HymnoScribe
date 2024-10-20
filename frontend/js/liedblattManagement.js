@@ -106,6 +106,31 @@ export function addPageBreak() {
     addToSelected(pageBreakObject);
 }
 
+function addImageWithLazyLoading(content, imgSrc, altText) {
+    const img = document.createElement('img');
+    img.setAttribute('data-src', imgSrc);
+    img.setAttribute('alt', altText);
+    img.classList.add('lazy-image');
+    content.appendChild(img);
+}
+
+// Fügen Sie diese Funktion hinzu, um Lazy Loading zu initialisieren
+function initLazyLoading() {
+    const lazyImages = document.querySelectorAll('.lazy-image');
+    const imageObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const image = entry.target;
+                image.src = image.getAttribute('data-src');
+                image.classList.remove('lazy-image');
+                observer.unobserve(image);
+            }
+        });
+    });
+    
+    lazyImages.forEach(img => imageObserver.observe(img));
+}
+
 export function createLiedOptions(lied) {
     const liedOptions = document.createElement('div');
     liedOptions.classList.add('lied-options');
@@ -465,6 +490,7 @@ export function updateLiedblatt() {
         liedblattContent.appendChild(content);
     });
     saveSessionToLocalStorage();
+    initLazyLoading();
 }
     
 export function formatQuillHTML(htmlContent) {
