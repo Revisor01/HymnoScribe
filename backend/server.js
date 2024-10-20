@@ -10,6 +10,7 @@ const bcrypt = require('bcrypt');
 const cron = require('node-cron');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
+const compression = require('compression');
 const crypto = require('crypto');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
@@ -33,6 +34,7 @@ const pool = mysql.createPool({
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use(compression());
 app.use(express.json());
 app.use(cors({
     origin: process.env.URL ? process.env.URL.split(',') : ['*', 'https://hymnoscribe.de'],
