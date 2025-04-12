@@ -74,7 +74,7 @@ export async function loadSession(id) {
     }
 }
 
-function loadConfigFromLocalStorage() {
+export function loadConfigFromLocalStorage() {
     try {
         const savedConfig = localStorage.getItem('liedblattConfig');
         if (savedConfig) {
