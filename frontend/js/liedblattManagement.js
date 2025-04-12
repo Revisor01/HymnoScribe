@@ -494,23 +494,25 @@ export function updateLiedblatt() {
     debouncedSaveSession();
     initLazyLoading();
     
-    const previewFormatSelect = document.getElementById('previewFormat');
-    if (previewFormatSelect) {
-        const selectedFormat = previewFormatSelect.value;
-        
-        // Längere Verzögerung um Race Conditions zu vermeiden
-        setTimeout(() => {
-            // Flag setzen, dass während der Seitenumbruchberechnung keine Session gespeichert werden soll
+    try {
+        const previewFormatSelect = document.getElementById('previewFormat');
+        if (previewFormatSelect) {
+            const selectedFormat = previewFormatSelect.value;
+            
+            // Eine Flag setzen, dass während der Seitenumbruchberechnung keine Session gespeichert werden soll
             window.isUpdatingPageBreaks = true;
             
-            try {
-                updatePreviewWithPageBreaks(selectedFormat);
-            } catch (error) {
-                console.error("Fehler bei der Aktualisierung der Seitenumbruchvorschau:", error);
-            } finally {
-                window.isUpdatingPageBreaks = false;
-            }
-        }, 200);
+            setTimeout(() => {
+                try {
+                    updatePreviewWithPageBreaks(selectedFormat);
+                } finally {
+                    window.isUpdatingPageBreaks = false;
+                }
+            }, 100);
+        }
+    } catch (error) {
+        console.error("Fehler bei der Aktualisierung der Seitenumbruchvorschau:", error);
+        window.isUpdatingPageBreaks = false;
     }
 }
 

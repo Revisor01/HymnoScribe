@@ -104,21 +104,22 @@ function loadConfigFromLocalStorage() {
 }
 
 let saveSessionTimeout = null;
+let isSavingSession = false;
+let lastSavedData = null;
 
 /**
 * Speichert die Session mit Debouncing, um zu häufige Speicheraufrufe zu vermeiden
 * @param {number} delay - Verzögerung in Millisekunden, Default 1000ms (1 Sekunde)
 */
-export function debouncedSaveSession(delay = 1000) {
-    // Vorherigen Timeout löschen, falls vorhanden
+export function debouncedSaveSession(delay = 300) {
+    // Vorherigen Timeout abbrechen, falls vorhanden
     if (saveSessionTimeout) {
         clearTimeout(saveSessionTimeout);
     }
     
-    // Neuen Timeout setzen
+    // Neuen Timeout starten
     saveSessionTimeout = setTimeout(() => {
         saveSessionToLocalStorage();
-        console.log("Session gespeichert (debounced)");
     }, delay);
 }
 
@@ -139,43 +140,70 @@ export async function deleteSession(id) {
 }
 
 export function saveSessionToLocalStorage() {
-    const selectedItems = document.querySelectorAll('.selected-item');
-    const sessionData = Array.from(selectedItems).map(item => {
-        const objekt = JSON.parse(item.getAttribute('data-object'));
-        const uniqueId = item.getAttribute('data-unique-id');
-        
-        const showTitleCheckbox = item.querySelector('input[id^="showTitle"]');
-        objekt.showTitle = showTitleCheckbox ? showTitleCheckbox.checked : true;
-        
-        if (objekt.typ === 'Titel' || objekt.typ === 'Freitext') {
-            const quillInstance = quillInstances[objekt.id];
-            if (quillInstance) {
-                objekt.inhalt = quillInstance.root.innerHTML;
+    // Wenn bereits ein Speichervorgang läuft oder Seitenumbrüche aktualisiert werden, abbrechen
+    if (isSavingSession || window.isUpdatingPageBreaks) {
+        return;
+    }
+    
+    isSavingSession = true;
+    
+    try {
+        const selectedItems = document.querySelectorAll('.selected-item');
+        const sessionData = Array.from(selectedItems).map(item => {
+            const objekt = JSON.parse(item.getAttribute('data-object'));
+            const uniqueId = item.getAttribute('data-unique-id');
+            
+            const showTitleCheckbox = item.querySelector('input[id^="showTitle"]');
+            objekt.showTitle = showTitleCheckbox ? showTitleCheckbox.checked : true;
+            
+            if (objekt.typ === 'Titel' || objekt.typ === 'Freitext') {
+                const quillInstance = quillInstances[objekt.id];
+                if (quillInstance) {
+                    objekt.inhalt = quillInstance.root.innerHTML;
+                }
+            } else if (objekt.typ === 'Lied' || objekt.typ === 'Liturgie') {
+                const liedOptions = item.querySelector('.lied-options');
+                if (liedOptions) {
+                    const showNotesCheckbox = liedOptions.querySelector('input[type="checkbox"]');
+                    objekt.showNotes = showNotesCheckbox ? showNotesCheckbox.checked : false;
+                    const noteTypeRadio = liedOptions.querySelector('input[name^="noteType"]:checked');
+                    objekt.noteType = noteTypeRadio ? noteTypeRadio.value : null;
+                    objekt.selectedStrophen = Array.from(liedOptions.querySelectorAll('.strophen-container input:checked'))
+                    .map(cb => parseInt(cb.value));
+                    objekt.refrainOptions = Array.from(liedOptions.querySelectorAll('.strophe-option'))
+                    .map(stropheOption => {
+                        const refrainSelect = stropheOption.querySelector('select');
+                        return refrainSelect ? refrainSelect.value : 'none';
+                    });
+                }
             }
-        } else if (objekt.typ === 'Lied' || objekt.typ === 'Liturgie') {
-            const liedOptions = item.querySelector('.lied-options');
-            if (liedOptions) {
-                const showNotesCheckbox = liedOptions.querySelector('input[type="checkbox"]');
-                objekt.showNotes = showNotesCheckbox ? showNotesCheckbox.checked : false;
-                const noteTypeRadio = liedOptions.querySelector('input[name^="noteType"]:checked');
-                objekt.noteType = noteTypeRadio ? noteTypeRadio.value : null;
-                objekt.selectedStrophen = Array.from(liedOptions.querySelectorAll('.strophen-container input:checked'))
-                .map(cb => parseInt(cb.value));
-                objekt.refrainOptions = Array.from(liedOptions.querySelectorAll('.strophe-option'))
-                .map(stropheOption => {
-                    const refrainSelect = stropheOption.querySelector('select');
-                    return refrainSelect ? refrainSelect.value : 'none';
-                });
-            }
+            
+            const altTitleInput = item.querySelector('.alternative-title-input');
+            objekt.alternativePrefix = altTitleInput ? altTitleInput.value : '';
+            
+            return { uniqueId, objekt };
+        });
+        
+        // Prüfen, ob sich die Daten geändert haben, um unnötige Speicherungen zu vermeiden
+        const newDataString = JSON.stringify(sessionData);
+        if (lastSavedData === newDataString) {
+            return; // Keine Änderungen, nicht speichern
         }
         
-        const altTitleInput = item.querySelector('.alternative-title-input');
-        objekt.alternativePrefix = altTitleInput ? altTitleInput.value : '';
+        // In localStorage speichern
+        localStorage.setItem('lastSession', newDataString);
+        lastSavedData = newDataString;
         
-        return { uniqueId, objekt };
-    });
-    localStorage.setItem('lastSession', JSON.stringify(sessionData));
-    console.log('Session saved:', sessionData);
+        // Reduzierte Konsolenausgabe: nur noch einmalig pro tatsächlicher Änderung
+        console.log('Session saved');
+    } catch (error) {
+        console.error('Fehler beim Speichern der Session:', error);
+    } finally {
+        // Flag zurücksetzen mit leichter Verzögerung, um Bounce-Effekte zu vermeiden
+        setTimeout(() => {
+            isSavingSession = false;
+        }, 50);
+    }
 }
 
 export function loadLastSession() {

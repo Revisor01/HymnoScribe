@@ -289,9 +289,16 @@ export function applyPageBreaksToPreview(breakData, format = 'a5') {
  * @param {string} format - Das gewählte Format (a5, dl, a4-schmal, a3-schmal)
  */
 export function updatePreviewWithPageBreaks(format = 'a5') {
-    console.log("Aktualisiere Vorschau mit Seitenumbrüchen für Format:", format);
+    // Wenn bereits eine Aktualisierung läuft, abbrechen
+    if (window.isUpdatingPageBreaks === true) {
+        return;
+    }
+    
+    window.isUpdatingPageBreaks = true;
     
     try {
+        console.log("Aktualisiere Vorschau mit Seitenumbrüchen für Format:", format);
+        
         // Berechnete Seitenumbrüche
         const breakData = calculatePageBreaksForPreview(format);
         
@@ -299,6 +306,9 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
         applyPageBreaksToPreview(breakData, format);
     } catch (error) {
         console.error("Fehler bei der Berechnung der Seitenumbrüche:", error);
+    } finally {
+        // Immer sicherstellen, dass das Flag zurückgesetzt wird
+        window.isUpdatingPageBreaks = false;
     }
 }
 
