@@ -103,13 +103,14 @@ export function loadConfigFromLocalStorage() {
     }
 }
 
+// Hilfsvariablen für das Debouncing
 let saveSessionTimeout = null;
 let isSavingSession = false;
 let lastSavedData = null;
 
 /**
-* Speichert die Session mit Debouncing, um zu häufige Speicheraufrufe zu vermeiden
-* @param {number} delay - Verzögerung in Millisekunden, Default 1000ms (1 Sekunde)
+* Speichert die Session mit Verzögerung, um mehrfache Aufrufe zu vermeiden
+* @param {number} delay - Verzögerung in Millisekunden
 */
 export function debouncedSaveSession(delay = 300) {
     // Vorherigen Timeout abbrechen, falls vorhanden
@@ -119,10 +120,10 @@ export function debouncedSaveSession(delay = 300) {
     
     // Neuen Timeout starten
     saveSessionTimeout = setTimeout(() => {
+        // Wir verwenden hier kein Flag, das könnte die Umbruchberechnung beeinflussen
         saveSessionToLocalStorage();
     }, delay);
 }
-
 
 export async function deleteSession(id) {
     const confirmed = await customConfirm('Sind Sie sicher, dass Sie diese Session löschen möchten?');

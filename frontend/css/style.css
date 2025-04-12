@@ -127,6 +127,27 @@
     border: 1px solid #ff5555;
 }
 
+.preview-page-break {
+    border-top: 2px dashed #ff5555;
+    margin: 15px 0;
+    padding: 8px 0;
+    position: relative;
+    text-align: right;
+    font-size: 11px;
+    color: #ff5555;
+    background-color: rgba(255, 85, 85, 0.05);
+    border-radius: 3px;
+}
+
+.preview-page-break::before {
+    content: "✂️";
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+}
+
 /* Sicherstellen, dass der Seitenumbruch im PDF nicht erscheint */
 @media print {
     .preview-page-break, .preview-format-container {
