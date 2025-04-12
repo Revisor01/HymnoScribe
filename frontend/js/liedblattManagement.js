@@ -1,5 +1,5 @@
 // liedblattManagement.js
-import { saveSessionToLocalStorage } from './sessionManagement.js';
+import { saveSessionToLocalStorage, debouncedSaveSession } from './sessionManagement.js';
 import { globalConfig, getImagePath, applyGlobalConfig } from './script.js';
 import { authenticatedFetch, customAlert, customConfirm, customPrompt } from './utils.js';
 import { updatePreviewWithPageBreaks } from './previewPageBreaks.js';
