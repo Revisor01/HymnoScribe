@@ -65,10 +65,254 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
     }, 300);
 }
 
+// Füge diese Hilfsfunktion hinzu (am Anfang der Datei oder im Funktionsbereich)
+/**
+* Bestimmt, ob ein Element ein Titel ist
+* @param {HTMLElement} element - Das zu prüfende Element
+* @returns {boolean} - True, wenn es sich um einen Titel handelt
+*/
+function isTitle(element) {
+    return element.querySelector('.item-title') !== null;
+}
+
+/**
+* Bestimmt, ob ein Element eine Strophe oder ein Refrain ist
+* @param {HTMLElement} element - Das zu prüfende Element
+* @returns {boolean} - True, wenn es sich um eine Strophe oder einen Refrain handelt
+*/
+function isStropheOrRefrain(element) {
+    return element.querySelector('.strophe') !== null || element.querySelector('.refrain') !== null;
+}
+
+/**
+* Prüft, ob ein Seitenumbruch an einer bestimmten Stelle vermieden werden sollte
+* @param {Array} elements - Alle Elemente des Dokuments
+* @param {number} currentIndex - Der aktuelle Index
+* @returns {boolean} - True, wenn der Umbruch vermieden werden sollte
+*/
+function shouldAvoidPageBreak(elements, currentIndex) {
+    if (currentIndex <= 0 || currentIndex >= elements.length) return false;
+    
+    const currentElement = elements[currentIndex];
+    const nextElement = elements[currentIndex + 1];
+    const prevElement = elements[currentIndex - 1];
+    
+    // Fall 1: Aktuelles Element ist ein Titel und das nächste eine Strophe/Refrain
+    if (isTitle(currentElement) && nextElement && isStropheOrRefrain(nextElement)) {
+        return true;
+    }
+    
+    // Fall 2: Vorheriges Element ist eine Strophe und aktuelles auch
+    if (prevElement && isStropheOrRefrain(prevElement) && isStropheOrRefrain(currentElement)) {
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+* Identifiziert zusammengehörige Elementgruppen, die nicht getrennt werden sollten
+* @param {Array} elements - Alle Elemente im Dokument
+* @returns {Array} - Array von Element-Gruppen
+*/
+function identifyElementGroups(elements) {
+    const groups = [];
+    let currentGroup = [];
+    let inStropheGroup = false;
+    let inTitleGroup = false;
+    
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i];
+        
+        // Manueller Seitenumbruch beendet eine Gruppe
+        if (element.classList.contains('page-break')) {
+            if (currentGroup.length > 0) {
+                groups.push([...currentGroup]);
+                currentGroup = [];
+            }
+            inStropheGroup = false;
+            inTitleGroup = false;
+            continue;
+        }
+        
+        // Prüfe, ob es ein Titel ist
+        const isElementTitle = isTitle(element);
+        
+        // Prüfe, ob es eine Strophe oder ein Refrain ist
+        const isElementStropheOrRefrain = isStropheOrRefrain(element);
+        
+        // Wenn wir einen Titel gefunden haben, beginne eine neue Titel-Gruppe
+        if (isElementTitle) {
+            // Wenn bereits eine Gruppe aktiv ist, beende sie
+            if (currentGroup.length > 0 && !inTitleGroup) {
+                groups.push([...currentGroup]);
+                currentGroup = [];
+            }
+            
+            // Starte eine neue Titel-Gruppe
+            currentGroup.push(element);
+            inTitleGroup = true;
+            continue;
+        }
+        
+        // Wenn wir eine Strophe/Refrain nach einem Titel haben, füge es zur Titelgruppe hinzu
+        if (isElementStropheOrRefrain && inTitleGroup) {
+            currentGroup.push(element);
+            continue;
+        }
+        
+        // Wenn wir eine Strophe/Refrain haben, aber nicht in einer Titelgruppe sind
+        if (isElementStropheOrRefrain) {
+            // Wenn keine Gruppe aktiv ist, beginne eine neue
+            if (currentGroup.length === 0) {
+                currentGroup.push(element);
+                inStropheGroup = true;
+            } 
+            // Wenn bereits eine Strophengruppe aktiv ist, füge es hinzu
+            else if (inStropheGroup) {
+                currentGroup.push(element);
+            } 
+            // Sonst beginne eine neue Gruppe
+            else {
+                groups.push([...currentGroup]);
+                currentGroup = [element];
+                inStropheGroup = true;
+                inTitleGroup = false;
+            }
+            continue;
+        }
+        
+        // Für andere Elemente, die nicht zu speziellen Gruppen gehören
+        if (currentGroup.length > 0) {
+            groups.push([...currentGroup]);
+        }
+        
+        currentGroup = [element];
+        inStropheGroup = false;
+        inTitleGroup = false;
+    }
+    
+    // Füge die letzte Gruppe hinzu, falls vorhanden
+    if (currentGroup.length > 0) {
+        groups.push(currentGroup);
+    }
+    
+    return groups;
+}
 /**
  * Berechnet Seitenumbrüche basierend auf der PDF-Generierungslogik
  * @param {string} format - Das gewählte Format
  */
+
+/**
+* Berechnet alle Positionen für Seitenumbrüche in der Vorschau
+* @param {string} format - Das gewählte Format (a5, dl, a4-schmal, a3-schmal)
+* @returns {Object} - Berechnete Seitenumbrüche und Elementinformationen
+*/
+export function calculatePageBreaksForPreview(format = 'a5') {
+    const liedblattContent = document.getElementById('liedblatt-content');
+    if (!liedblattContent) return { breaks: [], elementsWithProps: [] };
+    
+    // PDF-Seitengröße und Seitenränder
+    const pageSize = pageSizes[format];
+    const margin = { top: 30, right: 20, bottom: 20, left: 20 };
+    
+    // Verfügbare Seitenhöhe (in PT)
+    const availableHeight = pageSize.height - margin.top - margin.bottom;
+    
+    // Alle Elemente im Liedblatt analysieren (ohne bestehende Umbrüche)
+    const elements = Array.from(liedblattContent.children).filter(el => 
+        !el.classList.contains('preview-page-break')
+    );
+    
+    // Elementeigenschaften sammeln
+    const elementsWithProps = elements.map((element, index) => ({
+        element: element,
+        index: index,
+        height: estimatePDFElementHeight(element, globalConfig),
+        isTitle: element.querySelector('.item-title') !== null,
+        isStrophe: element.querySelector('.strophe') !== null,
+        isRefrain: element.querySelector('.refrain') !== null,
+        isPageBreak: element.classList.contains('page-break')
+    }));
+    
+    // Aktuelle Y-Position und Seitenumbrüche
+    let currentY = pageSize.height - margin.top;
+    let pageNumber = 1;
+    const breaks = [];
+    
+    // Element-zu-Element durchgehen und Höhen schätzen
+    for (let i = 0; i < elementsWithProps.length; i++) {
+        const elementProps = elementsWithProps[i];
+        
+        // Manueller Seitenumbruch
+        if (elementProps.isPageBreak) {
+            breaks.push({
+                afterElementIndex: i,
+                pageNumber: pageNumber,
+                type: 'manual'
+            });
+            pageNumber++;
+            currentY = pageSize.height - margin.top;
+            continue;
+        }
+        
+        // Höhe des Elements berechnen
+        let elementHeight = elementProps.height;
+        
+        // Prüfen, ob ein Umbruch nötig ist
+        if (currentY - elementHeight < margin.bottom) {
+            // Spezielle Behandlung: Titel nicht vom Inhalt trennen
+            if (elementProps.isTitle && i < elementsWithProps.length - 1 && 
+                (elementsWithProps[i+1].isStrophe || elementsWithProps[i+1].isRefrain)) {
+                    // Wenn es ein Titel ist und danach ein Strophe oder Refrain kommt,
+                    // schieben wir beides auf die nächste Seite
+                    breaks.push({
+                        afterElementIndex: i - 1 >= 0 ? i - 1 : i,
+                        pageNumber: pageNumber,
+                        type: 'auto'
+                    });
+                    pageNumber++;
+                    currentY = pageSize.height - margin.top;
+                } 
+            // Spezielle Behandlung: Strophen nicht unterbrechen
+            else if (elementProps.isStrophe && i > 0 && elementsWithProps[i-1].isStrophe) {
+                // Suche nach dem Beginn der Strophengruppe
+                let j = i - 1;
+                while (j >= 0 && elementsWithProps[j].isStrophe) {
+                    j--;
+                }
+                
+                breaks.push({
+                    afterElementIndex: j >= 0 ? j : i - 1,
+                    pageNumber: pageNumber,
+                    type: 'auto'
+                });
+                pageNumber++;
+                currentY = pageSize.height - margin.top;
+            }
+            // Normale Umbruchbehandlung
+            else {
+                breaks.push({
+                    afterElementIndex: i - 1 >= 0 ? i - 1 : i,
+                    pageNumber: pageNumber,
+                    type: 'auto'
+                });
+                pageNumber++;
+                currentY = pageSize.height - margin.top - elementHeight;
+            }
+        } else {
+            // Element passt auf die aktuelle Seite
+            currentY -= elementHeight;
+        }
+        
+        // Nach jedem Element einen Standardabstand abziehen
+        currentY -= scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
+    }
+    
+    return { breaks, elementsWithProps };
+}
+
 function calculatePDFLikePageBreaks(format) {
     const liedblattContent = document.getElementById('liedblatt-content');
     if (!liedblattContent) return;
@@ -76,6 +320,7 @@ function calculatePDFLikePageBreaks(format) {
     // PDF-Seitengröße und Seitenränder
     const pageSize = pageSizes[format];
     const margin = { top: 30, right: 20, bottom: 20, left: 20 };
+    const contentWidth = pageSize.width - margin.left - margin.right;
     
     // Verfügbare Seitenhöhe (in PT)
     const availableHeight = pageSize.height - margin.top - margin.bottom;
@@ -89,63 +334,73 @@ function calculatePDFLikePageBreaks(format) {
         !el.classList.contains('preview-page-break')
     );
     
-    // Element-zu-Element durchgehen und Höhen schätzen
-    for (let i = 0; i < elements.length; i++) {
-        const element = elements[i];
+    // Identifiziere die Element-Gruppen für intelligente Umbrüche
+    const elementGroups = identifyElementGroups(elements);
+    console.log("Identifizierte Elementgruppen:", elementGroups.length);
+    
+    // Sammle Seitenumbrüche
+    const breakPositions = [];
+    
+    // Gehe durch alle Gruppen und berechne deren Platz
+    let processedElements = 0;
+    
+    for (let groupIndex = 0; groupIndex < elementGroups.length; groupIndex++) {
+        const group = elementGroups[groupIndex];
         
-        // Manueller Seitenumbruch
-        if (element.classList.contains('page-break')) {
-            pageNumber++;
-            currentY = pageSize.height - margin.top;
-            continue;
-        }
+        // Schätze die Höhe der gesamten Gruppe
+        const groupHeight = estimateGroupHeight(group);
         
-        // Elementtyp bestimmen für spezielle Behandlung
-        const isTitle = element.querySelector('.item-title') !== null;
-        const isStrophe = element.querySelector('.strophe') !== null;
-        const isRefrain = element.querySelector('.refrain') !== null;
-        const isImage = element.querySelector('img') !== null;
-        
-        // Höhe des Elements in PT berechnen (angepasst an PDF-Logik)
-        let elementHeight = estimatePDFElementHeight(element, globalConfig);
-        
-        // Prüfen, ob ein Umbruch nötig ist
-        if (currentY - elementHeight < margin.bottom) {
-            // Spezielle Behandlung: Titel nicht vom Inhalt trennen
-            if (isTitle && i < elements.length - 1 && 
-                (elements[i+1].querySelector('.strophe') || elements[i+1].querySelector('.refrain'))) {
-                // Wenn es ein Titel ist und danach ein Strophe oder Refrain kommt,
-                // schieben wir beides auf die nächste Seite
-                insertPageBreakMarker(elements[i-1] || element, pageNumber, format);
-                pageNumber++;
-                currentY = pageSize.height - margin.top;
-            } 
-            // Spezielle Behandlung: Strophen nicht unterbrechen
-            else if (isStrophe && i > 0 && elements[i-1].querySelector('.strophe')) {
-                // Suche nach dem Beginn der Strophengruppe
-                let j = i - 1;
-                while (j >= 0 && elements[j].querySelector('.strophe')) {
-                    j--;
-                }
+        // Wenn die Gruppe auf die aktuelle Seite passt oder es die erste Gruppe auf der Seite ist
+        if (currentY - groupHeight >= margin.bottom || currentY === pageSize.height - margin.top) {
+            // Gruppe passt auf die Seite, verarbeite alle Elemente
+            for (const element of group) {
+                const elementHeight = estimatePDFElementHeight(element, globalConfig);
+                currentY -= elementHeight;
                 
-                insertPageBreakMarker(elements[j], pageNumber, format);
-                pageNumber++;
-                currentY = pageSize.height - margin.top;
-            }
-            // Normale Umbruchbehandlung
-            else {
-                insertPageBreakMarker(elements[i-1] || element, pageNumber, format);
-                pageNumber++;
-                currentY = pageSize.height - margin.top - elementHeight;
+                // Standard-Abstand nach jedem Element
+                currentY -= scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
+                processedElements++;
             }
         } else {
-            // Element passt auf die aktuelle Seite
-            currentY -= elementHeight;
+            // Gruppe passt nicht auf aktuelle Seite, füge Umbruch ein
+            if (processedElements > 0) {
+                breakPositions.push({
+                    afterElement: elements[processedElements - 1],
+                    pageNumber: pageNumber,
+                    type: 'auto'
+                });
+                
+                pageNumber++;
+                currentY = pageSize.height - margin.top;
+                
+                // Jetzt verarbeite die Gruppe auf der neuen Seite
+                for (const element of group) {
+                    const elementHeight = estimatePDFElementHeight(element, globalConfig);
+                    currentY -= elementHeight;
+                    
+                    // Standard-Abstand nach jedem Element
+                    currentY -= scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
+                    processedElements++;
+                }
+            }
         }
-        
-        // Nach jedem Element einen Standardabstand abziehen
-        currentY -= scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
     }
+    
+    // Gehe durch alle erkannten Bruchpositionen und füge Marker ein
+    for (const breakInfo of breakPositions) {
+        insertPageBreakMarker(breakInfo.afterElement, breakInfo.pageNumber, format);
+    }
+}
+
+function estimateGroupHeight(group) {
+    let totalHeight = 0;
+    
+    for (const element of group) {
+        totalHeight += estimatePDFElementHeight(element, globalConfig);
+        totalHeight += scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
+    }
+    
+    return totalHeight;
 }
 
 /**

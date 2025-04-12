@@ -196,7 +196,9 @@ async function generatePDF(format) {
     async function drawText(text, x, y, fontSize, maxWidth, options = {}) {
         const { 
             bold, italic, underline, alignment, indent, isCopyright, isRefrain, isStrophe, 
-            isLastElement, isHeading, isQuillHeading, afterIcon, isFirstOnPage 
+            isLastElement, isHeading, isQuillHeading, afterIcon, isFirstOnPage,
+            // Neue Optionen für Gruppeninformationen
+            isInGroup, groupIndex, elementIndex, totalElements
         } = options;
         
         let font;
@@ -228,8 +230,50 @@ async function generatePDF(format) {
         const lines = await splitTextToLines(text, font, fontSize, maxWidth - indent);
         let currentY = y;
         
+        // Prüfe, ob der gesamte Text auf die Seite passt
+        const totalTextHeight = lines.length * fontSize * lineHeight;
+        const willFitOnPage = currentY - totalTextHeight >= margin.bottom;
+        
+        // Wenn der Text nicht passt und zu einer Gruppe gehört, prüfe die Gruppenzugehörigkeit
+        if (!willFitOnPage && isInGroup) {
+            // Wenn es sich um das erste Element einer Gruppe handelt, füge einen Seitenumbruch ein
+            if (elementIndex === 0 || isStrophe && lines.length > 1) {
+                console.log("Element belongs to a group and needs a page break");
+                ({ page, y } = addPage());
+                currentY = y;
+            }
+            // Wenn es ein Folgeelement einer Gruppe ist und die erste Zeile nicht passt,
+            // füge ebenfalls einen Seitenumbruch ein
+            else if (currentY - fontSize < margin.bottom) {
+                console.log("Follow-up element in group needs a page break");
+                ({ page, y } = addPage());
+                currentY = y;
+            }
+        }
+        
+        // Zeichne den Text zeilenweise
         for (const line of lines) {
+            // Prüfe, ob die aktuelle Zeile auf die Seite passt
             if (currentY - fontSize < margin.bottom) {
+                // Für Strophen: Wenn wir im ersten Drittel einer Strophe sind, verschiebe die ganze Strophe
+                if (isStrophe && (elementIndex / totalElements) < 0.3) {
+                    console.log("First part of strophe needs page break, moving entire strophe");
+                    ({ page, y } = addPage());
+                    currentY = y;
+                    // Zeichne alle Zeilen neu, beginnend mit der ersten
+                    return drawText(text, x, y, fontSize, maxWidth, options);
+                }
+                
+                // Für Titel: Verhindere Umbruch nach einem Titel
+                if (isHeading || options.isTitle) {
+                    console.log("Heading needs page break");
+                    ({ page, y } = addPage());
+                    currentY = y;
+                    // Zeichne den Titel neu auf der neuen Seite
+                    return drawText(text, x, y, fontSize, maxWidth, options);
+                }
+                
+                // Standardfall: Füge einen Seitenumbruch ein
                 ({ page, y } = addPage());
                 currentY = y;
             }
@@ -268,8 +312,9 @@ async function generatePDF(format) {
         
         // Anwenden des Abstands nach der Überschrift
         if (isHeading) {
-            console.log("Current spacing after heading:", currentSpacing.after);
-            currentY -= currentSpacing.after;
+            const headingSpacing = fontSize * 0.5; // Standard-Headingabstand
+            console.log("Adding spacing after heading:", headingSpacing);
+            currentY -= headingSpacing;
         }
         
         // Füge Abstand für Strophen und Refrains hinzu
@@ -441,19 +486,46 @@ async function generatePDF(format) {
     }
     
     const liedblattContent = document.getElementById('liedblatt-content');
-    const items = liedblattContent.children;
+    const items = Array.from(liedblattContent.children);
     
-    console.log("Processing liedblatt content...");
+    // Analysiere die Dokument-Struktur für bessere Umbruchentscheidungen
+    const elementGroups = identifyElementGroups(items);
+    
+    console.log("Processing liedblatt content with intelligent page breaks...");
     
     let lastItemType = null;
+    let currentGroupIndex = -1;
+    let currentGroup = null;
+    let elementsInCurrentGroup = [];
     
     showProgress(40, "Verarbeite Inhalte");
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        console.log("Processing item:", item.tagName, item.className);
         
+        // Suche die aktuelle Gruppe
+        const newGroupIndex = elementGroups.findIndex(group => group.includes(item));
+        
+        // Wenn wir eine neue Gruppe beginnen
+        if (newGroupIndex !== -1 && newGroupIndex !== currentGroupIndex) {
+            // Prüfe, ob die gesamte Gruppe auf die aktuelle Seite passt
+            const groupHeight = await estimateGroupHeight(elementGroups[newGroupIndex], scaledFontSize, globalConfig, contentWidth);
+            
+            if (y - groupHeight < margin.bottom && y !== height - margin.top) {
+                console.log(`Group ${newGroupIndex} doesn't fit on current page, adding page break`);
+                ({ page, y } = addPage());
+            }
+            
+            currentGroupIndex = newGroupIndex;
+            elementsInCurrentGroup = elementGroups[newGroupIndex];
+        }
+        
+        // Verarbeite das Element wie gewohnt, aber mit Gruppeninformationen
+        const isInGroup = currentGroupIndex !== -1;
+        const indexInGroup = isInGroup ? elementsInCurrentGroup.indexOf(item) : -1;
+        
+        // Manueller Seitenumbruch
         if (item.classList.contains('page-break')) {
-            console.log("Page break detected");
+            console.log("Manual page break detected");
             ({ page, y } = addPage());
             continue;
         }
@@ -461,6 +533,7 @@ async function generatePDF(format) {
         const isFirstOnPage = y === height - margin.top;
         const afterIcon = items[i - 1] && items[i - 1].querySelector('.fas, .trenner-default-img');
         
+        // Zeichne Icons
         if (item.querySelector('.fas, .trenner-default-img')) {
             let iconType = 'default';
             const iconElement = item.querySelector('.fas, .trenner-default-img');
@@ -474,6 +547,18 @@ async function generatePDF(format) {
         } else {
             const elements = item.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
             
+            // Prüfe, ob die Elementgruppe auf die aktuelle Seite passt
+            if (currentGroupIndex !== -1 && !isFirstOnPage) {
+                const groupHeight = await estimateGroupHeight(elementGroups[currentGroupIndex], scaledFontSize, globalConfig);
+                
+                // Wenn die Gruppe nicht auf die aktuelle Seite passt, füge einen Seitenumbruch ein
+                if (y - groupHeight < margin.bottom) {
+                    console.log("Group doesn't fit on current page, adding page break");
+                    ({ page, y } = addPage());
+                }
+            }
+            
+            // Verarbeite die einzelnen Elemente in der Gruppe
             for (let j = 0; j < elements.length; j++) {
                 const element = elements[j];
                 
@@ -519,6 +604,14 @@ async function generatePDF(format) {
                         marginBottom = scaleValue(COPYRIGHT_MARGIN_BOTTOM, scaledFontSize);
                     }
                     const nextElement = elements[j + 1];
+                    const elementOptions = {
+                        bold: /* ... vorhandene Optionen ... */,
+                        // Zusätzliche Informationen für intelligente Umbruchentscheidungen
+                        isInGroup,
+                        groupIndex: currentGroupIndex,
+                        indexInGroup,
+                        totalElementsInGroup: isInGroup ? elementsInCurrentGroup.length : 1
+                    };
                     const isNextCopyright = nextElement && nextElement.classList.contains('copyright-info');
                     
                     if (isHeading && isNextCopyright) {
@@ -542,7 +635,12 @@ async function generatePDF(format) {
                         isHeading: isHeading,
                         isQuillHeading: isQuillHeading,
                         afterIcon: afterIcon,
-                        isFirstOnPage: isFirstOnPage
+                        isFirstOnPage: isFirstOnPage,
+                        // Gruppeninformationen
+                        isInGroup: isInGroup,
+                        groupIndex: currentGroupIndex,
+                        elementIndex: j,
+                        totalElements: elements.length
                     };
                     
                     console.log('isQuillHeading:', options.isQuillHeading, 'Item:', item);
@@ -611,6 +709,182 @@ async function generatePDF(format) {
         progressContainer.style.display = 'none';
     }
 }
+
+/**
+* Identifiziert zusammengehörige Elementgruppen, die nicht getrennt werden sollten
+* @param {Array} items - Alle Elemente im Dokument
+* @returns {Array} - Array von Element-Gruppen
+*/
+function identifyElementGroups(items) {
+    const groups = [];
+    let currentGroup = [];
+    let inStropheGroup = false;
+    let inTitleGroup = false;
+    
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        
+        // Manueller Seitenumbruch beendet eine Gruppe
+        if (item.classList.contains('page-break')) {
+            if (currentGroup.length > 0) {
+                groups.push([...currentGroup]);
+                currentGroup = [];
+            }
+            inStropheGroup = false;
+            inTitleGroup = false;
+            continue;
+        }
+        
+        // Prüfe, ob es ein Titel ist
+        const isItemTitle = isTitle(item);
+        
+        // Prüfe, ob es eine Strophe oder ein Refrain ist
+        const isItemStropheOrRefrain = isStropheOrRefrain(item);
+        
+        // Wenn wir einen Titel gefunden haben, beginne eine neue Titel-Gruppe
+        if (isItemTitle) {
+            // Wenn bereits eine Gruppe aktiv ist, beende sie
+            if (currentGroup.length > 0 && !inTitleGroup) {
+                groups.push([...currentGroup]);
+                currentGroup = [];
+            }
+            
+            // Starte eine neue Titel-Gruppe
+            currentGroup.push(item);
+            inTitleGroup = true;
+            continue;
+        }
+        
+        // Wenn wir eine Strophe/Refrain nach einem Titel haben, füge es zur Titelgruppe hinzu
+        if (isItemStropheOrRefrain && inTitleGroup) {
+            currentGroup.push(item);
+            continue;
+        }
+        
+        // Wenn wir eine Strophe/Refrain haben, aber nicht in einer Titelgruppe sind
+        if (isItemStropheOrRefrain) {
+            // Wenn keine Gruppe aktiv ist, beginne eine neue
+            if (currentGroup.length === 0) {
+                currentGroup.push(item);
+                inStropheGroup = true;
+            } 
+            // Wenn bereits eine Strophengruppe aktiv ist, füge es hinzu
+            else if (inStropheGroup) {
+                currentGroup.push(item);
+            } 
+            // Sonst beginne eine neue Gruppe
+            else {
+                groups.push([...currentGroup]);
+                currentGroup = [item];
+                inStropheGroup = true;
+                inTitleGroup = false;
+            }
+            continue;
+        }
+        
+        // Für andere Elemente, die nicht zu speziellen Gruppen gehören
+        if (currentGroup.length > 0) {
+            groups.push([...currentGroup]);
+        }
+        
+        currentGroup = [item];
+        inStropheGroup = false;
+        inTitleGroup = false;
+    }
+    
+    // Füge die letzte Gruppe hinzu, falls vorhanden
+    if (currentGroup.length > 0) {
+        groups.push(currentGroup);
+    }
+    
+    return groups;
+}
+
+/**
+* Schätzt die Höhe einer Gruppe von Elementen
+* @param {Array} group - Gruppe von Elementen
+* @param {number} fontSize - Aktuelle Schriftgröße
+* @param {Object} config - Globale Konfiguration
+* @returns {number} - Geschätzte Höhe der Gruppe
+*/
+async function estimateGroupHeight(group, fontSize, config, availableWidth) {
+    let totalHeight = 0;
+    
+    for (const item of group) {
+        const elements = item.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
+        
+        for (const element of elements) {
+            if (element.tagName === 'IMG') {
+                // Bild-Höhe schätzen
+                const img = element;
+                const imgWidth = availableWidth;
+                const imgHeight = img.naturalHeight && img.naturalWidth ? 
+                (img.naturalHeight / img.naturalWidth) * imgWidth : 
+                scaleValue(DEFAULT_OBJECT_SPACING * 2, fontSize); // Fallback, wenn keine Dimensionen verfügbar
+                totalHeight += imgHeight + scaleValue(IMAGE_MARGIN_TOP, fontSize) + scaleValue(IMAGE_MARGIN_BOTTOM, fontSize);
+            } else {
+                // Text-Höhe schätzen
+                let elementFontSize = fontSize;
+                
+                if (element.tagName === 'H1') {
+                    elementFontSize = fontSize * HEADING_1_SCALE;
+                } else if (element.tagName === 'H2') {
+                    elementFontSize = fontSize * HEADING_2_SCALE;
+                } else if (element.tagName === 'H3') {
+                    elementFontSize = fontSize * HEADING_3_SCALE;
+                }
+                
+                const lineHeight = config.lineHeight;
+                const text = element.innerText;
+                const lines = estimateNumberOfLines(text, elementFontSize, availableWidth);
+                
+                totalHeight += lines * elementFontSize * lineHeight;
+                
+                // Zusätzliche Abstände
+                if (element.classList.contains('strophe') || element.classList.contains('refrain')) {
+                    totalHeight += scaleValue(STROPHE_SPACING, fontSize);
+                }
+            }
+        }
+        
+        // Standard-Abstand nach jedem Element
+        totalHeight += scaleValue(DEFAULT_OBJECT_SPACING, fontSize);
+    }
+    
+    return totalHeight;
+}
+/**
+* Schätzt die Anzahl der Zeilen für einen Text
+* @param {string} text - Der zu messende Text
+* @param {number} fontSize - Aktuelle Schriftgröße
+* @param {number} maxWidth - Maximale Breite
+* @returns {number} - Geschätzte Anzahl von Zeilen
+*/
+function estimateNumberOfLines(text, fontSize, maxWidth) {
+    // Dies ist eine vereinfachte Schätzung; in der Realität wird font.widthOfTextAtSize verwendet
+    const averageCharWidth = fontSize * 0.6; // Grobe Schätzung der durchschnittlichen Zeichenbreite
+    const charsPerLine = Math.floor(maxWidth / averageCharWidth);
+    
+    // Aufteilen nach Wörtern und Berechnung der Zeilen
+    const words = text.split(' ');
+    let lines = 1;
+    let currentLineLength = 0;
+    
+    for (const word of words) {
+        // Wortlänge plus ein Leerzeichen
+        const wordLength = word.length + 1;
+        
+        if (currentLineLength + wordLength <= charsPerLine) {
+            currentLineLength += wordLength;
+        } else {
+            lines++;
+            currentLineLength = wordLength;
+        }
+    }
+    
+    return Math.max(1, lines);
+}
+
 
 function ensureEvenPageCount(doc) {
     const pageCount = doc.getPageCount();
