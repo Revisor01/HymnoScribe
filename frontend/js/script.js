@@ -20,7 +20,8 @@ import {
     updateSessionsList,
     updateVorlagenList,
     saveCurrentSessionAsVorlage,
-    showSessionsAndVorlagen
+    showSessionsAndVorlagen,
+    debouncedSaveSession
 } from './sessionManagement.js';
 
 import {
