@@ -47,6 +47,8 @@ import {
     quillInstances
 } from './liedblattManagement.js';
 
+import { initPreviewFormatSelector } from './previewPageBreaks.js';
+
 import {
     initializeDragAndDrop,
     handleDragStart,
@@ -88,6 +90,9 @@ async function initializeApp() {
         await loadVorlagenList();
         updateUIBasedOnUserRole();
         applyGlobalConfig(document.getElementById('liedblatt-content'));
+        
+        initPreviewFormatSelector();
+        
         updateLiedblatt();
         
         // Rufen Sie loadObjekte alle 5 Minuten auf
@@ -511,6 +516,22 @@ function setupEventListeners() {
             updateGlobalConfig(newConfig);
         }
     });
+    
+    const previewFormatSelect = document.getElementById('previewFormat');
+    if (previewFormatSelect) {
+        previewFormatSelect.addEventListener('change', function(e) {
+            const selectedFormat = e.target.value;
+            
+            // Speichere das ausgewählte Format in der globalen Konfiguration
+            if (selectedFormat) {
+                globalConfig.previewFormat = selectedFormat;
+                saveConfigToLocalStorage();
+                
+                // Aktualisiere die Vorschau mit den Seitenumbrüchen
+                updateLiedblatt();
+            }
+        });
+    }
     
     const poolSearch = document.getElementById('poolSearch');
     const deleteLogoBtn = document.getElementById('deleteLogo');

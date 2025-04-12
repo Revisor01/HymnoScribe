@@ -2,6 +2,7 @@
 import { saveSessionToLocalStorage } from './sessionManagement.js';
 import { globalConfig, getImagePath, applyGlobalConfig } from './script.js';
 import { authenticatedFetch, customAlert, customConfirm, customPrompt } from './utils.js';
+import { updatePreviewWithPageBreaks } from './previewPageBreaks.js';
 
 export function getTrennerIconClass(type) {
     switch (type) {
@@ -335,8 +336,8 @@ export function updateLiedblatt() {
                 
                 content.appendChild(copyrightElement);
             }
-        
-        
+            
+            
             const showNotes = selected.querySelector('input[type="checkbox"]').checked;
             const noteType = selected.querySelector('input[name^="noteType"]:checked')?.value;
             if (showNotes && noteType) {
@@ -489,10 +490,14 @@ export function updateLiedblatt() {
         
         liedblattContent.appendChild(content);
     });
+    
     saveSessionToLocalStorage();
     initLazyLoading();
-}
     
+    const previewFormat = document.getElementById('previewFormat')?.value || 'a5';
+    updatePreviewWithPageBreaks(previewFormat);
+}
+
 export function formatQuillHTML(htmlContent) {
     // Ersetze <strong> durch <span style="font-weight: bold;">
     htmlContent = htmlContent.replace(/<strong>/g, '<p style="font-weight: bold;">')

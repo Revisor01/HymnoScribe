@@ -79,6 +79,53 @@
     margin: 20px 0;
 }
 
+.preview-page-break {
+        border-top: 2px dashed #ff0000;
+        margin: 10px 0;
+        position: relative;
+        padding-top: 5px;
+        text-align: right;
+    }
+
+    .preview-page-break::after {
+        content: "Automatischer Seitenumbruch";
+        position: absolute;
+        right: 0;
+        top: -10px;
+        background-color: white;
+        padding: 0 5px;
+        font-size: 10px;
+        color: #ff0000;
+    }
+
+    .preview-format-container {
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+    }
+
+    .preview-format-container label {
+        margin-right: 10px;
+    }
+
+    /* Stil für die Seitenvorschau */
+    .page-preview {
+        border: 1px solid #ddd;
+        margin-bottom: 20px;
+        padding: 10px;
+        background-color: #fff;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .page-preview-header {
+        font-size: 10px;
+        color: #888;
+        text-align: right;
+        margin-bottom: 5px;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 5px;
+    }
+
 /* Styling für den Theme-Switcher */
 #theme-switcher {
     appearance: none;
