@@ -494,8 +494,21 @@ export function updateLiedblatt() {
     saveSessionToLocalStorage();
     initLazyLoading();
     
-    const previewFormat = document.getElementById('previewFormat')?.value || 'a5';
-    updatePreviewWithPageBreaks(previewFormat);
+    // Fügen Sie diese Zeile hinzu, um die Seitenumbrüche zu aktualisieren
+    try {
+        // Hole das aktuell ausgewählte Format aus dem Dropdown
+        const previewFormatSelect = document.getElementById('previewFormat');
+        if (previewFormatSelect) {
+            const selectedFormat = previewFormatSelect.value;
+            
+            // Verzögerung hinzufügen, um sicherzustellen, dass alle Bilder geladen sind
+            setTimeout(() => {
+                updatePreviewWithPageBreaks(selectedFormat);
+            }, 100);
+        }
+    } catch (error) {
+        console.error("Fehler bei der Aktualisierung der Seitenumbruchvorschau:", error);
+    }
 }
 
 export function formatQuillHTML(htmlContent) {

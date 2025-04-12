@@ -47,7 +47,7 @@ import {
     quillInstances
 } from './liedblattManagement.js';
 
-import { initPreviewFormatSelector } from './previewPageBreaks.js';
+import { initPreviewFormatSelector, updatePreviewWithPageBreaks } from './previewPageBreaks.js';
 
 import {
     initializeDragAndDrop,
@@ -91,7 +91,11 @@ async function initializeApp() {
         updateUIBasedOnUserRole();
         applyGlobalConfig(document.getElementById('liedblatt-content'));
         
-        initPreviewFormatSelector();
+        // NEU: Initialisierung der Vorschau-Format-Auswahl
+        // Diese Zeile fügen Sie hinzu:
+        setTimeout(() => {
+            initPreviewFormatSelector();
+        }, 500);
         
         updateLiedblatt();
         
@@ -308,8 +312,18 @@ function updateLiedblattStyle() {
 }
 
 function saveConfigToLocalStorage() {
-    localStorage.setItem('liedblattConfig', JSON.stringify(globalConfig));
-    console.log("Config saved to localStorage:", globalConfig);
+    // NEU: Sicherstellen, dass das Vorschauformat gespeichert wird
+    const configToSave = {
+        fontFamily: globalConfig.fontFamily,
+        fontSize: globalConfig.fontSize,
+        textAlign: globalConfig.textAlign,
+        lineHeight: globalConfig.lineHeight,
+        churchLogo: globalConfig.churchLogo,
+        previewFormat: globalConfig.previewFormat || 'a5' // Default-Wert hinzufügen
+    };
+    
+    localStorage.setItem('liedblattConfig', JSON.stringify(configToSave));
+    console.log("Config saved to localStorage:", configToSave);
 }
 
 export function showConfigModal() {
@@ -528,7 +542,7 @@ function setupEventListeners() {
                 saveConfigToLocalStorage();
                 
                 // Aktualisiere die Vorschau mit den Seitenumbrüchen
-                updateLiedblatt();
+                updatePreviewWithPageBreaks(selectedFormat);
             }
         });
     }

@@ -74,18 +74,32 @@ export async function loadSession(id) {
     }
 }
 
-export function loadConfigFromLocalStorage() {
-    const savedConfig = localStorage.getItem('liedblattConfig');
-    if (savedConfig) {
-        try {
+function loadConfigFromLocalStorage() {
+    try {
+        const savedConfig = localStorage.getItem('liedblattConfig');
+        if (savedConfig) {
             const parsedConfig = JSON.parse(savedConfig);
-            Object.assign(globalConfig, parsedConfig);
-            console.log("Loaded config from localStorage:", globalConfig);
-        } catch (error) {
-            console.error("Error parsing saved config:", error);
+            
+            // Übernehme gespeicherte Werte
+            globalConfig.fontFamily = parsedConfig.fontFamily || 'Jost';
+            globalConfig.fontSize = parsedConfig.fontSize || 12;
+            globalConfig.textAlign = parsedConfig.textAlign || 'center';
+            globalConfig.lineHeight = parsedConfig.lineHeight || 1.5;
+            globalConfig.churchLogo = parsedConfig.churchLogo || null;
+            
+            // NEU: Vorschauformat hinzufügen
+            globalConfig.previewFormat = parsedConfig.previewFormat || 'a5';
+            
+            // Setze das Format in der Auswahlbox, wenn sie existiert
+            const previewFormatSelect = document.getElementById('previewFormat');
+            if (previewFormatSelect && globalConfig.previewFormat) {
+                previewFormatSelect.value = globalConfig.previewFormat;
+            }
+            
+            console.log("Konfiguration aus localStorage geladen:", globalConfig);
         }
-    } else {
-        console.log("No saved config found in localStorage");
+    } catch (error) {
+        console.error("Fehler beim Laden der Konfiguration:", error);
     }
 }
 

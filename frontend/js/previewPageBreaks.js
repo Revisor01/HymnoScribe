@@ -43,23 +43,21 @@ const previewPageSizes = {
     }
 };
 
-// Skalieren eines Wertes basierend auf der globalen Schriftgröße
-function scaleValue(value, fontSize) {
-    return (value / BASE_FONT_SIZE) * fontSize;
-}
-
 /**
  * Berechnet die Höhe eines Elements in der Vorschau
  * @param {HTMLElement} element - Das zu messende Element
- * @param {Object} globalConfig - Die globale Konfiguration
  * @returns {number} - Die Höhe des Elements in Pixeln
  */
-export function calculateElementHeight(element) {
+function calculateElementHeight(element) {
     if (!element) return 0;
     
     const computedStyle = window.getComputedStyle(element);
-    const marginTop = parseFloat(computedStyle.marginTop);
-    const marginBottom = parseFloat(computedStyle.marginBottom);
+    const marginTop = parseFloat(computedStyle.marginTop) || 0;
+    const marginBottom = parseFloat(computedStyle.marginBottom) || 0;
+    const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+    const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
+    const borderTopWidth = parseFloat(computedStyle.borderTopWidth) || 0;
+    const borderBottomWidth = parseFloat(computedStyle.borderBottomWidth) || 0;
 
     // Element-Höhe inklusive Padding, Border und Margin
     const totalHeight = element.offsetHeight + marginTop + marginBottom;
@@ -95,209 +93,168 @@ export function calculatePageBreaksForPreview(format = 'a5') {
     const existingAutoBreaks = liedblattContent.querySelectorAll('.preview-page-break');
     existingAutoBreaks.forEach(breakEl => breakEl.remove());
     
-    const elements = liedblattContent.children;
+    const elements = Array.from(liedblattContent.children);
     const breaks = [];
     let currentHeight = 0;
     let pageNumber = 1;
-    let currentPageElements = [];
     
-    const elementsWithHeight = [];
-
-    // Sammle alle Elemente und ihre geschätzte Höhe
+    // Array für Elemente mit ihren Eigenschaften
+    const elementsWithProps = [];
+    
+    // Sammle alle Elemente und ihre Eigenschaften
     for (let i = 0; i < elements.length; i++) {
         const element = elements[i];
         
-        // Wenn es ein manueller Seitenumbruch ist, beginne eine neue Seite
-        if (element.classList.contains('page-break')) {
-            if (currentPageElements.length > 0) {
-                breaks.push({
-                    type: 'manual',
-                    afterElement: currentPageElements[currentPageElements.length - 1],
-                    pageNumber: pageNumber
-                });
-                pageNumber++;
-                currentHeight = 0;
-                currentPageElements = [];
-            }
+        // Überspringe bereits vorhandene Seitenumbruch-Marker
+        if (element.classList.contains('preview-page-break')) {
             continue;
         }
         
-        // Höhe des aktuellen Elements berechnen
+        // Wenn es ein manueller Seitenumbruch ist
+        if (element.classList.contains('page-break')) {
+            elementsWithProps.push({
+                element: element,
+                isPageBreak: true,
+                height: 0
+            });
+            continue;
+        }
+        
+        // Höhe des Elements berechnen
         const elementHeight = calculateElementHeight(element);
         
-        // Loggen der Elementhöhe für Debugging-Zwecke
-        console.log(`Element ${i} (${element.tagName.toLowerCase()}${element.className ? '.' + element.className.split(' ').join('.') : ''}) Höhe: ${elementHeight}px`);
+        // Element-Typ bestimmen
+        const isTitle = element.querySelector('.item-title') !== null;
+        const isImageContent = element.classList.contains('image-content');
+        const isStrophe = element.querySelector('.strophe') !== null;
+        const isRefrain = element.querySelector('.refrain') !== null;
         
-        elementsWithHeight.push({
+        elementsWithProps.push({
             element: element,
             height: elementHeight,
-            isTitle: element.querySelector('.item-title') !== null,
-            isImageContent: element.classList.contains('image-content'),
-            isStrophe: element.querySelector('.strophe') !== null,
-            isRefrain: element.querySelector('.refrain') !== null
+            isTitle: isTitle,
+            isImageContent: isImageContent,
+            isStrophe: isStrophe,
+            isRefrain: isRefrain,
+            isPageBreak: false
         });
     }
-
-    // Verarbeite jetzt die Elemente mit der berechneten Höhe
-    currentHeight = 0;
     
-    for (let i = 0; i < elementsWithHeight.length; i++) {
-        const { element, height, isTitle, isImageContent, isStrophe, isRefrain } = elementsWithHeight[i];
+    // Aktuell verfügbare Höhe auf der ersten Seite
+    let remainingHeight = availableHeight;
+    
+    // Iteriere durch die Elemente und berechne Seitenumbrüche
+    for (let i = 0; i < elementsWithProps.length; i++) {
+        const elementProps = elementsWithProps[i];
         
-        // Füge das Element zur aktuellen Seite hinzu
-        currentPageElements.push(element);
+        // Bei einem manuellen Seitenumbruch
+        if (elementProps.isPageBreak) {
+            pageNumber++;
+            remainingHeight = availableHeight;
+            continue;
+        }
         
-        // Wenn dieses Element auf die aktuelle Seite nicht passt
-        if (currentHeight + height > availableHeight) {
-            // Spezielle Regeln für Lieder
-            let breakPosition = i - 1; // Standardmäßig vor dem aktuellen Element umbrechen
+        // Prüfen ob das Element auf die aktuelle Seite passt
+        if (elementProps.height > remainingHeight) {
+            // Element passt nicht auf aktuelle Seite - finde geeignete Umbruchstelle
             
             // Prüfen ob Umbruch zwischen Titel und Strophe wäre
             let titleBeforeStrophe = false;
-            if (i > 0 && elementsWithHeight[i-1].isTitle && (isStrophe || isRefrain)) {
+            if (i > 0 && elementsWithProps[i-1].isTitle && 
+                (elementProps.isStrophe || elementProps.isRefrain)) {
                 titleBeforeStrophe = true;
             }
             
             // Prüfen ob Umbruch innerhalb einer Strophe wäre
             let withinStrophe = false;
-            if (isStrophe && i > 0 && elementsWithHeight[i-1].isStrophe) {
+            if (elementProps.isStrophe && i > 0 && elementsWithProps[i-1].isStrophe) {
                 withinStrophe = true;
             }
             
-            // Wenn der Umbruch zwischen Titel und Strophe wäre oder innerhalb einer Strophe,
-            // versuche einen besseren Umbruchpunkt zu finden
+            // Entscheiden, wo der Umbruch erfolgen soll
+            let breakIndex = i - 1;
+            
+            // Wenn wir einen ungünstigen Umbruch haben, suchen wir einen besseren Umbruchpunkt
             if (titleBeforeStrophe || withinStrophe) {
-                // Gehe zurück bis zum Anfang des Liedes/der Strophe
-                let j = i - 1;
-                while (j >= 0) {
-                    if (!elementsWithHeight[j].isTitle && 
-                        !elementsWithHeight[j].isStrophe && 
-                        !elementsWithHeight[j].isRefrain) {
-                        breakPosition = j;
+                // Gehe zurück bis zum letzten nicht-Titel und nicht-Strophen Element
+                for (let j = i - 1; j >= 0; j--) {
+                    if (!elementsWithProps[j].isTitle && 
+                        !elementsWithProps[j].isStrophe && 
+                        !elementsWithProps[j].isRefrain) {
+                        breakIndex = j;
                         break;
                     }
-                    j--;
                 }
             }
             
-            // Füge einen Umbruch ein, wenn wir eine Position haben
-            if (breakPosition >= 0 && breakPosition < elementsWithHeight.length) {
+            // Füge den Seitenumbruch nach dem gefundenen Element hinzu
+            if (breakIndex >= 0) {
                 breaks.push({
-                    type: 'auto',
-                    afterElement: elementsWithHeight[breakPosition].element,
-                    pageNumber: pageNumber
+                    afterElementIndex: breakIndex,
+                    pageNumber: pageNumber,
+                    type: 'auto'
                 });
                 
-                // Berechne die Höhe neu für die nächste Seite
-                currentHeight = 0;
-                for (let j = breakPosition + 1; j <= i; j++) {
-                    currentHeight += elementsWithHeight[j].height;
-                }
-                
-                // Aktualisiere die aktuelle Seite
+                // Erhöhe die Seitenzahl und setze die verfügbare Höhe zurück
                 pageNumber++;
-                currentPageElements = elementsWithHeight.slice(breakPosition + 1, i + 1).map(e => e.element);
+                remainingHeight = availableHeight;
+                
+                // Ziehe die Höhe des aktuellen Elements ab
+                remainingHeight -= elementProps.height;
             } else {
-                // Wenn kein passender Umbruchpunkt gefunden wurde, breche einfach vor dem aktuellen Element um
-                breaks.push({
-                    type: 'auto',
-                    afterElement: elementsWithHeight[i-1].element,
-                    pageNumber: pageNumber
-                });
-                pageNumber++;
-                currentHeight = height;
-                currentPageElements = [element];
+                // Wenn kein passender Umbruchpunkt gefunden wurde
+                remainingHeight = availableHeight - elementProps.height;
             }
         } else {
-            // Wenn es passt, aktualisiere einfach die aktuelle Höhe
-            currentHeight += height;
+            // Element passt auf die aktuelle Seite
+            remainingHeight -= elementProps.height;
         }
     }
-
-    console.log("Berechnete Seitenumbrüche:", breaks);
-    return breaks;
+    
+    return { breaks, elementsWithProps };
 }
 
 /**
  * Fügt Seitenumbrüche in die Vorschau ein
- * @param {Array} pageBreaks - Die berechneten Positionen der Seitenumbrüche
+ * @param {Object} breakData - Die berechneten Seitenumbrüche und Element-Informationen
+ * @param {string} format - Das gewählte Format
  */
-export function applyPageBreaksToPreview(pageBreaks, format = 'a5') {
+export function applyPageBreaksToPreview(breakData, format = 'a5') {
+    const { breaks, elementsWithProps } = breakData;
     const liedblattContent = document.getElementById('liedblatt-content');
+    
     if (!liedblattContent) return;
     
-    // Entferne bestehende Seitenvorschauelemente
-    const existingPagePreviews = liedblattContent.querySelectorAll('.page-preview');
-    existingPagePreviews.forEach(preview => {
-        // Hole die Kindelemente und füge sie direkt in liedblattContent ein
-        const children = Array.from(preview.children);
-        children.forEach(child => {
-            if (!child.classList.contains('page-preview-header')) {
-                liedblattContent.insertBefore(child, preview);
-            }
-        });
-        liedblattContent.removeChild(preview);
-    });
-    
-    // Entferne alle bestehenden Seitenumbrüche in der Vorschau
+    // Entferne bestehende Seitenumbruchmarkierungen
     const existingBreaks = liedblattContent.querySelectorAll('.preview-page-break');
     existingBreaks.forEach(breakEl => breakEl.remove());
     
-    // Wenn keine Seitenumbrüche vorhanden sind, beenden
-    if (!pageBreaks || pageBreaks.length === 0) return;
+    // Wenn keine Umbrüche vorhanden sind, beenden
+    if (!breaks || breaks.length === 0) return;
     
+    // Das gewählte Format für die Anzeige
     const pageSize = previewPageSizes[format] || previewPageSizes['a5'];
     
-    // Umhülle Inhalte in Seitenvorschauelemente
-    const allElements = Array.from(liedblattContent.children);
-    let currentPageElements = [];
-    let pageCounter = 1;
-    
-    // Erstelle die erste Seite
-    let currentPage = document.createElement('div');
-    currentPage.className = 'page-preview';
-    currentPage.style.width = `${pageSize.width * 0.9}px`; // Etwas kleiner für die Anzeige
-    
-    // Füge den Seitenkopf hinzu
-    const pageHeader = document.createElement('div');
-    pageHeader.className = 'page-preview-header';
-    pageHeader.textContent = `Seite ${pageCounter} - ${pageSize.name}`;
-    currentPage.appendChild(pageHeader);
-    
-    liedblattContent.insertBefore(currentPage, liedblattContent.firstChild);
-    
-    // Füge die Elemente den Seiten hinzu
-    for (let i = 0; i < allElements.length; i++) {
-        const element = allElements[i];
-        
-        // Prüfe, ob nach diesem Element ein Umbruch kommt
-        const hasBreakAfter = pageBreaks.some(breakInfo => 
-            breakInfo.afterElement === element
-        );
-        
-        // Füge das aktuelle Element zur Seite hinzu
-        if (element.parentNode !== currentPage) {
-            currentPage.appendChild(element);
+    // Füge Umbruchmarkierungen für jede berechnete Umbruchstelle ein
+    breaks.forEach(breakInfo => {
+        if (breakInfo.type === 'auto') {
+            // Finde das Element, nach dem der Umbruch erfolgen soll
+            const elementAfterBreak = elementsWithProps[breakInfo.afterElementIndex].element;
+            
+            // Erstelle die Umbruchmarkierung
+            const pageBreakMarker = document.createElement('div');
+            pageBreakMarker.className = 'preview-page-break';
+            pageBreakMarker.dataset.pageNumber = breakInfo.pageNumber;
+            pageBreakMarker.dataset.formatName = pageSize.name;
+            
+            // Füge die Umbruchmarkierung nach dem entsprechenden Element ein
+            if (elementAfterBreak.nextSibling) {
+                liedblattContent.insertBefore(pageBreakMarker, elementAfterBreak.nextSibling);
+            } else {
+                liedblattContent.appendChild(pageBreakMarker);
+            }
         }
-        
-        // Wenn ein Umbruch kommt, erstelle eine neue Seite
-        if (hasBreakAfter) {
-            pageCounter++;
-            
-            // Erstelle eine neue Seite
-            currentPage = document.createElement('div');
-            currentPage.className = 'page-preview';
-            currentPage.style.width = `${pageSize.width * 0.9}px`;
-            
-            // Füge den Seitenkopf hinzu
-            const pageHeader = document.createElement('div');
-            pageHeader.className = 'page-preview-header';
-            pageHeader.textContent = `Seite ${pageCounter} - ${pageSize.name}`;
-            currentPage.appendChild(pageHeader);
-            
-            liedblattContent.appendChild(currentPage);
-        }
-    }
+    });
 }
 
 /**
@@ -307,11 +264,15 @@ export function applyPageBreaksToPreview(pageBreaks, format = 'a5') {
 export function updatePreviewWithPageBreaks(format = 'a5') {
     console.log("Aktualisiere Vorschau mit Seitenumbrüchen für Format:", format);
     
-    // Berechnete Seitenumbrüche
-    const pageBreaks = calculatePageBreaksForPreview(format);
-    
-    // Anwenden der Seitenumbrüche in der Vorschau
-    applyPageBreaksToPreview(pageBreaks, format);
+    try {
+        // Berechnete Seitenumbrüche
+        const breakData = calculatePageBreaksForPreview(format);
+        
+        // Anwenden der Seitenumbrüche in der Vorschau
+        applyPageBreaksToPreview(breakData, format);
+    } catch (error) {
+        console.error("Fehler bei der Berechnung der Seitenumbrüche:", error);
+    }
 }
 
 /**
@@ -319,7 +280,10 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
  */
 export function initPreviewFormatSelector() {
     const previewFormatSelect = document.getElementById('previewFormat');
-    if (!previewFormatSelect) return;
+    if (!previewFormatSelect) {
+        console.error("Format-Auswahl für Vorschau nicht gefunden!");
+        return;
+    }
     
     // Event-Listener für Änderungen des Vorschauformats
     previewFormatSelect.addEventListener('change', (e) => {
@@ -328,7 +292,9 @@ export function initPreviewFormatSelector() {
     });
     
     // Initiale Aktualisierung mit dem Standardformat
-    updatePreviewWithPageBreaks(previewFormatSelect.value);
+    setTimeout(() => {
+        updatePreviewWithPageBreaks(previewFormatSelect.value);
+    }, 500); // Kurze Verzögerung, damit alle Elemente gerendert sind
 }
 
 // Export der Funktionen
