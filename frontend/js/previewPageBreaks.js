@@ -334,9 +334,20 @@ function calculatePDFLikePageBreaks(format) {
         !el.classList.contains('preview-page-break')
     );
     
+    console.log(`PDF-Berechnung für ${format}: ${elements.length} Elemente gefunden`);
+    
     // Identifiziere die Element-Gruppen für intelligente Umbrüche
     const elementGroups = identifyElementGroups(elements);
     console.log("Identifizierte Elementgruppen:", elementGroups.length);
+    
+    // Debug: Gruppendetails ausgeben
+    elementGroups.forEach((group, index) => {
+        console.log(`Gruppe ${index + 1}: ${group.length} Elemente`);
+        console.log(" - Erster Elementtyp:", group[0].tagName, Array.from(group[0].classList));
+        const hasTitle = group.some(el => isTitle(el));
+        const hasStrophe = group.some(el => isStropheOrRefrain(el));
+        console.log(" - Enthält Titel:", hasTitle, "Enthält Strophe:", hasStrophe);
+    });
     
     // Sammle Seitenumbrüche
     const breakPositions = [];
@@ -349,9 +360,11 @@ function calculatePDFLikePageBreaks(format) {
         
         // Schätze die Höhe der gesamten Gruppe
         const groupHeight = estimateGroupHeight(group);
+        console.log(`Gruppe ${groupIndex + 1}: Geschätzte Höhe ${groupHeight}pt, Verfügbarer Platz: ${currentY - margin.bottom}pt`);
         
         // Wenn die Gruppe auf die aktuelle Seite passt oder es die erste Gruppe auf der Seite ist
         if (currentY - groupHeight >= margin.bottom || currentY === pageSize.height - margin.top) {
+            console.log(`Gruppe ${groupIndex + 1} passt auf aktuelle Seite`);
             // Gruppe passt auf die Seite, verarbeite alle Elemente
             for (const element of group) {
                 const elementHeight = estimatePDFElementHeight(element, globalConfig);
@@ -364,6 +377,7 @@ function calculatePDFLikePageBreaks(format) {
         } else {
             // Gruppe passt nicht auf aktuelle Seite, füge Umbruch ein
             if (processedElements > 0) {
+                console.log(`Gruppe ${groupIndex + 1} passt nicht - Seitenumbruch nach Element ${processedElements}`);
                 breakPositions.push({
                     afterElement: elements[processedElements - 1],
                     pageNumber: pageNumber,
@@ -382,9 +396,33 @@ function calculatePDFLikePageBreaks(format) {
                     currentY -= scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
                     processedElements++;
                 }
+            } else {
+                // Es ist die erste Gruppe auf der Seite, aber zu groß - trotzdem versuchen
+                console.log(`Gruppe ${groupIndex + 1} ist zu groß für eine Seite, aber wird trotzdem platziert (erste auf Seite)`);
+                for (const element of group) {
+                    const elementHeight = estimatePDFElementHeight(element, globalConfig);
+                    currentY -= elementHeight;
+                    
+                    // Standard-Abstand nach jedem Element
+                    currentY -= scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
+                    processedElements++;
+                    
+                    // Wenn kein Platz mehr ist, füge Umbruch ein und setze Y zurück
+                    if (currentY < margin.bottom && processedElements < elements.length) {
+                        breakPositions.push({
+                            afterElement: element,
+                            pageNumber: pageNumber,
+                            type: 'overflow'
+                        });
+                        pageNumber++;
+                        currentY = pageSize.height - margin.top;
+                    }
+                }
             }
         }
     }
+    
+    console.log("Berechnete Seitenumbrüche:", breakPositions.length);
     
     // Gehe durch alle erkannten Bruchpositionen und füge Marker ein
     for (const breakInfo of breakPositions) {
@@ -395,11 +433,30 @@ function calculatePDFLikePageBreaks(format) {
 function estimateGroupHeight(group) {
     let totalHeight = 0;
     
+    console.log("Schätze Gruppenhöhe für", group.length, "Elemente");
+    
+    // Vorabprüfung der Gruppe
+    const hasTitle = group.some(el => isTitle(el));
+    const hasStrophe = group.some(el => isStropheOrRefrain(el));
+    
+    // Zusätzlicher Puffer für Gruppen mit Titel und Strophen
+    const groupBuffer = (hasTitle && hasStrophe) ? 20 : 0;
+    
     for (const element of group) {
-        totalHeight += estimatePDFElementHeight(element, globalConfig);
+        const height = estimatePDFElementHeight(element, globalConfig);
+        totalHeight += height;
+        
+        // Debugging für jedes Element
+        console.log(` - Element (${element.tagName}): ${height}pt`);
+        
+        // Standard-Abstand zwischen Elementen
         totalHeight += scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
     }
     
+    // Gruppenbuffer für komplexere Gruppen hinzufügen
+    totalHeight += groupBuffer * PX_TO_PT_RATIO;
+    
+    console.log(`Geschätzte Gruppenhöhe: ${totalHeight}pt (mit Buffer: ${groupBuffer})`);
     return totalHeight;
 }
 

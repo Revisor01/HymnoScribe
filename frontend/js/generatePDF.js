@@ -529,8 +529,16 @@ async function generatePDF(format) {
     
     // Analysiere die Dokument-Struktur für bessere Umbruchentscheidungen
     const elementGroups = identifyElementGroups(items);
+    console.log("Gruppenerkennung für PDF:", elementGroups.length, "Gruppen identifiziert");
     
-    console.log("Processing liedblatt content with intelligent page breaks...");
+    // Debug-Ausgabe für besseres Verständnis der Gruppen
+    elementGroups.forEach((group, idx) => {
+        const types = group.map(el => {
+            const classes = Array.from(el.classList).join(' ');
+            return `${el.tagName}${classes ? ' (' + classes + ')' : ''}`;
+        });
+        console.log(`Gruppe ${idx + 1}: ${types.join(', ')}`);
+    });
     
     let lastItemType = null;
     let currentGroupIndex = -1;
@@ -770,6 +778,9 @@ async function generatePDF(format) {
 * @returns {Array} - Array von Element-Gruppen
 */
 function identifyElementGroups(items) {
+    // Debug-Ausgabe für bessere Nachvollziehbarkeit
+    console.log("Starte Gruppenerkennung mit", items.length, "Elementen");
+    
     const groups = [];
     let currentGroup = [];
     let inStropheGroup = false;
@@ -778,10 +789,18 @@ function identifyElementGroups(items) {
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
         
+        // Spezielle Debug-Ausgabe für jedes Element
+        console.log(`Verarbeite Element #${i}:`, {
+            isTitle: isTitle(item),
+            isStrophe: isStropheOrRefrain(item),
+            hasClass: Array.from(item.classList)
+        });
+        
         // Manueller Seitenumbruch beendet eine Gruppe
         if (item.classList.contains('page-break')) {
             if (currentGroup.length > 0) {
                 groups.push([...currentGroup]);
+                console.log("Gruppe beendet wegen Seitenumbruch:", currentGroup.length, "Elemente");
                 currentGroup = [];
             }
             inStropheGroup = false;
@@ -800,6 +819,7 @@ function identifyElementGroups(items) {
             // Wenn bereits eine Gruppe aktiv ist, beende sie
             if (currentGroup.length > 0 && !inTitleGroup) {
                 groups.push([...currentGroup]);
+                console.log("Neue Titelgruppe - vorherige Gruppe abgeschlossen:", currentGroup.length, "Elemente");
                 currentGroup = [];
             }
             
@@ -812,6 +832,7 @@ function identifyElementGroups(items) {
         // Wenn wir eine Strophe/Refrain nach einem Titel haben, füge es zur Titelgruppe hinzu
         if (isItemStropheOrRefrain && inTitleGroup) {
             currentGroup.push(item);
+            console.log("Strophe zu Titelgruppe hinzugefügt");
             continue;
         }
         
@@ -821,14 +842,17 @@ function identifyElementGroups(items) {
             if (currentGroup.length === 0) {
                 currentGroup.push(item);
                 inStropheGroup = true;
+                console.log("Neue Strophengruppe begonnen");
             } 
             // Wenn bereits eine Strophengruppe aktiv ist, füge es hinzu
             else if (inStropheGroup) {
                 currentGroup.push(item);
+                console.log("Strophe zu Strophengruppe hinzugefügt");
             } 
             // Sonst beginne eine neue Gruppe
             else {
                 groups.push([...currentGroup]);
+                console.log("Neue Strophengruppe - vorherige Gruppe abgeschlossen:", currentGroup.length, "Elemente");
                 currentGroup = [item];
                 inStropheGroup = true;
                 inTitleGroup = false;
@@ -839,6 +863,7 @@ function identifyElementGroups(items) {
         // Für andere Elemente, die nicht zu speziellen Gruppen gehören
         if (currentGroup.length > 0) {
             groups.push([...currentGroup]);
+            console.log("Gruppe mit normalen Elementen abgeschlossen:", currentGroup.length, "Elemente");
         }
         
         currentGroup = [item];
@@ -849,64 +874,168 @@ function identifyElementGroups(items) {
     // Füge die letzte Gruppe hinzu, falls vorhanden
     if (currentGroup.length > 0) {
         groups.push(currentGroup);
+        console.log("Letzte Gruppe hinzugefügt:", currentGroup.length, "Elemente");
     }
     
+    console.log("Gruppenerkennung abgeschlossen:", groups.length, "Gruppen identifiziert");
     return groups;
 }
 
 /**
-* Schätzt die Höhe einer Gruppe von Elementen
+* Verbesserte Schätzung der Höhe einer Gruppe von Elementen
 * @param {Array} group - Gruppe von Elementen
-* @param {number} fontSize - Aktuelle Schriftgröße
-* @param {Object} config - Globale Konfiguration
-* @returns {number} - Geschätzte Höhe der Gruppe
+* @returns {number} - Geschätzte Höhe der Gruppe in PT
 */
-async function estimateGroupHeight(group, fontSize, config, availableWidth) {
+function estimateGroupHeight(group) {
     let totalHeight = 0;
     
-    for (const item of group) {
-        const elements = item.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
+    console.log("Schätze Gruppenhöhe für", group.length, "Elemente");
+    
+    // Vorabprüfung der Gruppe
+    const hasTitle = group.some(el => isTitle(el));
+    const hasStrophe = group.some(el => isStropheOrRefrain(el));
+    
+    // Zusätzlicher Puffer für Gruppen mit Titel und Strophen
+    const groupBuffer = (hasTitle && hasStrophe) ? 20 : 0;
+    
+    for (const element of group) {
+        const height = estimatePDFElementHeight(element, globalConfig);
+        totalHeight += height;
         
-        for (const element of elements) {
-            if (element.tagName === 'IMG') {
-                // Bild-Höhe schätzen
-                const img = element;
-                const imgWidth = availableWidth;
-                const imgHeight = img.naturalHeight && img.naturalWidth ? 
-                (img.naturalHeight / img.naturalWidth) * imgWidth : 
-                scaleValue(DEFAULT_OBJECT_SPACING * 2, fontSize); // Fallback, wenn keine Dimensionen verfügbar
-                totalHeight += imgHeight + scaleValue(IMAGE_MARGIN_TOP, fontSize) + scaleValue(IMAGE_MARGIN_BOTTOM, fontSize);
-            } else {
-                // Text-Höhe schätzen
-                let elementFontSize = fontSize;
+        // Debugging für jedes Element
+        console.log(` - Element (${element.tagName}): ${height}pt`);
+        
+        // Standard-Abstand zwischen Elementen
+        totalHeight += scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
+    }
+    
+    // Gruppenbuffer für komplexere Gruppen hinzufügen
+    totalHeight += groupBuffer * PX_TO_PT_RATIO;
+    
+    console.log(`Geschätzte Gruppenhöhe: ${totalHeight}pt (mit Buffer: ${groupBuffer})`);
+    return totalHeight;
+}
+/**
+* Berechnet Seitenumbrüche mit verbesserter Gruppenerkennung
+* @param {string} format - Das gewählte Format
+*/
+function calculatePDFLikePageBreaks(format) {
+    const liedblattContent = document.getElementById('liedblatt-content');
+    if (!liedblattContent) return;
+    
+    // PDF-Seitengröße und Seitenränder
+    const pageSize = pageSizes[format];
+    const margin = { top: 30, right: 20, bottom: 20, left: 20 };
+    const contentWidth = pageSize.width - margin.left - margin.right;
+    
+    // Verfügbare Seitenhöhe (in PT)
+    const availableHeight = pageSize.height - margin.top - margin.bottom;
+    
+    // Aktuelle Y-Position (in PT), beginnt am oberen Rand
+    let currentY = pageSize.height - margin.top;
+    let pageNumber = 1;
+    
+    // Alle Elemente im Liedblatt analysieren
+    const elements = Array.from(liedblattContent.children).filter(el => 
+        !el.classList.contains('preview-page-break')
+    );
+    
+    console.log(`PDF-Berechnung für ${format}: ${elements.length} Elemente gefunden`);
+    
+    // Identifiziere die Element-Gruppen für intelligente Umbrüche
+    const elementGroups = identifyElementGroups(elements);
+    console.log("Identifizierte Elementgruppen:", elementGroups.length);
+    
+    // Debug: Gruppendetails ausgeben
+    elementGroups.forEach((group, index) => {
+        console.log(`Gruppe ${index + 1}: ${group.length} Elemente`);
+        console.log(" - Erster Elementtyp:", group[0].tagName, Array.from(group[0].classList));
+        const hasTitle = group.some(el => isTitle(el));
+        const hasStrophe = group.some(el => isStropheOrRefrain(el));
+        console.log(" - Enthält Titel:", hasTitle, "Enthält Strophe:", hasStrophe);
+    });
+    
+    // Sammle Seitenumbrüche
+    const breakPositions = [];
+    
+    // Gehe durch alle Gruppen und berechne deren Platz
+    let processedElements = 0;
+    
+    for (let groupIndex = 0; groupIndex < elementGroups.length; groupIndex++) {
+        const group = elementGroups[groupIndex];
+        
+        // Schätze die Höhe der gesamten Gruppe
+        const groupHeight = estimateGroupHeight(group);
+        console.log(`Gruppe ${groupIndex + 1}: Geschätzte Höhe ${groupHeight}pt, Verfügbarer Platz: ${currentY - margin.bottom}pt`);
+        
+        // Wenn die Gruppe auf die aktuelle Seite passt oder es die erste Gruppe auf der Seite ist
+        if (currentY - groupHeight >= margin.bottom || currentY === pageSize.height - margin.top) {
+            console.log(`Gruppe ${groupIndex + 1} passt auf aktuelle Seite`);
+            // Gruppe passt auf die Seite, verarbeite alle Elemente
+            for (const element of group) {
+                const elementHeight = estimatePDFElementHeight(element, globalConfig);
+                currentY -= elementHeight;
                 
-                if (element.tagName === 'H1') {
-                    elementFontSize = fontSize * HEADING_1_SCALE;
-                } else if (element.tagName === 'H2') {
-                    elementFontSize = fontSize * HEADING_2_SCALE;
-                } else if (element.tagName === 'H3') {
-                    elementFontSize = fontSize * HEADING_3_SCALE;
+                // Standard-Abstand nach jedem Element
+                currentY -= scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
+                processedElements++;
+            }
+        } else {
+            // Gruppe passt nicht auf aktuelle Seite, füge Umbruch ein
+            if (processedElements > 0) {
+                console.log(`Gruppe ${groupIndex + 1} passt nicht - Seitenumbruch nach Element ${processedElements}`);
+                breakPositions.push({
+                    afterElement: elements[processedElements - 1],
+                    pageNumber: pageNumber,
+                    type: 'auto'
+                });
+                
+                pageNumber++;
+                currentY = pageSize.height - margin.top;
+                
+                // Jetzt verarbeite die Gruppe auf der neuen Seite
+                for (const element of group) {
+                    const elementHeight = estimatePDFElementHeight(element, globalConfig);
+                    currentY -= elementHeight;
+                    
+                    // Standard-Abstand nach jedem Element
+                    currentY -= scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
+                    processedElements++;
                 }
-                
-                const lineHeight = config.lineHeight;
-                const text = element.innerText;
-                const lines = estimateNumberOfLines(text, elementFontSize, availableWidth);
-                
-                totalHeight += lines * elementFontSize * lineHeight;
-                
-                // Zusätzliche Abstände
-                if (element.classList.contains('strophe') || element.classList.contains('refrain')) {
-                    totalHeight += scaleValue(STROPHE_SPACING, fontSize);
+            } else {
+                // Es ist die erste Gruppe auf der Seite, aber zu groß - trotzdem versuchen
+                console.log(`Gruppe ${groupIndex + 1} ist zu groß für eine Seite, aber wird trotzdem platziert (erste auf Seite)`);
+                for (const element of group) {
+                    const elementHeight = estimatePDFElementHeight(element, globalConfig);
+                    currentY -= elementHeight;
+                    
+                    // Standard-Abstand nach jedem Element
+                    currentY -= scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
+                    processedElements++;
+                    
+                    // Wenn kein Platz mehr ist, füge Umbruch ein und setze Y zurück
+                    if (currentY < margin.bottom && processedElements < elements.length) {
+                        breakPositions.push({
+                            afterElement: element,
+                            pageNumber: pageNumber,
+                            type: 'overflow'
+                        });
+                        pageNumber++;
+                        currentY = pageSize.height - margin.top;
+                    }
                 }
             }
         }
-        
-        // Standard-Abstand nach jedem Element
-        totalHeight += scaleValue(DEFAULT_OBJECT_SPACING, fontSize);
     }
     
-    return totalHeight;
+    console.log("Berechnete Seitenumbrüche:", breakPositions.length);
+    
+    // Gehe durch alle erkannten Bruchpositionen und füge Marker ein
+    for (const breakInfo of breakPositions) {
+        insertPageBreakMarker(breakInfo.afterElement, breakInfo.pageNumber, format);
+    }
 }
+
 /**
 * Schätzt die Anzahl der Zeilen für einen Text
 * @param {string} text - Der zu messende Text
