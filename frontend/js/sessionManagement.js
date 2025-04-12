@@ -74,7 +74,7 @@ export async function loadSession(id) {
     }
 }
 
-export function loadConfigFromLocalStorage() {
+function loadConfigFromLocalStorage() {
     try {
         const savedConfig = localStorage.getItem('liedblattConfig');
         if (savedConfig) {
@@ -102,6 +102,26 @@ export function loadConfigFromLocalStorage() {
         console.error("Fehler beim Laden der Konfiguration:", error);
     }
 }
+
+let saveSessionTimeout = null;
+
+/**
+* Speichert die Session mit Debouncing, um zu häufige Speicheraufrufe zu vermeiden
+* @param {number} delay - Verzögerung in Millisekunden, Default 1000ms (1 Sekunde)
+*/
+export function debouncedSaveSession(delay = 1000) {
+    // Vorherigen Timeout löschen, falls vorhanden
+    if (saveSessionTimeout) {
+        clearTimeout(saveSessionTimeout);
+    }
+    
+    // Neuen Timeout setzen
+    saveSessionTimeout = setTimeout(() => {
+        saveSessionToLocalStorage();
+        console.log("Session gespeichert (debounced)");
+    }, delay);
+}
+
 
 export async function deleteSession(id) {
     const confirmed = await customConfirm('Sind Sie sicher, dass Sie diese Session löschen möchten?');

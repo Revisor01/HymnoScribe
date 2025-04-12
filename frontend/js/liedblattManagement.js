@@ -491,23 +491,26 @@ export function updateLiedblatt() {
         liedblattContent.appendChild(content);
     });
     
-    saveSessionToLocalStorage();
+    debouncedSaveSession();
     initLazyLoading();
     
-    // Fügen Sie diese Zeile hinzu, um die Seitenumbrüche zu aktualisieren
-    try {
-        // Hole das aktuell ausgewählte Format aus dem Dropdown
-        const previewFormatSelect = document.getElementById('previewFormat');
-        if (previewFormatSelect) {
-            const selectedFormat = previewFormatSelect.value;
+    const previewFormatSelect = document.getElementById('previewFormat');
+    if (previewFormatSelect) {
+        const selectedFormat = previewFormatSelect.value;
+        
+        // Längere Verzögerung um Race Conditions zu vermeiden
+        setTimeout(() => {
+            // Flag setzen, dass während der Seitenumbruchberechnung keine Session gespeichert werden soll
+            window.isUpdatingPageBreaks = true;
             
-            // Verzögerung hinzufügen, um sicherzustellen, dass alle Bilder geladen sind
-            setTimeout(() => {
+            try {
                 updatePreviewWithPageBreaks(selectedFormat);
-            }, 100);
-        }
-    } catch (error) {
-        console.error("Fehler bei der Aktualisierung der Seitenumbruchvorschau:", error);
+            } catch (error) {
+                console.error("Fehler bei der Aktualisierung der Seitenumbruchvorschau:", error);
+            } finally {
+                window.isUpdatingPageBreaks = false;
+            }
+        }, 200);
     }
 }
 

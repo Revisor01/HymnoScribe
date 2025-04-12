@@ -219,42 +219,69 @@ export function calculatePageBreaksForPreview(format = 'a5') {
  * @param {Object} breakData - Die berechneten Seitenumbrüche und Element-Informationen
  * @param {string} format - Das gewählte Format
  */
+// In previewPageBreaks.js
 export function applyPageBreaksToPreview(breakData, format = 'a5') {
     const { breaks, elementsWithProps } = breakData;
     const liedblattContent = document.getElementById('liedblatt-content');
     
-    if (!liedblattContent) return;
+    if (!liedblattContent || window.isUpdatingPageBreaks) return;
     
-    // Entferne bestehende Seitenumbruchmarkierungen
-    const existingBreaks = liedblattContent.querySelectorAll('.preview-page-break');
-    existingBreaks.forEach(breakEl => breakEl.remove());
+    // Event-Flag setzen, um Rekursion zu vermeiden
+    window.isUpdatingPageBreaks = true;
     
-    // Wenn keine Umbrüche vorhanden sind, beenden
-    if (!breaks || breaks.length === 0) return;
-    
-    // Das gewählte Format für die Anzeige
-    const pageSize = previewPageSizes[format] || previewPageSizes['a5'];
-    
-    // Füge Umbruchmarkierungen für jede berechnete Umbruchstelle ein
-    breaks.forEach(breakInfo => {
-        if (breakInfo.type === 'auto') {
-            // Finde das Element, nach dem der Umbruch erfolgen soll
-            const elementAfterBreak = elementsWithProps[breakInfo.afterElementIndex].element;
-            
-            // Erstelle die Umbruchmarkierung
-            const pageBreakMarker = document.createElement('div');
-            pageBreakMarker.className = 'preview-page-break';
-            pageBreakMarker.dataset.pageNumber = breakInfo.pageNumber;
-            pageBreakMarker.dataset.formatName = pageSize.name;
-            
-            // Füge die Umbruchmarkierung nach dem entsprechenden Element ein
-            if (elementAfterBreak.nextSibling) {
-                liedblattContent.insertBefore(pageBreakMarker, elementAfterBreak.nextSibling);
-            } else {
-                liedblattContent.appendChild(pageBreakMarker);
-            }
+    try {
+        // Existierende Umbrüche entfernen
+        const existingBreaks = liedblattContent.querySelectorAll('.preview-page-break');
+        
+        // Optimierung: Nur entfernen wenn nötig
+        if (existingBreaks.length > 0) {
+            existingBreaks.forEach(breakEl => breakEl.remove());
         }
-    });
+        
+        // Wenn keine Umbrüche vorhanden, direkt beenden
+        if (!breaks || breaks.length === 0) {
+            return;
+        }
+        
+        // Das gewählte Format für die Anzeige
+        const pageSize = previewPageSizes[format] || previewPageSizes['a5'];
+        
+        // DocumentFragment zur performanten DOM-Manipulation verwenden
+        const fragment = document.createDocumentFragment();
+        const markers = [];
+        
+        // Umbrüche erst sammeln
+        breaks.forEach(breakInfo => {
+            if (breakInfo.type === 'auto' && breakInfo.afterElementIndex >= 0 && 
+                breakInfo.afterElementIndex < elementsWithProps.length) {
+                    
+                    const elementAfterBreak = elementsWithProps[breakInfo.afterElementIndex].element;
+                    
+                    // Erstelle die Umbruchmarkierung
+                    const pageBreakMarker = document.createElement('div');
+                    pageBreakMarker.className = 'preview-page-break';
+                    pageBreakMarker.dataset.pageNumber = breakInfo.pageNumber;
+                    pageBreakMarker.dataset.formatName = pageSize.name;
+                    
+                    markers.push({
+                        marker: pageBreakMarker,
+                        elementAfter: elementAfterBreak
+                    });
+                }
+        });
+        
+        // Dann gesammelt einfügen, um DOM-Operationen zu minimieren
+        markers.forEach(({ marker, elementAfter }) => {
+            if (elementAfter.nextSibling) {
+                liedblattContent.insertBefore(marker, elementAfter.nextSibling);
+            } else {
+                liedblattContent.appendChild(marker);
+            }
+        });
+    } finally {
+        // Flag zurücksetzen
+        window.isUpdatingPageBreaks = false;
+    }
 }
 
 /**
@@ -285,16 +312,34 @@ export function initPreviewFormatSelector() {
         return;
     }
     
-    // Event-Listener für Änderungen des Vorschauformats
+    // Event-Listener mit Debouncing
+    let formatChangeTimeout;
     previewFormatSelect.addEventListener('change', (e) => {
+        if (formatChangeTimeout) {
+            clearTimeout(formatChangeTimeout);
+        }
+        
         const selectedFormat = e.target.value;
-        updatePreviewWithPageBreaks(selectedFormat);
+        
+        formatChangeTimeout = setTimeout(() => {
+            window.isUpdatingPageBreaks = true;
+            try {
+                updatePreviewWithPageBreaks(selectedFormat);
+            } finally {
+                window.isUpdatingPageBreaks = false;
+            }
+        }, 200);
     });
     
-    // Initiale Aktualisierung mit dem Standardformat
+    // Initiale Aktualisierung mit Verzögerung
     setTimeout(() => {
-        updatePreviewWithPageBreaks(previewFormatSelect.value);
-    }, 500); // Kurze Verzögerung, damit alle Elemente gerendert sind
+        window.isUpdatingPageBreaks = true;
+        try {
+            updatePreviewWithPageBreaks(previewFormatSelect.value);
+        } finally {
+            window.isUpdatingPageBreaks = false;
+        }
+    }, 500);
 }
 
 // Export der Funktionen
