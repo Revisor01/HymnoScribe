@@ -28,6 +28,45 @@ const QUILL_H3_MARGIN_BOTTOM = 5;
 const COPYRIGHT_MARGIN_TOP = -5;
 const COPYRIGHT_MARGIN_BOTTOM = -5;
 
+function isTitle(element) {
+    return element.querySelector('.item-title') !== null;
+}
+
+/**
+* Bestimmt, ob ein Element eine Strophe oder ein Refrain ist
+* @param {HTMLElement} element - Das zu prüfende Element
+* @returns {boolean} - True, wenn es sich um eine Strophe oder einen Refrain handelt
+*/
+function isStropheOrRefrain(element) {
+    return element.querySelector('.strophe') !== null || element.querySelector('.refrain') !== null;
+}
+
+/**
+* Prüft, ob ein Seitenumbruch an einer bestimmten Stelle vermieden werden sollte
+* @param {Array} elements - Alle Elemente des Dokuments
+* @param {number} currentIndex - Der aktuelle Index
+* @returns {boolean} - True, wenn der Umbruch vermieden werden sollte
+*/
+function shouldAvoidPageBreak(elements, currentIndex) {
+    if (currentIndex <= 0 || currentIndex >= elements.length) return false;
+    
+    const currentElement = elements[currentIndex];
+    const nextElement = elements[currentIndex + 1];
+    const prevElement = elements[currentIndex - 1];
+    
+    // Fall 1: Aktuelles Element ist ein Titel und das nächste eine Strophe/Refrain
+    if (isTitle(currentElement) && nextElement && isStropheOrRefrain(nextElement)) {
+        return true;
+    }
+    
+    // Fall 2: Vorheriges Element ist eine Strophe und aktuelles auch
+    if (prevElement && isStropheOrRefrain(prevElement) && isStropheOrRefrain(currentElement)) {
+        return true;
+    }
+    
+    return false;
+}
+
 // Funktion zum Skalieren der Werte basierend auf der globalen Schriftgröße
 function scaleValue(value, globalFontSize) {
     return (value / BASE_FONT_SIZE) * globalFontSize;
