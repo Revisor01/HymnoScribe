@@ -67,6 +67,53 @@ function shouldAvoidPageBreak(elements, currentIndex) {
     return false;
 }
 
+function estimatePDFElementHeight(element, config) {
+    const computedStyle = window.getComputedStyle(element);
+    
+    // Grundlegende Höhe vom DOM
+    let baseHeight = element.offsetHeight;
+    
+    // Schriftgröße und Zeilenabstand berücksichtigen
+    const fontSize = parseFloat(config.fontSize || 12);
+    const lineHeight = parseFloat(config.lineHeight || 1.5);
+    
+    // Besondere Behandlung für bestimmte Elementtypen
+    if (element.querySelector('.item-title')) {
+        // Titel haben größere Schrift
+        baseHeight *= HEADING_3_SCALE;
+    }
+    
+    if (element.querySelector('.strophe') || element.querySelector('.refrain')) {
+        // Text zählen und Zeilenanzahl schätzen
+        const textContent = element.textContent || '';
+        const totalChars = textContent.length;
+        const charsPerLine = 50; // Geschätzte Zeichen pro Zeile
+        const estimatedLines = Math.ceil(totalChars / charsPerLine);
+        
+        // Höhe basierend auf Zeilenanzahl, Schriftgröße und Zeilenabstand
+        const lineHeightPx = fontSize * lineHeight;
+        baseHeight = estimatedLines * lineHeightPx;
+        
+        // Zusätzlicher Abstand für Strophen
+        baseHeight += STROPHE_SPACING;
+    }
+    
+    if (element.querySelector('img')) {
+        // Bilder direkt messen
+        const img = element.querySelector('img');
+        baseHeight = img.offsetHeight;
+    }
+    
+    // Margins hinzufügen
+    const marginTop = parseFloat(computedStyle.marginTop) || 0;
+    const marginBottom = parseFloat(computedStyle.marginBottom) || 0;
+    baseHeight += marginTop + marginBottom;
+    
+    // In PT umrechnen für PDF-Kompatibilität
+    return baseHeight * PX_TO_PT_RATIO;
+}
+
+
 // Funktion zum Skalieren der Werte basierend auf der globalen Schriftgröße
 function scaleValue(value, globalFontSize) {
     return (value / BASE_FONT_SIZE) * globalFontSize;
