@@ -603,15 +603,8 @@ async function generatePDF(format) {
                         marginTop = scaleValue(COPYRIGHT_MARGIN_TOP, scaledFontSize);
                         marginBottom = scaleValue(COPYRIGHT_MARGIN_BOTTOM, scaledFontSize);
                     }
+                    
                     const nextElement = elements[j + 1];
-                    const elementOptions = {
-                        bold: /* ... vorhandene Optionen ... */,
-                        // Zusätzliche Informationen für intelligente Umbruchentscheidungen
-                        isInGroup,
-                        groupIndex: currentGroupIndex,
-                        indexInGroup,
-                        totalElementsInGroup: isInGroup ? elementsInCurrentGroup.length : 1
-                    };
                     const isNextCopyright = nextElement && nextElement.classList.contains('copyright-info');
                     
                     if (isHeading && isNextCopyright) {
@@ -622,7 +615,29 @@ async function generatePDF(format) {
                         y -= marginTop;
                     }
                     
-                    let options = {
+                    // Definiere gemeinsame Eigenschaften für Textdarstellung
+                    const textProperties = {
+                        fontWeight: window.getComputedStyle(element).fontWeight,
+                        fontStyle: window.getComputedStyle(element).fontStyle,
+                        textDecoration: window.getComputedStyle(element).textDecoration,
+                        textAlign: window.getComputedStyle(element).textAlign,
+                        paddingLeft: window.getComputedStyle(element).paddingLeft
+                    };
+                    
+                    // Bestimme Formateigenschaften
+                    const isBold = element.tagName === 'STRONG' || 
+                    textProperties.fontWeight === 'bold' || 
+                    parseInt(textProperties.fontWeight) >= 700;
+                    
+                    const isItalic = isRefrain || 
+                    element.tagName === 'EM' || 
+                    textProperties.fontStyle === 'italic';
+                    
+                    const isUnderlined = element.tagName === 'U' || 
+                    textProperties.textDecoration.includes('underline');
+                    
+                    // Die Variable indexInGroup wird nicht definiert - stattdessen verwenden wir j als elementIndex
+                    const options = {
                         bold: element.tagName === 'STRONG' || window.getComputedStyle(element).fontWeight === 'bold' || parseInt(window.getComputedStyle(element).fontWeight) >= 700,
                         italic: isRefrain || element.tagName === 'EM' || window.getComputedStyle(element).fontStyle === 'italic',
                         underline: element.tagName === 'U' || window.getComputedStyle(element).textDecoration.includes('underline'),
