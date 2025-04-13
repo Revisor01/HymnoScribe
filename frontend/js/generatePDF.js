@@ -601,11 +601,25 @@ async function generatePDF(format) {
     const margin = { top: 30, right: 20, bottom: 20, left: 20 };
     const contentWidth = width - margin.left - margin.right;
     
-    let page = doc.addPage([width, height]);
-    let y = height - margin.top;
+    // PDF-Kontext als zentrale Verwaltung des aktuellen Zustands
+    // Dies ist der KRITISCHE FIX für das Problem
+    const pdfContext = {
+        doc,
+        page: null,
+        y: 0,
+        width,
+        height,
+        margin,
+        contentWidth,
+        fonts,
+        logoImage: null
+    };
+    
+    // Erste Seite erstellen
+    pdfContext.page = doc.addPage([width, height]);
+    pdfContext.y = height - margin.top;
     
     console.log("Page size:", { width, height, contentWidth });
-    
     console.log("Current global config:", JSON.stringify(globalConfig));
     
     let logoImage = null;
@@ -629,6 +643,9 @@ async function generatePDF(format) {
                 throw new Error('Unsupported logo image type');
             }
             
+            // Speichere Logo im PDF-Kontext
+            pdfContext.logoImage = logoImage;
+            
             console.log("Church logo embedded successfully");
         } catch (error) {
             console.error("Error embedding church logo:", error);
@@ -651,14 +668,21 @@ async function generatePDF(format) {
         }
     }
     
-    function addLogoToPage(page) {
-        if (logoImage) {
-            const { width, height } = page.getSize();
+    // Logo zur aktuellen Seite hinzufügen
+    addLogoToPage(pdfContext);
+    
+    /**
+    * Fügt das Logo zu einer Seite hinzu
+    * @param {Object} context - Der PDF-Kontext
+    */
+    function addLogoToPage(context) {
+        if (context.logoImage) {
+            const { width, height } = context.page.getSize();
             const logoHeight = 30; // Fixed height of 30px
-            const aspectRatio = logoImage.width / logoImage.height;
+            const aspectRatio = context.logoImage.width / context.logoImage.height;
             const logoWidth = logoHeight * aspectRatio;
             
-            page.drawImage(logoImage, {
+            context.page.drawImage(context.logoImage, {
                 x: width - logoWidth - 20,
                 y: height - logoHeight - 20,
                 width: logoWidth,
@@ -668,18 +692,35 @@ async function generatePDF(format) {
         }
     }   
     
-    // Add logo to the first page
-    addLogoToPage(page);
-    
-    function addPage() {
-        console.log("Adding new page");
-        page = doc.addPage([width, height]);
-        addLogoToPage(page); // Add logo to the new page
-        y = height - margin.top;
-        return { page, y };
+    /**
+    * Fügt eine neue Seite hinzu und aktualisiert den PDF-Kontext
+    * @param {Object} context - Der PDF-Kontext
+    * @returns {Object} - Der aktualisierte PDF-Kontext
+    */
+    function addNewPage(context) {
+        console.log("Füge neue Seite hinzu");
+        // Erstelle eine neue Seite mit den gleichen Dimensionen
+        context.page = context.doc.addPage([context.width, context.height]);
+        // Füge das Logo hinzu
+        addLogoToPage(context);
+        // Setze Y-Position zurück auf den Anfang der Seite
+        context.y = context.height - context.margin.top;
+        console.log(`Neue Seite hinzugefügt. Y-Position: ${context.y}`);
+        return context;
     }
     
-    async function drawText(text, x, y, fontSize, maxWidth, options = {}) {
+    /**
+    * Zeichnet Text auf die aktuelle Seite
+    * @param {Object} context - Der PDF-Kontext
+    * @param {string} text - Der zu zeichnende Text
+    * @param {number} x - X-Position
+    * @param {number} y - Y-Position
+    * @param {number} fontSize - Schriftgröße
+    * @param {number} maxWidth - Maximale Breite
+    * @param {Object} options - Weitere Optionen
+    * @returns {number} - Die Höhe des gezeichneten Texts
+    */
+    async function drawText(context, text, x, y, fontSize, maxWidth, options = {}) {
         const { 
             bold, italic, underline, alignment, indent, isCopyright, isRefrain, isStrophe, 
             isLastElement, isHeading, isQuillHeading, afterIcon, isFirstOnPage,
@@ -688,18 +729,18 @@ async function generatePDF(format) {
         
         let font;
         if (bold && italic) {
-            font = fonts.boldItalic;
+            font = context.fonts.boldItalic;
         } else if (bold) {
-            font = fonts.bold;
+            font = context.fonts.bold;
         } else if (italic) {
-            font = fonts.italic;
+            font = context.fonts.italic;
         } else {
-            font = fonts.regular; 
+            font = context.fonts.regular; 
         }
         
         if (!font) {
             console.error(`Required font style not found for ${globalConfig.fontFamily}`);
-            font = fonts.regular || Object.values(fonts)[0];
+            font = context.fonts.regular || Object.values(context.fonts)[0];
         }
         
         console.log("Drawing text:", { 
@@ -733,12 +774,12 @@ async function generatePDF(format) {
                 const lineWidth = await font.widthOfTextAtSize(line, fontSize);
                 xPos = x + maxWidth - lineWidth;
             } else if (alignment === 'justify' && line !== lines[lines.length - 1]) {
-                await drawJustifiedText(line, x + indent, currentY, fontSize, maxWidth - indent, { bold, italic, underline });
+                await drawJustifiedText(context, line, x + indent, currentY, fontSize, maxWidth - indent, { bold, italic, underline });
                 currentY -= fontSize * lineHeight;
                 continue;
             }
             
-            page.drawText(line, {
+            context.page.drawText(line, {
                 x: xPos,
                 y: currentY,
                 size: fontSize,
@@ -749,7 +790,7 @@ async function generatePDF(format) {
             
             if (underline) {
                 const lineWidth = await font.widthOfTextAtSize(line, fontSize);
-                page.drawLine({
+                context.page.drawLine({
                     start: { x: xPos, y: currentY - 2 },
                     end: { x: xPos + lineWidth, y: currentY - 2 },
                     thickness: 0.5
@@ -775,7 +816,83 @@ async function generatePDF(format) {
         return startY - currentY;
     }
     
-    async function drawImage(imgSrc, x, y, imgWidth) {
+    /**
+    * Zeichnet ausgerichteten Text
+    * @param {Object} context - Der PDF-Kontext
+    * @param {string} line - Die zu zeichnende Textzeile
+    * @param {number} x - X-Position
+    * @param {number} y - Y-Position
+    * @param {number} fontSize - Schriftgröße
+    * @param {number} maxWidth - Maximale Breite
+    * @param {Object} options - Weitere Optionen
+    * @returns {void}
+    */
+    async function drawJustifiedText(context, line, x, y, fontSize, maxWidth, options = {}) {
+        const { bold, italic, underline } = options;
+        
+        // Font-Auswahl analog zu drawText
+        let font;
+        if (bold && italic) {
+            font = context.fonts.boldItalic;
+        } else if (bold) {
+            font = context.fonts.bold;
+        } else if (italic) {
+            font = context.fonts.italic;
+        } else {
+            font = context.fonts.regular; 
+        }
+        
+        // Wortabstände berechnen
+        const words = line.split(' ');
+        const totalWordsWidth = await words.reduce(async (accPromise, word) => {
+            const acc = await accPromise;
+            const wordWidth = await font.widthOfTextAtSize(word, fontSize);
+            return acc + wordWidth;
+        }, Promise.resolve(0));
+        
+        const spaceCount = words.length - 1;
+        if (spaceCount <= 0) {
+            // Einzelnes Wort kann nicht ausgerichtet werden
+            context.page.drawText(line, { x, y, size: fontSize, font });
+            return;
+        }
+        
+        const extraSpace = maxWidth - totalWordsWidth;
+        const spaceWidth = extraSpace / spaceCount;
+        
+        let currentX = x;
+        for (let i = 0; i < words.length; i++) {
+            const word = words[i];
+            context.page.drawText(word, { x: currentX, y, size: fontSize, font });
+            
+            const wordWidth = await font.widthOfTextAtSize(word, fontSize);
+            currentX += wordWidth;
+            
+            // Nach jedem Wort außer dem letzten einen Abstand hinzufügen
+            if (i < words.length - 1) {
+                currentX += spaceWidth;
+            }
+        }
+        
+        if (underline) {
+            context.page.drawLine({
+                start: { x, y: y - 2 },
+                end: { x: x + maxWidth, y: y - 2 },
+                thickness: 0.5
+            });
+        }
+    }
+    
+    /**
+    * Zeichnet ein Bild auf die aktuelle Seite
+    * @param {Object} context - Der PDF-Kontext
+    * @param {string} imgSrc - Die Bild-URL
+    * @param {number} x - X-Position
+    * @param {number} y - Y-Position
+    * @param {number} imgWidth - Bildbreite
+    * @returns {number} - Die Höhe des gezeichneten Bildes
+    */
+    async function drawImage(context, imgSrc, x, y, imgWidth) {
         console.log("Drawing image:", { imgSrc, x, y, imgWidth });
         try {
             const response = await fetch(imgSrc);
@@ -784,9 +901,9 @@ async function generatePDF(format) {
             
             let img;
             if (imgType === 'png') {
-                img = await doc.embedPng(imgArrayBuffer);
+                img = await context.doc.embedPng(imgArrayBuffer);
             } else if (imgType === 'jpeg') {
-                img = await doc.embedJpg(imgArrayBuffer);
+                img = await context.doc.embedJpg(imgArrayBuffer);
             } else {
                 throw new Error('Unsupported image type');
             }
@@ -794,15 +911,16 @@ async function generatePDF(format) {
             const scaledDims = img.scale(imgWidth / img.width);
             
             // Überprüfe, ob das Bild auf die aktuelle Seite passt
-            if (y - scaledDims.height < margin.bottom) {
+            if (y - scaledDims.height < context.margin.bottom) {
                 // Wenn nicht, füge eine neue Seite hinzu
-                ({ page, y } = addPage());
+                context = addNewPage(context);
+                y = context.y;
             }
             
             // Berücksichtigen Sie den oberen Abstand
             y -= scaleValue(IMAGE_MARGIN_TOP, scaledFontSize);
             
-            page.drawImage(img, {
+            context.page.drawImage(img, {
                 x,
                 y: y - scaledDims.height,
                 width: scaledDims.width,
@@ -810,7 +928,7 @@ async function generatePDF(format) {
             });
             
             // Aktualisiere die Y-Position für den nächsten Inhalt
-            y = y - scaledDims.height - scaleValue(IMAGE_MARGIN_BOTTOM, scaledFontSize);
+            context.y = y - scaledDims.height - scaleValue(IMAGE_MARGIN_BOTTOM, scaledFontSize);
             
             return scaledDims.height + scaleValue(IMAGE_MARGIN_TOP, scaledFontSize) + scaleValue(IMAGE_MARGIN_BOTTOM, scaledFontSize);
         } catch (error) {
@@ -819,7 +937,16 @@ async function generatePDF(format) {
         }
     }
     
-    async function drawIcon(iconName, x, y, size) {
+    /**
+    * Zeichnet ein Icon auf die aktuelle Seite
+    * @param {Object} context - Der PDF-Kontext
+    * @param {string} iconName - Der Name des Icons
+    * @param {number} x - X-Position
+    * @param {number} y - Y-Position
+    * @param {number} size - Icon-Größe
+    * @returns {number} - Die Höhe des gezeichneten Icons
+    */
+    async function drawIcon(context, iconName, x, y, size) {
         console.log("Drawing icon:", { iconName, x, y, size });
         const iconPaths = {
             'star': '/api/icons/star.png',
@@ -834,7 +961,7 @@ async function generatePDF(format) {
         try {
             const response = await fetch(iconPath);
             const imgArrayBuffer = await response.arrayBuffer();
-            const img = await doc.embedPng(imgArrayBuffer);
+            const img = await context.doc.embedPng(imgArrayBuffer);
             
             let iconWidth, iconHeight;
             
@@ -842,20 +969,23 @@ async function generatePDF(format) {
                 iconWidth = 150;
                 iconHeight = (iconWidth / img.width) * img.height;
             } else {
-                const scaledSize = Math.min(size, contentWidth);
+                const scaledSize = Math.min(size, context.contentWidth);
                 const scaledDims = img.scale(scaledSize / img.width);
                 iconWidth = scaledDims.width;
                 iconHeight = scaledDims.height;
             }
             
-            const xCentered = x + (contentWidth - iconWidth) / 2;
+            const xCentered = x + (context.contentWidth - iconWidth) / 2;
             
-            page.drawImage(img, {
+            context.page.drawImage(img, {
                 x: xCentered,
                 y: y - iconHeight,
                 width: iconWidth,
                 height: iconHeight
             });
+            
+            // Aktualisiere die Y-Position
+            context.y = y - iconHeight;
             
             return iconHeight;
         } catch (error) {
@@ -882,37 +1012,22 @@ async function generatePDF(format) {
     
     // Erstelle Kontext für die Elementverarbeitung
     const processingContext = {
-        doc, 
-        page, 
-        y, 
-        margin, 
-        contentWidth, 
-        width, 
-        height, 
+        ...pdfContext,
         scaledFontSize, 
         scaledIconSize, 
         scaledIconMargin, 
         scaledDefaultObjectSpacing, 
-        fonts, 
-        showProgress,
-        addLogoToPage, 
-        drawIcon,
-        drawImage,
-        drawText,
-        globalConfig // Wichtig: Globale Konfiguration übergeben
+        showProgress
     };
     
     // Verarbeite alle Elementgruppen mit Umbruchinformationen aus der Vorschau
     showProgress(40, "Verarbeite Inhalte");
-    const { page: updatedPage, y: updatedY } = 
-    await processElementGroups(elementGroups, pageBreakInfo, processingContext);
     
-    // Aktualisiere die Seitenvariablen
-    page = updatedPage;
-    y = updatedY;
+    // KRITISCH: Diese Funktion muss den aktualisierten Kontext zurückgeben
+    const updatedContext = await processElementGroups(elementGroups, pageBreakInfo, processingContext);
     
     // Stelle sicher, dass die PDF eine gerade Seitenzahl hat (wichtig für Broschüren)
-    ensureEvenPageCount(doc);
+    ensureEvenPageCount(pdfContext.doc);
     
     console.log("PDF generation complete. Saving...");
     showProgress(90, "Finalisiere PDF");
@@ -950,6 +1065,295 @@ async function generatePDF(format) {
     } finally {
         progressContainer.style.display = 'none';
     }
+}
+
+/**
+* Verarbeitet alle Elementgruppen unter strenger Einhaltung der Vorschauumbrüche
+* @param {Array} elementGroups - Alle identifizierten Elementgruppen
+* @param {Object} pageBreakInfo - Aus der Vorschau extrahierte Umbruchinformationen
+* @param {Object} context - Kontext mit Seite, Y-Position und anderen Zeichenparametern
+* @returns {Object} Aktualisierter Zeichenkontext
+*/
+async function processElementGroups(elementGroups, pageBreakInfo, context) {
+    // Extrahiere benötigte Kontextvariablen
+    let { 
+        doc, page, y, margin, contentWidth, width, height, 
+        scaledFontSize, scaledIconSize, scaledIconMargin, scaledDefaultObjectSpacing, 
+        fonts, showProgress, logoImage
+    } = context;
+    
+    // Erstelle eine Map für schnellen Zugriff auf Umbruchinformationen
+    const breakInfoMap = {};
+    if (pageBreakInfo.breakInfo && Array.isArray(pageBreakInfo.breakInfo)) {
+        pageBreakInfo.breakInfo.forEach(info => {
+            breakInfoMap[info.elementId] = info;
+        });
+    }
+    
+    console.log("Verarbeite Elementgruppen mit Umbruchinformationen:", 
+        Object.keys(breakInfoMap).length ? "Gefunden" : "Keine Umbrüche gefunden");
+    
+    // Zentrale Funktion für Seitenumbrüche - Aktualisiert den gesamten Kontext
+    function addNewPage() {
+        console.log("Füge neue Seite hinzu");
+        // KRITISCH: Erstelle neue Seite und aktualisiere den Kontext
+        page = doc.addPage([width, height]);
+        // Füge das Logo hinzu, falls vorhanden
+        if (logoImage) {
+            const logoHeight = 30;
+            const aspectRatio = logoImage.width / logoImage.height;
+            const logoWidth = logoHeight * aspectRatio;
+            
+            page.drawImage(logoImage, {
+                x: width - logoWidth - 20,
+                y: height - logoHeight - 20,
+                width: logoWidth,
+                height: logoHeight,
+                opacity: 0.3
+            });
+        }
+        // Setze Y-Position zurück zum Anfang der Seite
+        y = height - margin.top;
+        console.log(`Neue Seite hinzugefügt. Y-Position: ${y}`);
+        return { page, y };
+    }
+    
+    // Verarbeite alle Gruppen
+    let processedElements = 0;
+    
+    // Hilfsfunktion für das Zeichnen von Text, die den aktuellen Kontext verwendet
+    async function drawTextWithContext(text, fontSize, options = {}) {
+        const textHeight = await drawText(
+            { doc, page, y, margin, contentWidth, width, height, fonts },
+            text, 
+            margin.left, 
+            y, 
+            fontSize, 
+            contentWidth, 
+            options
+        );
+        // Aktualisiere die Y-Position nach dem Zeichnen
+        y -= textHeight;
+        return textHeight;
+    }
+    
+    // Hilfsfunktion für das Zeichnen von Bildern, die den aktuellen Kontext verwendet
+    async function drawImageWithContext(imgSrc, imgWidth) {
+        const imageHeight = await drawImage(
+            { doc, page, y, margin, contentWidth, width, height },
+            imgSrc, 
+            margin.left, 
+            y, 
+            imgWidth
+        );
+        // Aktualisiere die Y-Position nach dem Zeichnen
+        y -= imageHeight;
+        return imageHeight;
+    }
+    
+    // Hilfsfunktion für das Zeichnen von Icons, die den aktuellen Kontext verwendet
+    async function drawIconWithContext(iconName, size) {
+        const iconHeight = await drawIcon(
+            { doc, page, y, margin, contentWidth, width, height, doc },
+            iconName, 
+            margin.left, 
+            y, 
+            size
+        );
+        // Aktualisiere die Y-Position nach dem Zeichnen
+        y -= iconHeight;
+        return iconHeight;
+    }
+    
+    for (let groupIndex = 0; groupIndex < elementGroups.length; groupIndex++) {
+        const group = elementGroups[groupIndex];
+        showProgress(40 + (groupIndex / elementGroups.length) * 50, "Generiere PDF-Inhalt");
+        
+        // Verarbeite alle Elemente der Gruppe
+        for (let elementIndex = 0; elementIndex < group.length; elementIndex++) {
+            const element = group[elementIndex];
+            
+            // Spezieller Fall: Preview-Page-Break-Element (aus der Vorschau) überspringen
+            if (element.classList.contains('preview-page-break')) {
+                console.log("Vorschau-Seitenumbruch übersprungen - wird separat verarbeitet");
+                continue;
+            }
+            
+            // Manueller Seitenumbruch wird direkt verarbeitet
+            if (element.classList.contains('page-break')) {
+                console.log("Manueller Seitenumbruch verarbeitet");
+                // KRITISCH: Aktualisiere Seite UND Y-Position mit dem Rückgabewert
+                const pageInfo = addNewPage();
+                page = pageInfo.page;
+                y = pageInfo.y;
+                continue;
+            }
+            
+            // Element-ID für Umbrucherkennung extrahieren
+            const elementId = element.getAttribute('data-original-id') || 
+            element.getAttribute('data-liedblatt-id');
+            
+            // Prüfe, ob das vorherige Element ein Icon hatte
+            const afterIcon = (elementIndex > 0 && group[elementIndex-1]) ? 
+            group[elementIndex-1].querySelector('.fas, .trenner-default-img') : null;
+            
+            // Verarbeite verschiedene Elementtypen mit präziser Positionierung
+            if (element.querySelector('.fas, .trenner-default-img')) {
+                // Zeichne Icon-Elemente
+                let iconType = 'default';
+                const iconElement = element.querySelector('.fas, .trenner-default-img');
+                
+                // Ermittle den Icon-Typ
+                if (iconElement.classList.contains('fa-heart')) iconType = 'herz';
+                if (iconElement.classList.contains('fa-star')) iconType = 'star';
+                if (iconElement.classList.contains('fa-cross')) iconType = 'cross';
+                if (iconElement.classList.contains('fa-dove')) iconType = 'dove';
+                
+                // Zeichne das Icon und aktualisiere die Y-Position
+                await drawIconWithContext(iconType, scaledIconSize);
+                y -= scaledIconMargin;
+            } else {
+                // Zeichne Standardelemente (Text, Bilder, etc.)
+                // Finde alle relevanten Unterelemente
+                const elements = element.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
+                
+                // Verarbeite jedes Unterelement
+                for (let j = 0; j < elements.length; j++) {
+                    const subElement = elements[j];
+                    
+                    // Überspringe Nummerierungen (z.B. "1.")
+                    if (subElement.tagName === 'STRONG' && /^\d+\.$/.test(subElement.textContent.trim())) {
+                        continue;
+                    }
+                    
+                    // Verarbeite Bilder
+                    if (subElement.tagName === 'IMG') {
+                        await drawImageWithContext(subElement.src, contentWidth);
+                    } else {
+                        // Verarbeite Textelemente mit präziser Textformatierung
+                        let fontSize = scaledFontSize;
+                        let marginTop = 0;
+                        let marginBottom = 0;
+                        let isHeading = false;
+                        let isQuillHeading = false;
+                        const isCopyright = subElement.classList.contains('copyright-info');
+                        const isRefrain = subElement.classList.contains('refrain');
+                        const isStrophe = subElement.classList.contains('strophe');
+                        
+                        // Bestimme Schriftgröße und Abstände basierend auf Elementtyp
+                        if (subElement.tagName === 'H1') {
+                            fontSize = scaledFontSize * HEADING_1_SCALE;
+                            isHeading = true;
+                            if (subElement.classList.contains('isQuillHeading')) {
+                                isQuillHeading = true;
+                                marginTop = scaleValue(QUILL_H1_MARGIN_TOP, scaledFontSize);
+                                marginBottom = scaleValue(QUILL_H1_MARGIN_BOTTOM, scaledFontSize);
+                            }
+                        } else if (subElement.tagName === 'H2') {
+                            fontSize = scaledFontSize * HEADING_2_SCALE;
+                            isHeading = true;
+                            if (subElement.classList.contains('isQuillHeading')) {
+                                isQuillHeading = true;
+                                marginTop = scaleValue(QUILL_H2_MARGIN_TOP, scaledFontSize);
+                                marginBottom = scaleValue(QUILL_H2_MARGIN_BOTTOM, scaledFontSize);
+                            }
+                        } else if (subElement.tagName === 'H3') {
+                            fontSize = scaledFontSize * HEADING_3_SCALE;
+                            isHeading = true;
+                            if (subElement.classList.contains('isQuillHeading')) {
+                                isQuillHeading = true;
+                                marginTop = scaleValue(QUILL_H3_MARGIN_TOP, scaledFontSize);
+                                marginBottom = scaleValue(QUILL_H3_MARGIN_BOTTOM, scaledFontSize);
+                            }
+                        }
+                        
+                        if (isCopyright) { 
+                            fontSize = scaleValue(COPYRIGHT_FONT_SIZE, scaledFontSize);
+                            marginTop = scaleValue(COPYRIGHT_MARGIN_TOP, scaledFontSize);
+                            marginBottom = scaleValue(COPYRIGHT_MARGIN_BOTTOM, scaledFontSize);
+                        }
+                        
+                        const nextElement = elements[j + 1];
+                        const isNextCopyright = nextElement && nextElement.classList.contains('copyright-info');
+                        
+                        if (isHeading && isNextCopyright) {
+                            marginBottom = 1;
+                        }
+                        
+                        // Anwendung des oberen Abstands, außer bei ersten Elementen auf einer Seite
+                        const isFirstOnPage = y === height - margin.top;
+                        if (j !== 0 || !isFirstOnPage) {
+                            y -= marginTop;
+                        }
+                        
+                        // Präzise Textformatierung basierend auf den CSS-Eigenschaften
+                        const textProperties = {
+                            fontWeight: window.getComputedStyle(subElement).fontWeight,
+                            fontStyle: window.getComputedStyle(subElement).fontStyle,
+                            textDecoration: window.getComputedStyle(subElement).textDecoration,
+                            textAlign: window.getComputedStyle(subElement).textAlign,
+                            paddingLeft: window.getComputedStyle(subElement).paddingLeft
+                        };
+                        
+                        // Bestimme Textformatierung
+                        const isBold = subElement.tagName === 'STRONG' || 
+                        textProperties.fontWeight === 'bold' || 
+                        parseInt(textProperties.fontWeight) >= 700;
+                        
+                        const isItalic = isRefrain || 
+                        subElement.tagName === 'EM' || 
+                        textProperties.fontStyle === 'italic';
+                        
+                        const isUnderlined = subElement.tagName === 'U' || 
+                        textProperties.textDecoration.includes('underline');
+                        
+                        // Optionen für drawText - KEINE eigene Umbruchlogik
+                        const options = {
+                            bold: isBold,
+                            italic: isItalic,
+                            underline: isUnderlined,
+                            // KRITISCH: Korrekte Textausrichtung aus globaler Konfiguration übernehmen
+                            alignment: textProperties.textAlign || globalConfig.textAlign,
+                            indent: parseFloat(textProperties.paddingLeft) || 0,
+                            isCopyright: isCopyright,
+                            isRefrain: isRefrain,
+                            isStrophe: isStrophe,
+                            isLastElement: j === elements.length - 1,
+                            isHeading: isHeading,
+                            isQuillHeading: isQuillHeading,
+                            afterIcon: afterIcon,
+                            isFirstOnPage: isFirstOnPage,
+                            // Kritisch: Deaktiviere automatische Seitenumbrüche in drawText
+                            preventPageBreak: true
+                        };
+                        
+                        // Zeichne den Text und aktualisiere die Y-Position präzise
+                        const textContent = subElement.innerText;
+                        await drawTextWithContext(textContent, fontSize, options);
+                        y += marginBottom; // Berücksichtige unteren Abstand
+                    }
+                }
+            }
+            
+            // Standard-Abstand nach jedem Element hinzufügen
+            y -= scaledDefaultObjectSpacing;
+            processedElements++;
+            
+            // KRITISCH: Überprüfe, ob für dieses Element ein Umbruch in der Vorschau definiert ist
+            // Dies ist der einzige Ort, an dem Seitenumbrüche erzeugt werden (außer manuellen)
+            if (elementId && breakInfoMap[elementId]) {
+                const breakInfo = breakInfoMap[elementId];
+                console.log(`Seitenumbruch nach Element mit ID ${elementId} (Typ: ${breakInfo.type})`);
+                // WICHTIG: Aktualisiere Seite UND Y-Position mit dem Rückgabewert
+                const pageInfo = addNewPage();
+                page = pageInfo.page;
+                y = pageInfo.y;
+            }
+        }
+    }
+    
+    // Gib aktualisierten Kontext zurück
+    return { page, y, processedElements };
 }
 
 /**
@@ -1085,264 +1489,6 @@ async function fetchAndEmbedFont(doc, fontFamily) {
     }
     
     return loadedFonts;
-}
-
-/**
-* Verarbeitet alle Elementgruppen unter strenger Einhaltung der Vorschauumbrüche
-* @param {Array} elementGroups - Alle identifizierten Elementgruppen
-* @param {Object} pageBreakInfo - Aus der Vorschau extrahierte Umbruchinformationen
-* @param {Object} context - Kontext mit Seite, Y-Position und anderen Zeichenparametern
-* @returns {Object} Aktualisierter Zeichenkontext
-*/
-/**
-* Verbesserte Version der Funktion zum Hinzufügen neuer Seiten
-* Diese Funktion sollte die bestehende Funktion in generatePDF.js ersetzen
-* @returns {Object} Aktualisierte Seite und Y-Position
-*/
-function addNewPage() {
-    console.log("Füge neue Seite hinzu");
-    // Erstelle eine neue Seite mit den gleichen Dimensionen wie die erste Seite
-    page = doc.addPage([width, height]);
-    // Füge das Logo zur neuen Seite hinzu, falls vorhanden
-    addLogoToPage(page);
-    // KRITISCHE KORREKTUR: Y-Position zurücksetzen auf den Anfang der Seite
-    y = height - margin.top;
-    console.log(`Neue Seite erstellt. Y-Position zurückgesetzt auf ${y}`);
-    return { page, y };
-}
-
-/**
-* Korrekte Implementierung der Seitenumbruchverarbeitung
-* Diese Funktion ersetzt den entsprechenden Teil in processElementGroups
-* @param {Array} elementGroups - Alle zu verarbeitenden Elementgruppen
-* @param {Object} pageBreakInfo - Informationen über Seitenumbrüche
-* @param {Object} context - Der Kontext mit Seite, Y-Position und anderen Parametern
-* @returns {Object} Aktualisierter Kontext
-*/
-async function processElementGroups(elementGroups, pageBreakInfo, context) {
-    // Extrahiere benötigte Kontextvariablen
-    let { 
-        doc, page, y, margin, contentWidth, width, height, 
-        scaledFontSize, scaledIconSize, scaledIconMargin, scaledDefaultObjectSpacing, 
-        fonts, showProgress, addLogoToPage, drawIcon, drawImage, drawText, globalConfig 
-    } = context;
-    
-    // Erstelle eine Map für schnellen Zugriff auf Umbruchinformationen
-    const breakInfoMap = {};
-    if (pageBreakInfo.breakInfo && Array.isArray(pageBreakInfo.breakInfo)) {
-        pageBreakInfo.breakInfo.forEach(info => {
-            breakInfoMap[info.elementId] = info;
-        });
-    }
-    
-    console.log("Verarbeite Elementgruppen mit Umbruchinformationen:", 
-        Object.keys(breakInfoMap).length ? "Gefunden" : "Keine Umbrüche gefunden");
-    
-    // Zentrale Funktion für Seitenumbrüche - Wird nur an definierten Stellen aufgerufen
-    function addNewPage() {
-        console.log("Füge neue Seite hinzu");
-        page = doc.addPage([width, height]);
-        addLogoToPage(page);
-        // KRITISCH: Y-Position zurücksetzen auf den Seitenanfang
-        y = height - margin.top;
-        console.log(`Neue Seite hinzugefügt. Y-Position: ${y}`);
-        return { page, y };
-    }
-    
-    // Verarbeite alle Gruppen
-    let processedElements = 0;
-    
-    for (let groupIndex = 0; groupIndex < elementGroups.length; groupIndex++) {
-        const group = elementGroups[groupIndex];
-        showProgress(40 + (groupIndex / elementGroups.length) * 50, "Generiere PDF-Inhalt");
-        
-        // Verarbeite alle Elemente der Gruppe
-        for (let elementIndex = 0; elementIndex < group.length; elementIndex++) {
-            const element = group[elementIndex];
-            
-            // Spezieller Fall: Preview-Page-Break-Element (aus der Vorschau) überspringen
-            if (element.classList.contains('preview-page-break')) {
-                console.log("Vorschau-Seitenumbruch übersprungen - wird separat verarbeitet");
-                continue;
-            }
-            
-            // Manueller Seitenumbruch wird direkt verarbeitet
-            if (element.classList.contains('page-break')) {
-                console.log("Manueller Seitenumbruch verarbeitet");
-                // WICHTIG: Aktualisiere Seite UND Y-Position mit dem Rückgabewert
-                const pageInfo = addNewPage();
-                page = pageInfo.page;
-                y = pageInfo.y;
-                continue;
-            }
-            
-            // Element-ID für Umbrucherkennung extrahieren
-            const elementId = element.getAttribute('data-original-id') || 
-            element.getAttribute('data-liedblatt-id');
-            
-            // Prüfe, ob das vorherige Element ein Icon hatte
-            const afterIcon = (elementIndex > 0 && group[elementIndex-1]) ? 
-            group[elementIndex-1].querySelector('.fas, .trenner-default-img') : null;
-            
-            // Verarbeite verschiedene Elementtypen mit präziser Positionierung
-            if (element.querySelector('.fas, .trenner-default-img')) {
-                // Zeichne Icon-Elemente
-                let iconType = 'default';
-                const iconElement = element.querySelector('.fas, .trenner-default-img');
-                
-                // Ermittle den Icon-Typ
-                if (iconElement.classList.contains('fa-heart')) iconType = 'herz';
-                if (iconElement.classList.contains('fa-star')) iconType = 'star';
-                if (iconElement.classList.contains('fa-cross')) iconType = 'cross';
-                if (iconElement.classList.contains('fa-dove')) iconType = 'dove';
-                
-                // Zeichne das Icon und aktualisiere die Y-Position
-                const iconHeight = await drawIcon(iconType, margin.left, y, scaledIconSize);
-                y -= iconHeight + scaledIconMargin;
-            } else {
-                // Zeichne Standardelemente (Text, Bilder, etc.)
-                // Finde alle relevanten Unterelemente
-                const elements = element.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
-                
-                // Verarbeite jedes Unterelement
-                for (let j = 0; j < elements.length; j++) {
-                    const subElement = elements[j];
-                    
-                    // Überspringe Nummerierungen (z.B. "1.")
-                    if (subElement.tagName === 'STRONG' && /^\d+\.$/.test(subElement.textContent.trim())) {
-                        continue;
-                    }
-                    
-                    // Verarbeite Bilder
-                    if (subElement.tagName === 'IMG') {
-                        const imgHeight = await drawImage(subElement.src, margin.left, y, contentWidth);
-                        y -= imgHeight;
-                    } else {
-                        // Verarbeite Textelemente mit präziser Textformatierung
-                        let fontSize = scaledFontSize;
-                        let marginTop = 0;
-                        let marginBottom = 0;
-                        let isHeading = false;
-                        let isQuillHeading = false;
-                        const isCopyright = subElement.classList.contains('copyright-info');
-                        const isRefrain = subElement.classList.contains('refrain');
-                        const isStrophe = subElement.classList.contains('strophe');
-                        
-                        // Bestimme Schriftgröße und Abstände basierend auf Elementtyp
-                        if (subElement.tagName === 'H1') {
-                            fontSize = scaledFontSize * HEADING_1_SCALE;
-                            isHeading = true;
-                            if (subElement.classList.contains('isQuillHeading')) {
-                                isQuillHeading = true;
-                                marginTop = scaleValue(QUILL_H1_MARGIN_TOP, scaledFontSize);
-                                marginBottom = scaleValue(QUILL_H1_MARGIN_BOTTOM, scaledFontSize);
-                            }
-                        } else if (subElement.tagName === 'H2') {
-                            fontSize = scaledFontSize * HEADING_2_SCALE;
-                            isHeading = true;
-                            if (subElement.classList.contains('isQuillHeading')) {
-                                isQuillHeading = true;
-                                marginTop = scaleValue(QUILL_H2_MARGIN_TOP, scaledFontSize);
-                                marginBottom = scaleValue(QUILL_H2_MARGIN_BOTTOM, scaledFontSize);
-                            }
-                        } else if (subElement.tagName === 'H3') {
-                            fontSize = scaledFontSize * HEADING_3_SCALE;
-                            isHeading = true;
-                            if (subElement.classList.contains('isQuillHeading')) {
-                                isQuillHeading = true;
-                                marginTop = scaleValue(QUILL_H3_MARGIN_TOP, scaledFontSize);
-                                marginBottom = scaleValue(QUILL_H3_MARGIN_BOTTOM, scaledFontSize);
-                            }
-                        }
-                        
-                        if (isCopyright) { 
-                            fontSize = scaleValue(COPYRIGHT_FONT_SIZE, scaledFontSize);
-                            marginTop = scaleValue(COPYRIGHT_MARGIN_TOP, scaledFontSize);
-                            marginBottom = scaleValue(COPYRIGHT_MARGIN_BOTTOM, scaledFontSize);
-                        }
-                        
-                        const nextElement = elements[j + 1];
-                        const isNextCopyright = nextElement && nextElement.classList.contains('copyright-info');
-                        
-                        if (isHeading && isNextCopyright) {
-                            marginBottom = 1;
-                        }
-                        
-                        // Anwendung des oberen Abstands, außer bei ersten Elementen auf einer Seite
-                        const isFirstOnPage = y === height - margin.top;
-                        if (j !== 0 || !isFirstOnPage) {
-                            y -= marginTop;
-                        }
-                        
-                        // Präzise Textformatierung basierend auf den CSS-Eigenschaften
-                        const textProperties = {
-                            fontWeight: window.getComputedStyle(subElement).fontWeight,
-                            fontStyle: window.getComputedStyle(subElement).fontStyle,
-                            textDecoration: window.getComputedStyle(subElement).textDecoration,
-                            textAlign: window.getComputedStyle(subElement).textAlign,
-                            paddingLeft: window.getComputedStyle(subElement).paddingLeft
-                        };
-                        
-                        // Bestimme Textformatierung
-                        const isBold = subElement.tagName === 'STRONG' || 
-                        textProperties.fontWeight === 'bold' || 
-                        parseInt(textProperties.fontWeight) >= 700;
-                        
-                        const isItalic = isRefrain || 
-                        subElement.tagName === 'EM' || 
-                        textProperties.fontStyle === 'italic';
-                        
-                        const isUnderlined = subElement.tagName === 'U' || 
-                        textProperties.textDecoration.includes('underline');
-                        
-                        // Optionen für drawText - KEINE eigene Umbruchlogik
-                        const options = {
-                            bold: isBold,
-                            italic: isItalic,
-                            underline: isUnderlined,
-                            // KRITISCH: Korrekte Textausrichtung aus globaler Konfiguration übernehmen
-                            alignment: textProperties.textAlign || globalConfig.textAlign,
-                            indent: parseFloat(textProperties.paddingLeft) || 0,
-                            isCopyright: isCopyright,
-                            isRefrain: isRefrain,
-                            isStrophe: isStrophe,
-                            isLastElement: j === elements.length - 1,
-                            isHeading: isHeading,
-                            isQuillHeading: isQuillHeading,
-                            afterIcon: afterIcon,
-                            isFirstOnPage: isFirstOnPage,
-                            // Kritisch: Deaktiviere automatische Seitenumbrüche in drawText
-                            preventPageBreak: true
-                        };
-                        
-                        // Zeichne den Text und aktualisiere die Y-Position präzise
-                        const textContent = subElement.innerText;
-                        const textHeight = await drawText(textContent, margin.left, y, fontSize, contentWidth, options);
-                        y -= textHeight;
-                        y += marginBottom; // Berücksichtige unteren Abstand
-                    }
-                }
-            }
-            
-            // Standard-Abstand nach jedem Element hinzufügen
-            y -= scaledDefaultObjectSpacing;
-            processedElements++;
-            
-            // KRITISCH: Überprüfe, ob für dieses Element ein Umbruch in der Vorschau definiert ist
-            // Dies ist der einzige Ort, an dem Seitenumbrüche erzeugt werden (außer manuellen)
-            if (elementId && breakInfoMap[elementId]) {
-                const breakInfo = breakInfoMap[elementId];
-                console.log(`Seitenumbruch nach Element mit ID ${elementId} (Typ: ${breakInfo.type})`);
-                // WICHTIG: Aktualisiere Seite UND Y-Position mit dem Rückgabewert
-                const pageInfo = addNewPage();
-                page = pageInfo.page;
-                y = pageInfo.y;
-            }
-        }
-    }
-    
-    // Gib aktualisierten Kontext zurück
-    return { page, y, processedElements };
 }
 
 /**
