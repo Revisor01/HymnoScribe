@@ -1029,7 +1029,7 @@ async function generatePDF(format) {
     showProgress(40, "Verarbeite Inhalte");
     
     // KRITISCH: Diese Funktion muss den aktualisierten Kontext zurückgeben
-    const updatedContext = await processElementGroups(elementGroups, pageBreakInfo, processingContext);
+    // const updatedContext = await processElementGroups(elementGroups, pageBreakInfo, processingContext);
     const result = await processElementGroups(elementGroups, pageBreakInfo, pdfContext);
     
     // Stelle sicher, dass die PDF eine gerade Seitenzahl hat (wichtig für Broschüren)
