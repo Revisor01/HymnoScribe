@@ -1,13 +1,14 @@
-// previewPageBreaks.js - optimierte Version mit PDF-ähnlicher Logik
+// previewPageBreaks.js - Neu implementierte Version für akkurate PDF-ähnliche Seitenumbrüche
 
 import { globalConfig } from './script.js';
 
-// Seitengrößen von generatePDF.js übernehmen
+// Umrechnungskonstanten für Maßeinheiten
 const mmToPt = (mm) => mm * 2.83465;
 const PX_TO_PT_RATIO = 0.75;
 const pxToPt = (px) => px * PX_TO_PT_RATIO;
+const ptToPx = (pt) => pt / PX_TO_PT_RATIO;
 
-// Direkt aus generatePDF.js kopiert
+// Seitengrößen wie in generatePDF.js
 const pageSizes = {
     'a5': { width: mmToPt(148), height: mmToPt(210) },
     'dl': { width: mmToPt(99), height: mmToPt(210) },
@@ -15,10 +16,7 @@ const pageSizes = {
     'a3-schmal': { width: mmToPt(148), height: mmToPt(420) }
 };
 
-// Umrechnung von PT (PDF) zu PX (Vorschau)
-const ptToPx = (pt) => pt / PX_TO_PT_RATIO;
-
-// Konstanten für die Berechnung (aus generatePDF.js)
+// Konstanten für Abstandsberechnungen und Formatierung
 const BASE_FONT_SIZE = 14;
 const HEADING_1_SCALE = 1.6;
 const HEADING_2_SCALE = 1.4;
@@ -26,17 +24,22 @@ const HEADING_3_SCALE = 1.2;
 const COPYRIGHT_FONT_SIZE = 12;
 const STROPHE_SPACING = 8;
 const DEFAULT_OBJECT_SPACING = 15;
+const TITLE_MARGIN_BOTTOM = 8;
+const STROPHE_MARGIN_BOTTOM = 10;
 
-// Debouncing für die Berechnung
+// Konstanten für Elemente, die nicht getrennt werden sollten
+const MIN_ELEMENT_HEIGHT_FOR_SPLIT = 200; // Mindesthöhe eines Elements, um es zu teilen
+const MIN_SPACE_FOR_NEXT_GROUP = 60;      // Mindestplatz für die nächste Gruppe
+
+// Debouncing-Variablen
 let calculateTimeout = null;
 let isCalculating = false;
 
 /**
- * Aktualisiert die Vorschauansicht mit den berechneten Seitenumbrüchen
- * @param {string} format - Das gewählte Format (a5, dl, a4-schmal, a3-schmal)
+ * Aktualisiert die Vorschauansicht mit berechneten Seitenumbrüchen
+ * @param {string} format - Das gewählte Papierformat (a5, dl, usw.)
  */
 export function updatePreviewWithPageBreaks(format = 'a5') {
-    // Debouncing implementieren
     if (calculateTimeout) {
         clearTimeout(calculateTimeout);
     }
@@ -48,15 +51,21 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
         try {
             console.log("Aktualisiere Vorschau mit Seitenumbrüchen für Format:", format);
             
-            // Entferne vorhandene Seitenumbrüche
+            // Entferne vorhandene Seitenumbrüche aus der Vorschau
             const liedblattContent = document.getElementById('liedblatt-content');
             if (!liedblattContent) return;
             
             const existingBreaks = liedblattContent.querySelectorAll('.preview-page-break');
             existingBreaks.forEach(breakEl => breakEl.remove());
             
-            // Berechne Seitenumbrüche mit PDF-ähnlicher Logik
-            calculatePDFLikePageBreaks(format);
+            // Berechne Seitenumbrüche basierend auf der PDF-Generierungslogik
+            const { breakPositions } = calculatePrecisePageBreaks(format);
+            
+            // Füge Seitenumbruch-Marker in die Vorschau ein
+            breakPositions.forEach(breakInfo => {
+                insertPageBreakMarker(breakInfo.element, breakInfo.pageNumber, format);
+            });
+            
         } catch (error) {
             console.error("Fehler bei der Seitenumbruchberechnung:", error);
         } finally {
@@ -65,462 +74,416 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
     }, 300);
 }
 
-// Füge diese Hilfsfunktion hinzu (am Anfang der Datei oder im Funktionsbereich)
 /**
-* Bestimmt, ob ein Element ein Titel ist
-* @param {HTMLElement} element - Das zu prüfende Element
-* @returns {boolean} - True, wenn es sich um einen Titel handelt
-*/
-function isTitle(element) {
-    return element.querySelector('.item-title') !== null;
+ * Berechnet präzise Seitenumbruchpositionen ähnlich zur PDF-Generierung
+ * @param {string} format - Das gewählte Papierformat
+ * @returns {Object} Informationen zu Seitenumbrüchen
+ */
+function calculatePrecisePageBreaks(format) {
+    const liedblattContent = document.getElementById('liedblatt-content');
+    if (!liedblattContent) return { breakPositions: [] };
+    
+    // PDF-Seitengröße und Ränder
+    const pageSize = pageSizes[format];
+    const margin = { top: 30, right: 20, bottom: 20, left: 20 };
+    
+    // Verfügbare Höhe für Inhalt auf einer Seite
+    const availableHeight = pageSize.height - margin.top - margin.bottom;
+    
+    // Alle Content-Elemente (ohne bestehende Umbrüche)
+    const elements = Array.from(liedblattContent.children).filter(el => 
+        !el.classList.contains('preview-page-break')
+    );
+    
+    // Identifiziere semantische Gruppen (Titel mit Inhalten, Strophenblöcke usw.)
+    const elementGroups = identifySemanticGroups(elements);
+    console.log(`${elementGroups.length} semantische Gruppen identifiziert`);
+    
+    // Positionsverfolgung und Ergebnissammlung
+    let currentY = availableHeight;
+    let currentPage = 1;
+    const breakPositions = [];
+    
+    // Verarbeite alle Gruppen und entscheide über Seitenumbrüche
+    elementGroups.forEach((group, groupIndex) => {
+        // Manuellen Seitenumbruch prüfen
+        if (group.length === 1 && group[0].classList.contains('page-break')) {
+            breakPositions.push({
+                element: group[0],
+                pageNumber: currentPage,
+                type: 'manual'
+            });
+            currentPage++;
+            currentY = availableHeight;
+            return;
+        }
+        
+        // Berechne Gruppenhöhe mit verbesserter Genauigkeit
+        const groupHeight = calculateGroupHeight(group);
+        console.log(`Gruppe ${groupIndex + 1}: Höhe=${groupHeight}pt, Platz=${currentY}pt`);
+        
+        // Entscheide, ob die Gruppe auf die aktuelle Seite passt
+        if (groupHeight <= currentY) {
+            // Gruppe passt komplett
+            currentY -= groupHeight;
+            console.log(`Gruppe ${groupIndex + 1} passt auf Seite ${currentPage}`);
+        } else if (groupHeight > availableHeight && group.length > 1) {
+            // Große Gruppe, muss aufgeteilt werden
+            let elementY = currentY;
+            let lastBreakElement = null;
+            
+            // Gehe durch Elemente und suche Stellen für Umbrüche
+            for (let i = 0; i < group.length; i++) {
+                const element = group[i];
+                const elementHeight = calculateElementHeight(element);
+                
+                // Prüfe, ob Element auf aktuelle Seite passt
+                if (elementHeight > elementY) {
+                    // Element passt nicht mehr - Umbruch einfügen
+                    if (lastBreakElement) {
+                        breakPositions.push({
+                            element: lastBreakElement,
+                            pageNumber: currentPage,
+                            type: 'split'
+                        });
+                        currentPage++;
+                        elementY = availableHeight;
+                        lastBreakElement = null;
+                    } else if (i > 0) {
+                        breakPositions.push({
+                            element: group[i-1],
+                            pageNumber: currentPage,
+                            type: 'split'
+                        });
+                        currentPage++;
+                        elementY = availableHeight;
+                    } else {
+                        // Auch das erste Element passt nicht - erzwungener Umbruch
+                        breakPositions.push({
+                            element: element,
+                            pageNumber: currentPage,
+                            type: 'force'
+                        });
+                        currentPage++;
+                        elementY = availableHeight - elementHeight;
+                        continue;
+                    }
+                }
+                
+                // Aktuelle Höhe reduzieren
+                elementY -= elementHeight;
+                
+                // Bestimme, ob dies eine gute Stelle für einen möglichen Umbruch ist
+                if (canBreakAfter(element, group, i)) {
+                    lastBreakElement = element;
+                }
+            }
+            
+            // Aktualisiere die verbleibende Höhe für die nächste Gruppe
+            currentY = elementY;
+            
+        } else {
+            // Gruppe passt nicht, aber ist zu klein zum Aufteilen - auf nächste Seite verschieben
+            const lastElementFromPrevPage = group.length > 0 ? 
+                (groupIndex > 0 && elementGroups[groupIndex-1].length > 0 ? 
+                    elementGroups[groupIndex-1][elementGroups[groupIndex-1].length-1] : null) 
+                : null;
+            
+            if (lastElementFromPrevPage) {
+                breakPositions.push({
+                    element: lastElementFromPrevPage,
+                    pageNumber: currentPage,
+                    type: 'group'
+                });
+                currentPage++;
+                currentY = availableHeight - groupHeight;
+            } else if (currentY < MIN_SPACE_FOR_NEXT_GROUP) {
+                // Nicht genug Platz - erzwungener Umbruch
+                const prevElement = getPreviousVisibleElement(elements, group[0]);
+                if (prevElement) {
+                    breakPositions.push({
+                        element: prevElement,
+                        pageNumber: currentPage,
+                        type: 'space'
+                    });
+                    currentPage++;
+                    currentY = availableHeight - groupHeight;
+                }
+            } else {
+                // Versuche trotzdem auf aktueller Seite
+                currentY -= groupHeight;
+            }
+        }
+    });
+    
+    return { breakPositions };
 }
 
 /**
-* Bestimmt, ob ein Element eine Strophe oder ein Refrain ist
-* @param {HTMLElement} element - Das zu prüfende Element
-* @returns {boolean} - True, wenn es sich um eine Strophe oder einen Refrain handelt
-*/
-function isStropheOrRefrain(element) {
-    return element.querySelector('.strophe') !== null || element.querySelector('.refrain') !== null;
+ * Bestimmt, ob nach diesem Element ein Seitenumbruch eingefügt werden kann
+ * @param {HTMLElement} element - Das zu prüfende Element
+ * @param {Array} group - Die Gruppe, zu der das Element gehört
+ * @param {number} index - Index innerhalb der Gruppe
+ * @returns {boolean} Kann nach diesem Element umgebrochen werden
+ */
+function canBreakAfter(element, group, index) {
+    // Niemals nach Elementen brechen, die eng mit dem nächsten verbunden sind
+    if (index === group.length - 1) return true;
+    
+    const nextElement = group[index + 1];
+    
+    // Nicht nach Titeln oder vor Absätzen/Strophen brechen
+    if (isHeading(element)) return false;
+    
+    // Nicht zwischen Copyright-Info und Inhalt brechen
+    if (element.classList.contains('copyright-info')) return false;
+    
+    // Nicht zwischen aufeinanderfolgenden Strophen brechen
+    if (isStropheOrRefrain(element) && isStropheOrRefrain(nextElement)) return false;
+    
+    return true;
 }
 
 /**
-* Prüft, ob ein Seitenumbruch an einer bestimmten Stelle vermieden werden sollte
-* @param {Array} elements - Alle Elemente des Dokuments
-* @param {number} currentIndex - Der aktuelle Index
-* @returns {boolean} - True, wenn der Umbruch vermieden werden sollte
-*/
-function shouldAvoidPageBreak(elements, currentIndex) {
-    if (currentIndex <= 0 || currentIndex >= elements.length) return false;
-    
-    const currentElement = elements[currentIndex];
-    const nextElement = elements[currentIndex + 1];
-    const prevElement = elements[currentIndex - 1];
-    
-    // Fall 1: Aktuelles Element ist ein Titel und das nächste eine Strophe/Refrain
-    if (isTitle(currentElement) && nextElement && isStropheOrRefrain(nextElement)) {
-        return true;
-    }
-    
-    // Fall 2: Vorheriges Element ist eine Strophe und aktuelles auch
-    if (prevElement && isStropheOrRefrain(prevElement) && isStropheOrRefrain(currentElement)) {
-        return true;
-    }
-    
-    return false;
-}
-
-/**
-* Identifiziert zusammengehörige Elementgruppen, die nicht getrennt werden sollten
-* @param {Array} elements - Alle Elemente im Dokument
-* @returns {Array} - Array von Element-Gruppen
-*/
-function identifyElementGroups(elements) {
+ * Identifiziert semantisch zusammengehörige Elementgruppen
+ * @param {Array} elements - Alle Elemente des Dokuments
+ * @returns {Array} Array von Element-Gruppen
+ */
+function identifySemanticGroups(elements) {
     const groups = [];
     let currentGroup = [];
-    let inStropheGroup = false;
-    let inTitleGroup = false;
+    let currentContext = null; // 'title', 'strophe', 'other'
     
     for (let i = 0; i < elements.length; i++) {
         const element = elements[i];
         
-        // Manueller Seitenumbruch beendet eine Gruppe
+        // Manueller Seitenumbruch bildet immer eine eigene Gruppe
         if (element.classList.contains('page-break')) {
             if (currentGroup.length > 0) {
                 groups.push([...currentGroup]);
                 currentGroup = [];
             }
-            inStropheGroup = false;
-            inTitleGroup = false;
+            groups.push([element]);
+            currentContext = null;
             continue;
         }
         
-        // Prüfe, ob es ein Titel ist
-        const isElementTitle = isTitle(element);
+        const isTitle = isHeading(element);
+        const isStrophe = isStropheOrRefrain(element);
+        const hasCopyright = element.classList.contains('copyright-info');
         
-        // Prüfe, ob es eine Strophe oder ein Refrain ist
-        const isElementStropheOrRefrain = isStropheOrRefrain(element);
-        
-        // Wenn wir einen Titel gefunden haben, beginne eine neue Titel-Gruppe
-        if (isElementTitle) {
-            // Wenn bereits eine Gruppe aktiv ist, beende sie
-            if (currentGroup.length > 0 && !inTitleGroup) {
+        // Fallunterscheidungen für semantische Gruppierungen
+        if (isTitle) {
+            // Titel beginnt neue Gruppe, außer wir sind bereits in einer Titelgruppe
+            if (currentContext !== 'title' && currentGroup.length > 0) {
                 groups.push([...currentGroup]);
                 currentGroup = [];
             }
-            
-            // Starte eine neue Titel-Gruppe
             currentGroup.push(element);
-            inTitleGroup = true;
-            continue;
-        }
-        
-        // Wenn wir eine Strophe/Refrain nach einem Titel haben, füge es zur Titelgruppe hinzu
-        if (isElementStropheOrRefrain && inTitleGroup) {
+            currentContext = 'title';
+        } 
+        else if (hasCopyright) {
+            // Copyright-Info gehört immer zur aktuellen Gruppe
             currentGroup.push(element);
-            continue;
         }
-        
-        // Wenn wir eine Strophe/Refrain haben, aber nicht in einer Titelgruppe sind
-        if (isElementStropheOrRefrain) {
-            // Wenn keine Gruppe aktiv ist, beginne eine neue
-            if (currentGroup.length === 0) {
-                currentGroup.push(element);
-                inStropheGroup = true;
-            } 
-            // Wenn bereits eine Strophengruppe aktiv ist, füge es hinzu
-            else if (inStropheGroup) {
-                currentGroup.push(element);
-            } 
-            // Sonst beginne eine neue Gruppe
-            else {
+        else if (isStrophe) {
+            // Strophe nach Titel: bleibt in der Gruppe
+            // Strophe nach Strophe: bleibt in der Gruppe
+            // Strophe alleine: bildet eigene Strophengruppe
+            if (currentContext !== 'title' && currentContext !== 'strophe' && currentGroup.length > 0) {
                 groups.push([...currentGroup]);
-                currentGroup = [element];
-                inStropheGroup = true;
-                inTitleGroup = false;
+                currentGroup = [];
+                currentContext = 'strophe';
+            } else if (currentGroup.length === 0) {
+                currentContext = 'strophe';
             }
-            continue;
+            currentGroup.push(element);
         }
-        
-        // Für andere Elemente, die nicht zu speziellen Gruppen gehören
-        if (currentGroup.length > 0) {
-            groups.push([...currentGroup]);
+        else {
+            // Anderes Element, prüfen ob es zur aktuellen Gruppe gehört
+            if ((currentContext === 'title' && isCloselyRelatedToTitle(element)) || 
+                (currentContext === 'strophe' && isCloselyRelatedToStrophe(element))) {
+                currentGroup.push(element);
+            } else {
+                // Sonst: Neue Gruppe beginnen
+                if (currentGroup.length > 0) {
+                    groups.push([...currentGroup]);
+                }
+                currentGroup = [element];
+                currentContext = 'other';
+            }
         }
-        
-        currentGroup = [element];
-        inStropheGroup = false;
-        inTitleGroup = false;
     }
     
-    // Füge die letzte Gruppe hinzu, falls vorhanden
+    // Letzte Gruppe hinzufügen
     if (currentGroup.length > 0) {
         groups.push(currentGroup);
     }
     
     return groups;
 }
+
 /**
- * Berechnet Seitenumbrüche basierend auf der PDF-Generierungslogik
- * @param {string} format - Das gewählte Format
+ * Prüft, ob ein Element eng mit einem Titel verbunden ist
+ * @param {HTMLElement} element - Das zu prüfende Element
+ * @returns {boolean} Ist mit Titel verbunden
  */
+function isCloselyRelatedToTitle(element) {
+    // Z.B. Copyright-Info, Untertitel, Anmerkungen
+    return element.classList.contains('copyright-info') || 
+           element.classList.contains('item-subtitle') ||
+           element.tagName === 'P' ||
+           element.tagName === 'EM';
+}
 
 /**
-* Berechnet alle Positionen für Seitenumbrüche in der Vorschau
-* @param {string} format - Das gewählte Format (a5, dl, a4-schmal, a3-schmal)
-* @returns {Object} - Berechnete Seitenumbrüche und Elementinformationen
-*/
-export function calculatePageBreaksForPreview(format = 'a5') {
-    const liedblattContent = document.getElementById('liedblatt-content');
-    if (!liedblattContent) return { breaks: [], elementsWithProps: [] };
-    
-    // PDF-Seitengröße und Seitenränder
-    const pageSize = pageSizes[format];
-    const margin = { top: 30, right: 20, bottom: 20, left: 20 };
-    
-    // Verfügbare Seitenhöhe (in PT)
-    const availableHeight = pageSize.height - margin.top - margin.bottom;
-    
-    // Alle Elemente im Liedblatt analysieren (ohne bestehende Umbrüche)
-    const elements = Array.from(liedblattContent.children).filter(el => 
-        !el.classList.contains('preview-page-break')
-    );
-    
-    // Elementeigenschaften sammeln
-    const elementsWithProps = elements.map((element, index) => ({
-        element: element,
-        index: index,
-        height: estimatePDFElementHeight(element, globalConfig),
-        isTitle: element.querySelector('.item-title') !== null,
-        isStrophe: element.querySelector('.strophe') !== null,
-        isRefrain: element.querySelector('.refrain') !== null,
-        isPageBreak: element.classList.contains('page-break')
-    }));
-    
-    // Aktuelle Y-Position und Seitenumbrüche
-    let currentY = pageSize.height - margin.top;
-    let pageNumber = 1;
-    const breaks = [];
-    
-    // Element-zu-Element durchgehen und Höhen schätzen
-    for (let i = 0; i < elementsWithProps.length; i++) {
-        const elementProps = elementsWithProps[i];
-        
-        // Manueller Seitenumbruch
-        if (elementProps.isPageBreak) {
-            breaks.push({
-                afterElementIndex: i,
-                pageNumber: pageNumber,
-                type: 'manual'
-            });
-            pageNumber++;
-            currentY = pageSize.height - margin.top;
-            continue;
-        }
-        
-        // Höhe des Elements berechnen
-        let elementHeight = elementProps.height;
-        
-        // Prüfen, ob ein Umbruch nötig ist
-        if (currentY - elementHeight < margin.bottom) {
-            // Spezielle Behandlung: Titel nicht vom Inhalt trennen
-            if (elementProps.isTitle && i < elementsWithProps.length - 1 && 
-                (elementsWithProps[i+1].isStrophe || elementsWithProps[i+1].isRefrain)) {
-                    // Wenn es ein Titel ist und danach ein Strophe oder Refrain kommt,
-                    // schieben wir beides auf die nächste Seite
-                    breaks.push({
-                        afterElementIndex: i - 1 >= 0 ? i - 1 : i,
-                        pageNumber: pageNumber,
-                        type: 'auto'
-                    });
-                    pageNumber++;
-                    currentY = pageSize.height - margin.top;
-                } 
-            // Spezielle Behandlung: Strophen nicht unterbrechen
-            else if (elementProps.isStrophe && i > 0 && elementsWithProps[i-1].isStrophe) {
-                // Suche nach dem Beginn der Strophengruppe
-                let j = i - 1;
-                while (j >= 0 && elementsWithProps[j].isStrophe) {
-                    j--;
-                }
-                
-                breaks.push({
-                    afterElementIndex: j >= 0 ? j : i - 1,
-                    pageNumber: pageNumber,
-                    type: 'auto'
-                });
-                pageNumber++;
-                currentY = pageSize.height - margin.top;
-            }
-            // Normale Umbruchbehandlung
-            else {
-                breaks.push({
-                    afterElementIndex: i - 1 >= 0 ? i - 1 : i,
-                    pageNumber: pageNumber,
-                    type: 'auto'
-                });
-                pageNumber++;
-                currentY = pageSize.height - margin.top - elementHeight;
-            }
-        } else {
-            // Element passt auf die aktuelle Seite
-            currentY -= elementHeight;
-        }
-        
-        // Nach jedem Element einen Standardabstand abziehen
-        currentY -= scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
-    }
-    
-    return { breaks, elementsWithProps };
+ * Prüft, ob ein Element eng mit einer Strophe verbunden ist
+ * @param {HTMLElement} element - Das zu prüfende Element
+ * @returns {boolean} Ist mit Strophe verbunden
+ */
+function isCloselyRelatedToStrophe(element) {
+    // Z.B. Refrain nach Strophe, weitere Strophen
+    return element.classList.contains('refrain') || 
+           element.classList.contains('strophe') ||
+           (element.tagName === 'P' && element.innerHTML.includes('Refrain'));
 }
 
-function calculatePDFLikePageBreaks(format) {
-    const liedblattContent = document.getElementById('liedblatt-content');
-    if (!liedblattContent) return;
-    
-    // PDF-Seitengröße und Seitenränder
-    const pageSize = pageSizes[format];
-    const margin = { top: 30, right: 20, bottom: 20, left: 20 };
-    const contentWidth = pageSize.width - margin.left - margin.right;
-    
-    // Verfügbare Seitenhöhe (in PT)
-    const availableHeight = pageSize.height - margin.top - margin.bottom;
-    
-    // Aktuelle Y-Position (in PT), beginnt am oberen Rand
-    let currentY = pageSize.height - margin.top;
-    let pageNumber = 1;
-    
-    // Alle Elemente im Liedblatt analysieren
-    const elements = Array.from(liedblattContent.children).filter(el => 
-        !el.classList.contains('preview-page-break')
-    );
-    
-    console.log(`PDF-Berechnung für ${format}: ${elements.length} Elemente gefunden`);
-    
-    // Identifiziere die Element-Gruppen für intelligente Umbrüche
-    const elementGroups = identifyElementGroups(elements);
-    console.log("Identifizierte Elementgruppen:", elementGroups.length);
-    
-    // Debug: Gruppendetails ausgeben
-    elementGroups.forEach((group, index) => {
-        console.log(`Gruppe ${index + 1}: ${group.length} Elemente`);
-        console.log(" - Erster Elementtyp:", group[0].tagName, Array.from(group[0].classList));
-        const hasTitle = group.some(el => isTitle(el));
-        const hasStrophe = group.some(el => isStropheOrRefrain(el));
-        console.log(" - Enthält Titel:", hasTitle, "Enthält Strophe:", hasStrophe);
-    });
-    
-    // Sammle Seitenumbrüche
-    const breakPositions = [];
-    
-    // Gehe durch alle Gruppen und berechne deren Platz
-    let processedElements = 0;
-    
-    for (let groupIndex = 0; groupIndex < elementGroups.length; groupIndex++) {
-        const group = elementGroups[groupIndex];
-        
-        // Schätze die Höhe der gesamten Gruppe
-        const groupHeight = estimateGroupHeight(group);
-        console.log(`Gruppe ${groupIndex + 1}: Geschätzte Höhe ${groupHeight}pt, Verfügbarer Platz: ${currentY - margin.bottom}pt`);
-        
-        // Wenn die Gruppe auf die aktuelle Seite passt oder es die erste Gruppe auf der Seite ist
-        if (currentY - groupHeight >= margin.bottom || currentY === pageSize.height - margin.top) {
-            console.log(`Gruppe ${groupIndex + 1} passt auf aktuelle Seite`);
-            // Gruppe passt auf die Seite, verarbeite alle Elemente
-            for (const element of group) {
-                const elementHeight = estimatePDFElementHeight(element, globalConfig);
-                currentY -= elementHeight;
-                
-                // Standard-Abstand nach jedem Element
-                currentY -= scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
-                processedElements++;
-            }
-        } else {
-            // Gruppe passt nicht auf aktuelle Seite, füge Umbruch ein
-            if (processedElements > 0) {
-                console.log(`Gruppe ${groupIndex + 1} passt nicht - Seitenumbruch nach Element ${processedElements}`);
-                breakPositions.push({
-                    afterElement: elements[processedElements - 1],
-                    pageNumber: pageNumber,
-                    type: 'auto'
-                });
-                
-                pageNumber++;
-                currentY = pageSize.height - margin.top;
-                
-                // Jetzt verarbeite die Gruppe auf der neuen Seite
-                for (const element of group) {
-                    const elementHeight = estimatePDFElementHeight(element, globalConfig);
-                    currentY -= elementHeight;
-                    
-                    // Standard-Abstand nach jedem Element
-                    currentY -= scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
-                    processedElements++;
-                }
-            } else {
-                // Es ist die erste Gruppe auf der Seite, aber zu groß - trotzdem versuchen
-                console.log(`Gruppe ${groupIndex + 1} ist zu groß für eine Seite, aber wird trotzdem platziert (erste auf Seite)`);
-                for (const element of group) {
-                    const elementHeight = estimatePDFElementHeight(element, globalConfig);
-                    currentY -= elementHeight;
-                    
-                    // Standard-Abstand nach jedem Element
-                    currentY -= scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
-                    processedElements++;
-                    
-                    // Wenn kein Platz mehr ist, füge Umbruch ein und setze Y zurück
-                    if (currentY < margin.bottom && processedElements < elements.length) {
-                        breakPositions.push({
-                            afterElement: element,
-                            pageNumber: pageNumber,
-                            type: 'overflow'
-                        });
-                        pageNumber++;
-                        currentY = pageSize.height - margin.top;
-                    }
-                }
-            }
-        }
-    }
-    
-    console.log("Berechnete Seitenumbrüche:", breakPositions.length);
-    
-    // Gehe durch alle erkannten Bruchpositionen und füge Marker ein
-    for (const breakInfo of breakPositions) {
-        insertPageBreakMarker(breakInfo.afterElement, breakInfo.pageNumber, format);
-    }
+/**
+ * Prüft, ob ein Element eine Überschrift ist
+ * @param {HTMLElement} element - Das zu prüfende Element
+ * @returns {boolean} Ist eine Überschrift
+ */
+function isHeading(element) {
+    return element.querySelector('.item-title') !== null || 
+           element.classList.contains('item-title') ||
+           ['H1', 'H2', 'H3'].includes(element.tagName) ||
+           (element.classList.contains('isQuillHeading'));
 }
 
-function estimateGroupHeight(group) {
+/**
+ * Prüft, ob ein Element eine Strophe oder ein Refrain ist
+ * @param {HTMLElement} element - Das zu prüfende Element
+ * @returns {boolean} Ist eine Strophe oder ein Refrain
+ */
+function isStropheOrRefrain(element) {
+    return element.classList.contains('strophe') || 
+           element.classList.contains('refrain') ||
+           element.querySelector('.strophe') !== null || 
+           element.querySelector('.refrain') !== null;
+}
+
+/**
+ * Berechnet die Gesamthöhe einer Elementgruppe
+ * @param {Array} group - Die Elementgruppe
+ * @returns {number} Die berechnete Höhe
+ */
+function calculateGroupHeight(group) {
     let totalHeight = 0;
     
-    console.log("Schätze Gruppenhöhe für", group.length, "Elemente");
-    
-    // Vorabprüfung der Gruppe
-    const hasTitle = group.some(el => isTitle(el));
+    // Spezielle Flags für bestimmte Elementkombinationen
+    const hasTitle = group.some(el => isHeading(el));
     const hasStrophe = group.some(el => isStropheOrRefrain(el));
+    const hasCopyright = group.some(el => el.classList.contains('copyright-info'));
     
-    // Zusätzlicher Puffer für Gruppen mit Titel und Strophen
-    const groupBuffer = (hasTitle && hasStrophe) ? 20 : 0;
+    // Zusätzlicher Puffer basierend auf Gruppenkomplexität
+    const groupBuffer = hasTitle && hasStrophe ? 20 : 
+                        hasTitle || hasStrophe ? 10 : 5;
     
-    for (const element of group) {
-        const height = estimatePDFElementHeight(element, globalConfig);
-        totalHeight += height;
+    // Für jedes Element in der Gruppe
+    group.forEach((element, index) => {
+        // Berechne die Höhe des Elements
+        const elementHeight = calculateElementHeight(element);
+        totalHeight += elementHeight;
         
-        // Debugging für jedes Element
-        console.log(` - Element (${element.tagName}): ${height}pt`);
-        
-        // Standard-Abstand zwischen Elementen
-        totalHeight += scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
-    }
+        // Bestimme zusätzliche Abstände zwischen Elementen
+        if (index < group.length - 1) {
+            const nextElement = group[index + 1];
+            let spacing = DEFAULT_OBJECT_SPACING;
+            
+            // Anpassungen für bestimmte Elementkombinationen
+            if (isHeading(element) && !hasCopyright) {
+                // Weniger Abstand nach Überschrift
+                spacing = TITLE_MARGIN_BOTTOM;
+            } else if (isStropheOrRefrain(element) && isStropheOrRefrain(nextElement)) {
+                // Strophen dichter beieinander
+                spacing = STROPHE_MARGIN_BOTTOM;
+            } else if (element.classList.contains('copyright-info')) {
+                // Weniger Abstand nach Copyright
+                spacing = 5;
+            }
+            
+            // Skalierung auf die aktuelle Schriftgröße
+            totalHeight += scaleValue(spacing, globalConfig.fontSize) * PX_TO_PT_RATIO;
+        }
+    });
     
-    // Gruppenbuffer für komplexere Gruppen hinzufügen
+    // Zusätzlicher Puffer für die Gruppe
     totalHeight += groupBuffer * PX_TO_PT_RATIO;
     
-    console.log(`Geschätzte Gruppenhöhe: ${totalHeight}pt (mit Buffer: ${groupBuffer})`);
     return totalHeight;
 }
 
 /**
- * Fügt eine Seitenumbruchmarkierung nach dem angegebenen Element ein
- * @param {HTMLElement} elementBefore - Element vor dem Umbruch
- * @param {number} pageNumber - Aktuelle Seitennummer
- * @param {string} format - Gewähltes Format
+ * Berechnet die Höhe eines einzelnen Elements
+ * @param {HTMLElement} element - Das Element
+ * @returns {number} Die berechnete Höhe in Punkten
  */
-function insertPageBreakMarker(elementBefore, pageNumber, format) {
-    if (!elementBefore || !elementBefore.parentNode) return;
-    
-    const formatName = getFormatName(format);
-    const pageBreakMarker = document.createElement('div');
-    pageBreakMarker.className = 'preview-page-break';
-    pageBreakMarker.textContent = `Seite ${pageNumber} endet hier (${formatName})`;
-    
-    elementBefore.parentNode.insertBefore(pageBreakMarker, elementBefore.nextSibling);
-}
-
-/**
- * Schätzt die Höhe eines Elements wie sie im PDF sein würde
- * @param {HTMLElement} element - Das zu messende Element
- * @param {Object} config - Die globale Konfiguration
- * @returns {number} - Die geschätzte Höhe in PT
- */
-function estimatePDFElementHeight(element, config) {
+function calculateElementHeight(element) {
     const computedStyle = window.getComputedStyle(element);
     
-    // Grundlegende Höhe vom DOM
+    // Ausgangshöhe aus DOM
     let baseHeight = element.offsetHeight;
     
-    // Schriftgröße und Zeilenabstand berücksichtigen
-    const fontSize = parseFloat(config.fontSize || 12);
-    const lineHeight = parseFloat(config.lineHeight || 1.5);
+    // Skalierungsfaktoren anwenden
+    const fontSize = parseFloat(globalConfig.fontSize || BASE_FONT_SIZE);
+    const lineHeight = parseFloat(globalConfig.lineHeight || 1.5);
     
-    // Besondere Behandlung für bestimmte Elementtypen
-    if (element.querySelector('.item-title')) {
-        // Titel haben größere Schrift
-        baseHeight *= HEADING_3_SCALE;
+    // Spezialbehandlung für verschiedene Elementtypen
+    if (isHeading(element)) {
+        // Überschriften haben größere Höhe
+        if (element.querySelector('h1, .isQuillHeading')) {
+            baseHeight *= HEADING_1_SCALE * 0.8;
+        } else if (element.querySelector('h2')) {
+            baseHeight *= HEADING_2_SCALE * 0.8;
+        } else {
+            baseHeight *= HEADING_3_SCALE * 0.8;
+        }
     }
     
-    if (element.querySelector('.strophe') || element.querySelector('.refrain')) {
-        // Text zählen und Zeilenanzahl schätzen
+    if (isStropheOrRefrain(element)) {
+        // Bessere Berechnung für Strophen basierend auf Text und Zeilen
         const textContent = element.textContent || '';
-        const totalChars = textContent.length;
-        const charsPerLine = 50; // Geschätzte Zeichen pro Zeile
-        const estimatedLines = Math.ceil(totalChars / charsPerLine);
         
-        // Höhe basierend auf Zeilenanzahl, Schriftgröße und Zeilenabstand
-        const lineHeightPx = fontSize * lineHeight;
-        baseHeight = estimatedLines * lineHeightPx;
+        // Zähle tatsächliche Zeilenumbrüche
+        const lineBreaksCount = (textContent.match(/\n/g) || []).length;
+        
+        // Schätze Zeilenanzahl basierend auf Text und verfügbarer Breite
+        const wordsPerLine = 7; // Geschätzte Wortanzahl pro Zeile
+        const words = textContent.split(/\s+/).length;
+        const estimatedLines = Math.max(
+            lineBreaksCount + 1,
+            Math.ceil(words / wordsPerLine)
+        );
+        
+        // Berechne Höhe basierend auf Zeilen
+        baseHeight = estimatedLines * fontSize * lineHeight;
         
         // Zusätzlicher Abstand für Strophen
-        baseHeight += STROPHE_SPACING;
+        baseHeight += scaleValue(STROPHE_SPACING, fontSize);
     }
     
+    if (element.classList.contains('copyright-info')) {
+        // Copyright-Info hat spezielle Größe
+        baseHeight = scaleValue(COPYRIGHT_FONT_SIZE, fontSize) * 1.2;
+    }
+    
+    // Bilder direkt messen
     if (element.querySelector('img')) {
-        // Bilder direkt messen
         const img = element.querySelector('img');
-        baseHeight = img.offsetHeight;
+        baseHeight = img.offsetHeight || 150; // Fallback, falls noch nicht geladen
     }
     
-    // Margins hinzufügen
+    // Ränder hinzufügen
     const marginTop = parseFloat(computedStyle.marginTop) || 0;
     const marginBottom = parseFloat(computedStyle.marginBottom) || 0;
     baseHeight += marginTop + marginBottom;
@@ -530,19 +493,48 @@ function estimatePDFElementHeight(element, config) {
 }
 
 /**
+ * Findet das vorherige sichtbare Element im Dokument
+ * @param {Array} allElements - Alle Elemente
+ * @param {HTMLElement} currentElement - Das aktuelle Element
+ * @returns {HTMLElement|null} Das vorherige Element oder null
+ */
+function getPreviousVisibleElement(allElements, currentElement) {
+    const index = allElements.indexOf(currentElement);
+    if (index <= 0) return null;
+    return allElements[index - 1];
+}
+
+/**
+ * Fügt einen Seitenumbruch nach dem angegebenen Element ein
+ * @param {HTMLElement} element - Element, nach dem der Umbruch eingefügt wird
+ * @param {number} pageNumber - Seitennummer
+ * @param {string} format - Das gewählte Format
+ */
+function insertPageBreakMarker(element, pageNumber, format) {
+    if (!element || !element.parentNode) return;
+    
+    const formatName = getFormatName(format);
+    const pageBreakMarker = document.createElement('div');
+    pageBreakMarker.className = 'preview-page-break';
+    pageBreakMarker.textContent = `Seite ${pageNumber} endet hier (${formatName})`;
+    
+    element.parentNode.insertBefore(pageBreakMarker, element.nextSibling);
+}
+
+/**
  * Skaliert einen Wert basierend auf der Schriftgröße
  * @param {number} value - Der zu skalierende Wert
  * @param {number} fontSize - Die Schriftgröße
- * @returns {number} - Der skalierte Wert
+ * @returns {number} Der skalierte Wert
  */
 function scaleValue(value, fontSize) {
     return (value / BASE_FONT_SIZE) * fontSize;
 }
 
 /**
- * Gibt den lesbaren Namen des Formats zurück
+ * Gibt den lesbaren Namen eines Formats zurück
  * @param {string} format - Der Format-Schlüssel
- * @returns {string} - Der lesbare Name
+ * @returns {string} Der lesbare Name
  */
 function getFormatName(format) {
     const formatNames = {
@@ -555,7 +547,7 @@ function getFormatName(format) {
 }
 
 /**
- * Initialisiert die Formatauswahl für die Vorschau
+ * Initialisiert die Auswahl des Vorschauformats
  */
 export function initPreviewFormatSelector() {
     const previewFormatSelect = document.getElementById('previewFormat');
@@ -564,11 +556,11 @@ export function initPreviewFormatSelector() {
         return;
     }
     
-    // Event-Listener für Änderungen
+    // Event-Listener für Formatänderungen
     previewFormatSelect.addEventListener('change', (e) => {
         const selectedFormat = e.target.value;
         
-        // Speichern des Formats in der Konfiguration
+        // Format in Konfiguration speichern
         if (globalConfig) {
             globalConfig.previewFormat = selectedFormat;
             try {
@@ -578,11 +570,11 @@ export function initPreviewFormatSelector() {
             }
         }
         
-        // Aktualisierung der Vorschau
+        // Vorschau aktualisieren
         updatePreviewWithPageBreaks(selectedFormat);
     });
     
-    // Initiale Aktualisierung
+    // Initiale Aktualisierung der Vorschau
     requestAnimationFrame(() => {
         setTimeout(() => {
             updatePreviewWithPageBreaks(previewFormatSelect.value);
@@ -590,7 +582,7 @@ export function initPreviewFormatSelector() {
     });
 }
 
-// Export der Funktionen
+// Exportieren der Funktionen
 export default {
     updatePreviewWithPageBreaks,
     initPreviewFormatSelector
