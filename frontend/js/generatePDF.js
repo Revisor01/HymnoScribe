@@ -1107,6 +1107,10 @@ async function generatePDF(format) {
                     // Standard-Abstand nach jedem Element hinzufügen
                     y -= scaledDefaultObjectSpacing;
                     processedElements++;
+                    if (needsPageBreakAfter) {
+                        console.log(`Vorschau-Seitenumbruch nach Element mit ID ${elementId}`);
+                        ({ page, y } = addPage());
+                    }
                 }
             } else {
                 // Erste Gruppe auf der Seite, aber zu groß
@@ -1257,6 +1261,10 @@ async function generatePDF(format) {
                     // Standard-Abstand nach jedem Element hinzufügen
                     y -= scaledDefaultObjectSpacing;
                     processedElements++;
+                    if (needsPageBreakAfter) {
+                        console.log(`Vorschau-Seitenumbruch nach Element mit ID ${elementId}`);
+                        ({ page, y } = addPage());
+                    }
                 }
             }
         }
