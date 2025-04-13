@@ -1,4 +1,4 @@
-// previewPageBreaks.js - Neu implementierte Version für akkurate PDF-ähnliche Seitenumbrüche
+// previewPageBreaks.js - Optimierte Version für akkurate PDF-ähnliche Seitenumbrüche
 
 import { globalConfig } from './script.js';
 
@@ -17,19 +17,20 @@ const pageSizes = {
 };
 
 // Konstanten für Abstandsberechnungen und Formatierung
+// Optimierte Werte für weniger Seiten
 const BASE_FONT_SIZE = 14;
 const HEADING_1_SCALE = 1.6;
 const HEADING_2_SCALE = 1.4;
 const HEADING_3_SCALE = 1.2;
-const COPYRIGHT_FONT_SIZE = 12;
-const STROPHE_SPACING = 8;
-const DEFAULT_OBJECT_SPACING = 15;
-const TITLE_MARGIN_BOTTOM = 8;
-const STROPHE_MARGIN_BOTTOM = 10;
+const COPYRIGHT_FONT_SIZE = 10;
+const STROPHE_SPACING = 6;  // Reduziert von 8
+const DEFAULT_OBJECT_SPACING = 12; // Reduziert von 15
+const TITLE_MARGIN_BOTTOM = 6; // Reduziert von 8
+const STROPHE_MARGIN_BOTTOM = 8; // Reduziert von 10
 
 // Konstanten für Elemente, die nicht getrennt werden sollten
-const MIN_ELEMENT_HEIGHT_FOR_SPLIT = 200; // Mindesthöhe eines Elements, um es zu teilen
-const MIN_SPACE_FOR_NEXT_GROUP = 60;      // Mindestplatz für die nächste Gruppe
+const MIN_ELEMENT_HEIGHT_FOR_SPLIT = 180; // Reduziert von 200
+const MIN_SPACE_FOR_NEXT_GROUP = 50;      // Reduziert von 60
 
 // Debouncing-Variablen
 let calculateTimeout = null;
@@ -66,6 +67,9 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
                 insertPageBreakMarker(breakInfo.element, breakInfo.pageNumber, format);
             });
             
+            // Speichere die Umbruchinformationen für die PDF-Generierung
+            window.lastCalculatedBreakPositions = breakPositions;
+            
         } catch (error) {
             console.error("Fehler bei der Seitenumbruchberechnung:", error);
         } finally {
@@ -94,6 +98,13 @@ function calculatePrecisePageBreaks(format) {
     const elements = Array.from(liedblattContent.children).filter(el => 
         !el.classList.contains('preview-page-break')
     );
+    
+    // Stellen sicher, dass alle Elemente eine ID haben
+    elements.forEach((element, index) => {
+        if (!element.getAttribute('data-liedblatt-id') && !element.getAttribute('data-original-id')) {
+            element.setAttribute('data-liedblatt-id', `element-${index}-${Date.now()}`);
+        }
+    });
     
     // Identifiziere semantische Gruppen (Titel mit Inhalten, Strophenblöcke usw.)
     const elementGroups = identifySemanticGroups(elements);
@@ -386,8 +397,8 @@ function calculateGroupHeight(group) {
     const hasCopyright = group.some(el => el.classList.contains('copyright-info'));
     
     // Zusätzlicher Puffer basierend auf Gruppenkomplexität
-    const groupBuffer = hasTitle && hasStrophe ? 20 : 
-                        hasTitle || hasStrophe ? 10 : 5;
+    const groupBuffer = hasTitle && hasStrophe ? 15 : // Reduziert von 20
+                        hasTitle || hasStrophe ? 8 : 3; // Reduziert von 10/5
     
     // Für jedes Element in der Gruppe
     group.forEach((element, index) => {
@@ -409,7 +420,7 @@ function calculateGroupHeight(group) {
                 spacing = STROPHE_MARGIN_BOTTOM;
             } else if (element.classList.contains('copyright-info')) {
                 // Weniger Abstand nach Copyright
-                spacing = 5;
+                spacing = 4; // Reduziert von 5
             }
             
             // Skalierung auf die aktuelle Schriftgröße
@@ -442,11 +453,11 @@ function calculateElementHeight(element) {
     if (isHeading(element)) {
         // Überschriften haben größere Höhe
         if (element.querySelector('h1, .isQuillHeading')) {
-            baseHeight *= HEADING_1_SCALE * 0.8;
+            baseHeight *= HEADING_1_SCALE * 0.75; // Reduziert von 0.8
         } else if (element.querySelector('h2')) {
-            baseHeight *= HEADING_2_SCALE * 0.8;
+            baseHeight *= HEADING_2_SCALE * 0.75; // Reduziert von 0.8
         } else {
-            baseHeight *= HEADING_3_SCALE * 0.8;
+            baseHeight *= HEADING_3_SCALE * 0.75; // Reduziert von 0.8
         }
     }
     
@@ -458,7 +469,7 @@ function calculateElementHeight(element) {
         const lineBreaksCount = (textContent.match(/\n/g) || []).length;
         
         // Schätze Zeilenanzahl basierend auf Text und verfügbarer Breite
-        const wordsPerLine = 7; // Geschätzte Wortanzahl pro Zeile
+        const wordsPerLine = 8; // Erhöht von 7 für kompaktere Darstellung
         const words = textContent.split(/\s+/).length;
         const estimatedLines = Math.max(
             lineBreaksCount + 1,
@@ -466,7 +477,7 @@ function calculateElementHeight(element) {
         );
         
         // Berechne Höhe basierend auf Zeilen
-        baseHeight = estimatedLines * fontSize * lineHeight;
+        baseHeight = estimatedLines * fontSize * lineHeight * 0.95; // Faktor für weniger Höhe
         
         // Zusätzlicher Abstand für Strophen
         baseHeight += scaleValue(STROPHE_SPACING, fontSize);
@@ -517,6 +528,18 @@ function insertPageBreakMarker(element, pageNumber, format) {
     const pageBreakMarker = document.createElement('div');
     pageBreakMarker.className = 'preview-page-break';
     pageBreakMarker.textContent = `Seite ${pageNumber} endet hier (${formatName})`;
+    
+    // Sicherstellen, dass das Element eine ID hat
+    const elementId = element.getAttribute('data-original-id') || 
+                     element.getAttribute('data-liedblatt-id');
+    
+    if (!elementId) {
+        element.setAttribute('data-liedblatt-id', `auto-id-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+    }
+    
+    // Speichere die ID des Elements auch im Umbruchmarker
+    pageBreakMarker.setAttribute('data-after-element-id', 
+        element.getAttribute('data-original-id') || element.getAttribute('data-liedblatt-id'));
     
     element.parentNode.insertBefore(pageBreakMarker, element.nextSibling);
 }
