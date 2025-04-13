@@ -531,6 +531,17 @@ async function generatePDF(format) {
     const progressText = document.getElementById('pdf-progress-text');
     progressContainer.style.display = 'block';
     
+    // Definition der showProgress-Funktion
+    function showProgress(percent, message = '') {
+        const progressBar = document.getElementById('pdf-progress-bar');
+        const progressText = document.getElementById('pdf-progress-text');
+        if (progressBar && progressText) {
+            progressBar.style.width = `${percent}%`;
+            progressText.textContent = `${Math.round(percent)}% ${message}`;
+        }
+        console.log(`Progress: ${percent}% ${message}`);
+    }
+    
     showProgress(0, "Initialisiere PDF-Erstellung");
     console.log("Starting PDF generation for format:", format);
     const { PDFDocument } = window.PDFLib;
@@ -946,9 +957,15 @@ async function generatePDF(format) {
     
     // Erstelle Kontext für die Elementverarbeitung
     const processingContext = {
-        doc, page, y, margin, contentWidth, width, height, addLogoToPage,
+        doc, page, y, margin, contentWidth, width, height, 
         scaledFontSize, scaledIconSize, scaledIconMargin, 
-        scaledDefaultObjectSpacing, fonts, showProgress
+        scaledDefaultObjectSpacing, fonts, showProgress,
+        // Diese Funktionen müssen explizit übergeben werden
+        addLogoToPage, 
+        drawIcon,
+        drawImage,
+        drawText,
+        drawJustifiedText
     };
     
     // Verarbeite alle Elementgruppen mit Umbruchinformationen aus der Vorschau
@@ -1145,8 +1162,11 @@ async function fetchAndEmbedFont(doc, fontFamily) {
 */
 async function processElementGroups(elementGroups, pageBreakInfo, context) {
     // Extrahiere benötigte Kontextvariablen
-    let { page, y, margin, contentWidth, width, height, doc, addLogoToPage,
-        scaledFontSize, scaledIconSize, scaledIconMargin, scaledDefaultObjectSpacing, fonts } = context;
+    let { 
+        doc, page, y, margin, contentWidth, width, height, 
+        scaledFontSize, scaledIconSize, scaledIconMargin, scaledDefaultObjectSpacing, 
+        fonts, showProgress, addLogoToPage, drawIcon, drawImage, drawText, drawJustifiedText 
+    } = context;
     
     // Erstelle eine Map für schnellen Zugriff auf Umbruchinformationen
     const breakInfoMap = {};
@@ -1163,7 +1183,7 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
     let processedElements = 0;
     for (let groupIndex = 0; groupIndex < elementGroups.length; groupIndex++) {
         const group = elementGroups[groupIndex];
-        context.showProgress(40 + (groupIndex / elementGroups.length) * 50, "Generiere PDF-Inhalt");
+        showProgress(40 + (groupIndex / elementGroups.length) * 50, "Generiere PDF-Inhalt");
         
         // Verarbeite alle Elemente der Gruppe
         for (let elementIndex = 0; elementIndex < group.length; elementIndex++) {
@@ -1356,7 +1376,6 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
     // Gib aktualisierten Kontext zurück
     return { page, y, processedElements };
 }
-
 
 /**
 * Teilt einen Text in Zeilen auf, die in eine bestimmte Breite passen
