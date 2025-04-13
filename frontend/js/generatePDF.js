@@ -42,7 +42,7 @@ const COPYRIGHT_MARGIN_BOTTOM = -5;
 function addNewPage(context) {
     console.log("Füge neue Seite hinzu");
     
-    // Erstelle neue Seite
+    // Erstelle neue Seite direkt im übergebenen Kontext
     context.page = context.doc.addPage([context.width, context.height]);
     
     // Füge Logo hinzu, falls vorhanden
@@ -64,6 +64,7 @@ function addNewPage(context) {
     context.y = context.height - context.margin.top;
     console.log(`Neue Seite hinzugefügt. Y-Position: ${context.y}`);
     
+    // Wichtig: Rückgabe des direkt modifizierten Kontext-Objekts
     return context;
 }
 
@@ -1029,6 +1030,7 @@ async function generatePDF(format) {
     
     // KRITISCH: Diese Funktion muss den aktualisierten Kontext zurückgeben
     const updatedContext = await processElementGroups(elementGroups, pageBreakInfo, processingContext);
+    const result = await processElementGroups(elementGroups, pageBreakInfo, pdfContext);
     
     // Stelle sicher, dass die PDF eine gerade Seitenzahl hat (wichtig für Broschüren)
     ensureEvenPageCount(pdfContext.doc);
@@ -1110,8 +1112,8 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
             // Manueller Seitenumbruch wird direkt verarbeitet
             if (element.classList.contains('page-break')) {
                 console.log("Manueller Seitenumbruch verarbeitet");
-                // Wichtig: Kontext aktualisieren
-                context = addNewPage(context);
+                // Der Kontext wird direkt modifiziert, keine Neuzuweisung erforderlich
+                addNewPage(context);
                 continue;
             }
             
@@ -1268,7 +1270,8 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
             if (elementId && breakInfoMap[elementId]) {
                 const breakInfo = breakInfoMap[elementId];
                 console.log(`Seitenumbruch nach Element mit ID ${elementId} (Typ: ${breakInfo.type})`);
-                context = addNewPage(context);
+                // Der Kontext wird direkt modifiziert, keine Neuzuweisung erforderlich
+                addNewPage(context);
             }
         }
     }
