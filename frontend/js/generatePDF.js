@@ -18,6 +18,11 @@ const IMAGE_MARGIN_TOP = -10; // Abstand vor Bildern in Punkten
 const IMAGE_MARGIN_BOTTOM = 15; // Abstand nach Bildern in Punkten
 const STROPHE_SPACING = 8; // Abstand nach Strophen in Punkten
 
+// Konstanten für semantische Umbruchregeln
+const MAX_STROPHES_BEFORE_BREAK = 3;      // Maximale Anzahl Strophen vor einem Umbruch
+const MAX_PSALM_LINES_BEFORE_BREAK = 4;   // Maximale Anzahl Zeilen in Psalmen/Gebeten vor Umbruch
+const MIN_SPACE_FOR_NEXT_GROUP = 50;      // Minimaler Platz für nächste Gruppe
+
 // Neue Konstanten für Quill-Überschriften
 const QUILL_H1_MARGIN_TOP = 0;
 const QUILL_H1_MARGIN_BOTTOM = 12;
@@ -58,6 +63,48 @@ function isStropheOrRefrain(element) {
 }
 
 /**
+* Prüft, ob ein Element ein Gebet oder Psalm ist
+* @param {HTMLElement} element - Das zu prüfende Element
+* @returns {boolean} True, wenn es ein Gebet oder Psalm ist
+*/
+function isPsalmOrPrayer(element) {
+    // Direkte Klassen prüfen
+    if (element.classList.contains('psalm') || 
+        element.classList.contains('prayer') ||
+        element.classList.contains('gebet')) return true;
+    
+    // Klassen in untergeordneten Elementen prüfen
+    if (element.querySelector('.psalm') || 
+        element.querySelector('.prayer') ||
+        element.querySelector('.gebet')) return true;
+    
+    // Titel prüfen, die auf Gebet oder Psalm hindeuten
+    const titleEl = element.querySelector('.item-title, h1, h2, h3');
+    if (titleEl) {
+        const title = titleEl.textContent.toLowerCase();
+        if (title.includes('psalm') || 
+            title.includes('gebet') || 
+            title.includes('vater unser') ||
+            title.includes('prayer')) {
+                return true;
+            }
+    }
+    
+    // Prüfe auf charakteristische Formationen in Absätzen
+    const paragraphs = element.querySelectorAll('p');
+    if (paragraphs.length >= 3) {
+        // Typisches Muster für Psalmen ist, dass jeder Absatz kurz ist
+        let shortParagraphCount = 0;
+        paragraphs.forEach(p => {
+            if (p.textContent.length < 100) shortParagraphCount++;
+        });
+        if (shortParagraphCount >= paragraphs.length * 0.7) return true;
+    }
+    
+    return false;
+}
+
+/**
 * Prüft, ob ein Seitenumbruch an einer bestimmten Stelle vermieden werden sollte
 * @param {Array} elements - Alle Elemente des Dokuments
 * @param {number} currentIndex - Der aktuelle Index
@@ -78,6 +125,15 @@ function shouldAvoidPageBreak(elements, currentIndex) {
     // Fall 2: Vorheriges Element ist eine Strophe und aktuelles auch
     if (prevElement && isStropheOrRefrain(prevElement) && isStropheOrRefrain(currentElement)) {
         return true;
+    }
+    
+    // Fall 3: Psalm/Gebet mit weniger als MAX_PSALM_LINES_BEFORE_BREAK Zeilen
+    if (isPsalmOrPrayer(currentElement)) {
+        const textContent = currentElement.textContent || '';
+        const lineCount = (textContent.match(/\n/g) || []).length + 1;
+        if (lineCount < MAX_PSALM_LINES_BEFORE_BREAK) {
+            return true;
+        }
     }
     
     return false;
@@ -167,7 +223,7 @@ function estimatePDFElementHeight(element, config) {
 }
 
 /**
-* Verbesserte Schätzung der Höhe einer Gruppe von Elementen
+* Verbesserte Schätzung der Höhe einer Elementgruppe
 * @param {Array} group - Gruppe von Elementen
 * @returns {number} - Geschätzte Höhe der Gruppe in PT
 */
@@ -224,6 +280,7 @@ function identifyElementGroups(items) {
         console.log(`Verarbeite Element #${i}:`, {
             isTitle: isTitle(item),
             isStrophe: isStropheOrRefrain(item),
+            isPsalm: isPsalmOrPrayer(item),
             hasClass: Array.from(item.classList)
         });
         
@@ -236,12 +293,15 @@ function identifyElementGroups(items) {
             }
             inStropheGroup = false;
             inTitleGroup = false;
+            // Füge den Seitenumbruch als separate Gruppe hinzu
+            groups.push([item]);
             continue;
         }
         
         // Element-Eigenschaften prüfen
         const isItemTitle = isTitle(item);
         const isItemStropheOrRefrain = isStropheOrRefrain(item);
+        const isItemPsalm = isPsalmOrPrayer(item);
         
         // Titelgruppe beginnen
         if (isItemTitle) {
@@ -264,6 +324,13 @@ function identifyElementGroups(items) {
             continue;
         }
         
+        // Psalm/Gebet nach Titel
+        if (isItemPsalm && inTitleGroup) {
+            currentGroup.push(item);
+            console.log("Psalm/Gebet zu Titelgruppe hinzugefügt");
+            continue;
+        }
+        
         // Strophengruppe
         if (isItemStropheOrRefrain) {
             if (currentGroup.length === 0) {
@@ -273,14 +340,41 @@ function identifyElementGroups(items) {
                 console.log("Neue Strophengruppe begonnen");
             } 
             else if (inStropheGroup) {
-                currentGroup.push(item);
-                console.log("Strophe zu Strophengruppe hinzugefügt");
+                // Prüfen, ob wir die maximale Anzahl von Strophen in einer Gruppe erreicht haben
+                let stropheCount = currentGroup.filter(el => isStropheOrRefrain(el)).length;
+                
+                if (stropheCount >= MAX_STROPHES_BEFORE_BREAK) {
+                    // Nach X Strophen eine neue Gruppe beginnen
+                    groups.push([...currentGroup]);
+                    console.log(`Neue Gruppe nach ${stropheCount} Strophen gestartet`);
+                    currentGroup = [item];
+                } else {
+                    currentGroup.push(item);
+                    console.log("Strophe zu Strophengruppe hinzugefügt");
+                }
             } 
             else {
                 groups.push([...currentGroup]);
                 console.log("Neue Strophengruppe - vorherige Gruppe abgeschlossen:", currentGroup.length, "Elemente");
                 currentGroup = [item];
                 inStropheGroup = true;
+                inTitleGroup = false;
+            }
+            continue;
+        }
+        
+        // Psalm/Gebet-Gruppe
+        if (isItemPsalm) {
+            if (currentGroup.length === 0) {
+                currentGroup.push(item);
+                inStropheGroup = false;
+                inTitleGroup = false;
+                console.log("Neue Psalm/Gebet-Gruppe begonnen");
+            } else {
+                groups.push([...currentGroup]);
+                console.log("Neue Psalm/Gebet-Gruppe - vorherige Gruppe abgeschlossen:", currentGroup.length, "Elemente");
+                currentGroup = [item];
+                inStropheGroup = false;
                 inTitleGroup = false;
             }
             continue;
@@ -307,9 +401,13 @@ function identifyElementGroups(items) {
     return groups;
 }
 
+/**
+* Extrahiert Seitenumbruchmarker aus der Vorschauansicht
+* @returns {Object} Informationen über Seitenumbruchmarker
+*/
 function extractPageBreaksFromPreview() {
     const liedblattContent = document.getElementById('liedblatt-content');
-    if (!liedblattContent) return { elementIds: [], manualBreakIndices: [] };
+    if (!liedblattContent) return { elementIds: [], manualBreakElements: [], breakInfo: [] };
     
     const allElements = Array.from(liedblattContent.children);
     
@@ -834,6 +932,14 @@ async function generatePDF(format) {
         console.log(`Gruppe ${idx + 1}: ${types.join(', ')}`);
     });
     
+    // Erstelle eine Map für schnellen Zugriff auf Umbruchinformationen
+    const breakInfoMap = {};
+    if (pageBreakInfo.breakInfo) {
+        pageBreakInfo.breakInfo.forEach(info => {
+            breakInfoMap[info.elementId] = info;
+        });
+    }
+    
     // Verarbeite Element-Gruppen mit intelligenter Seitenumbruch-Logik
     showProgress(40, "Verarbeite Inhalte");
     let processedElements = 0;
@@ -851,8 +957,6 @@ async function generatePDF(format) {
             
             // Verarbeite alle Elemente der Gruppe
             for (const element of group) {
-                // Elemente verarbeiten - Code aus der vorherigen Version
-                
                 // Manueller Seitenumbruch
                 if (element.classList.contains('page-break')) {
                     console.log("Manual page break detected");
@@ -862,7 +966,14 @@ async function generatePDF(format) {
                 
                 const elementId = element.getAttribute('data-original-id') || 
                 element.getAttribute('data-liedblatt-id');
-                const needsPageBreakAfter = elementId && pageBreakInfo.elementIds.includes(elementId);
+                
+                // Verbesserte Umbruchlogik mit breakInfoMap
+                const breakInfo = elementId ? breakInfoMap[elementId] : null;
+                
+                // Zeige den Typ des Umbruchs, falls vorhanden
+                if (breakInfo) {
+                    console.log(`Element mit ID ${elementId} hat Umbruchtyp: ${breakInfo.type}`);
+                }
                 
                 const isFirstOnPage = y === height - margin.top;
                 const afterIcon = items[processedElements - 1] && items[processedElements - 1].querySelector('.fas, .trenner-default-img');
@@ -903,19 +1014,25 @@ async function generatePDF(format) {
                             
                             if (element.tagName === 'H1') {
                                 fontSize = scaledFontSize * HEADING_1_SCALE;
+                                isHeading = true;
                                 if (element.classList.contains('isQuillHeading')) {
+                                    isQuillHeading = true;
                                     marginTop = scaleValue(QUILL_H1_MARGIN_TOP, scaledFontSize);
                                     marginBottom = scaleValue(QUILL_H1_MARGIN_BOTTOM, scaledFontSize);
                                 }
                             } else if (element.tagName === 'H2') {
                                 fontSize = scaledFontSize * HEADING_2_SCALE;
+                                isHeading = true;
                                 if (element.classList.contains('isQuillHeading')) {
+                                    isQuillHeading = true;
                                     marginTop = scaleValue(QUILL_H2_MARGIN_TOP, scaledFontSize);
                                     marginBottom = scaleValue(QUILL_H2_MARGIN_BOTTOM, scaledFontSize);
                                 }
                             } else if (element.tagName === 'H3') {
                                 fontSize = scaledFontSize * HEADING_3_SCALE;
+                                isHeading = true;
                                 if (element.classList.contains('isQuillHeading')) {
+                                    isQuillHeading = true;
                                     marginTop = scaleValue(QUILL_H3_MARGIN_TOP, scaledFontSize);
                                     marginBottom = scaleValue(QUILL_H3_MARGIN_BOTTOM, scaledFontSize);
                                 }
@@ -981,8 +1098,6 @@ async function generatePDF(format) {
                                 totalElements: elements.length
                             };
                             
-                            console.log('isQuillHeading:', options.isQuillHeading, 'Item:', element);
-                            
                             let textContent = element.innerText;
                             const textHeight = await drawText(textContent, margin.left, y, fontSize, contentWidth, options);
                             y -= textHeight;
@@ -998,9 +1113,19 @@ async function generatePDF(format) {
                 // Standard-Abstand nach jedem Element hinzufügen
                 y -= scaledDefaultObjectSpacing;
                 processedElements++;
-                if (needsPageBreakAfter) {
-                    console.log(`Vorschau-Seitenumbruch nach Element mit ID ${elementId}`);
-                    ({ page, y } = addPage());
+                
+                // Umbruchlogik basierend auf detaillierten Informationen
+                if (breakInfo) {
+                    // Verwende den Umbruchtyp, falls vorhanden
+                    const breakType = breakInfo.type;
+                    console.log(`Seitenumbruch nach Element mit ID ${elementId} (Typ: ${breakType})`);
+                    
+                    // Verhindere Umbrüche nach Überschriften, es sei denn, es ist ein manueller Umbruch
+                    if (breakType === 'manual' || !isTitle(element)) {
+                        ({ page, y } = addPage());
+                    } else {
+                        console.log(`Umbruch nach Überschrift vermieden für Element: ${elementId}`);
+                    }
                 }
             }
         } else {
@@ -1014,7 +1139,6 @@ async function generatePDF(format) {
                 
                 // Verarbeite die Gruppe auf der neuen Seite
                 for (const element of group) {
-                    // Gleicher Verarbeitungscode wie oben
                     // Manueller Seitenumbruch
                     if (element.classList.contains('page-break')) {
                         console.log("Manual page break detected");
@@ -1024,7 +1148,9 @@ async function generatePDF(format) {
                     
                     const elementId = element.getAttribute('data-original-id') || 
                     element.getAttribute('data-liedblatt-id');
-                    const needsPageBreakAfter = elementId && pageBreakInfo.elementIds.includes(elementId);
+                    
+                    // Verbesserte Umbruchlogik mit breakInfoMap
+                    const breakInfo = elementId ? breakInfoMap[elementId] : null;
                     
                     const isFirstOnPage = y === height - margin.top;
                     const afterIcon = items[processedElements - 1] && items[processedElements - 1].querySelector('.fas, .trenner-default-img');
@@ -1065,19 +1191,25 @@ async function generatePDF(format) {
                                 
                                 if (element.tagName === 'H1') {
                                     fontSize = scaledFontSize * HEADING_1_SCALE;
+                                    isHeading = true;
                                     if (element.classList.contains('isQuillHeading')) {
+                                        isQuillHeading = true;
                                         marginTop = scaleValue(QUILL_H1_MARGIN_TOP, scaledFontSize);
                                         marginBottom = scaleValue(QUILL_H1_MARGIN_BOTTOM, scaledFontSize);
                                     }
                                 } else if (element.tagName === 'H2') {
                                     fontSize = scaledFontSize * HEADING_2_SCALE;
+                                    isHeading = true;
                                     if (element.classList.contains('isQuillHeading')) {
+                                        isQuillHeading = true;
                                         marginTop = scaleValue(QUILL_H2_MARGIN_TOP, scaledFontSize);
                                         marginBottom = scaleValue(QUILL_H2_MARGIN_BOTTOM, scaledFontSize);
                                     }
                                 } else if (element.tagName === 'H3') {
                                     fontSize = scaledFontSize * HEADING_3_SCALE;
+                                    isHeading = true;
                                     if (element.classList.contains('isQuillHeading')) {
+                                        isQuillHeading = true;
                                         marginTop = scaleValue(QUILL_H3_MARGIN_TOP, scaledFontSize);
                                         marginBottom = scaleValue(QUILL_H3_MARGIN_BOTTOM, scaledFontSize);
                                     }
@@ -1142,8 +1274,6 @@ async function generatePDF(format) {
                                     elementIndex: j,
                                     totalElements: elements.length
                                 };
-                                
-                                console.log('isQuillHeading:', options.isQuillHeading, 'Item:', element);
                                 
                                 let textContent = element.innerText;
                                 const textHeight = await drawText(textContent, margin.left, y, fontSize, contentWidth, options);
@@ -1160,9 +1290,19 @@ async function generatePDF(format) {
                     // Standard-Abstand nach jedem Element hinzufügen
                     y -= scaledDefaultObjectSpacing;
                     processedElements++;
-                    if (needsPageBreakAfter) {
-                        console.log(`Vorschau-Seitenumbruch nach Element mit ID ${elementId}`);
-                        ({ page, y } = addPage());
+                    
+                    // Umbruchlogik basierend auf detaillierten Informationen
+                    if (breakInfo) {
+                        // Verwende den Umbruchtyp, falls vorhanden
+                        const breakType = breakInfo.type;
+                        console.log(`Seitenumbruch nach Element mit ID ${elementId} (Typ: ${breakType})`);
+                        
+                        // Verhindere Umbrüche nach Überschriften, es sei denn, es ist ein manueller Umbruch
+                        if (breakType === 'manual' || !isTitle(element)) {
+                            ({ page, y } = addPage());
+                        } else {
+                            console.log(`Umbruch nach Überschrift vermieden für Element: ${elementId}`);
+                        }
                     }
                 }
             } else {
@@ -1171,7 +1311,6 @@ async function generatePDF(format) {
                 
                 // Versuche trotzdem, so viele Elemente wie möglich zu platzieren
                 for (const element of group) {
-                    // Gleicher Verarbeitungscode wie oben
                     // Manueller Seitenumbruch
                     if (element.classList.contains('page-break')) {
                         console.log("Manual page break detected");
@@ -1181,7 +1320,9 @@ async function generatePDF(format) {
                     
                     const elementId = element.getAttribute('data-original-id') || 
                     element.getAttribute('data-liedblatt-id');
-                    const needsPageBreakAfter = elementId && pageBreakInfo.elementIds.includes(elementId);
+                    
+                    // Verbesserte Umbruchlogik mit breakInfoMap
+                    const breakInfo = elementId ? breakInfoMap[elementId] : null;
                     
                     const isFirstOnPage = y === height - margin.top;
                     const afterIcon = items[processedElements - 1] && items[processedElements - 1].querySelector('.fas, .trenner-default-img');
@@ -1222,19 +1363,25 @@ async function generatePDF(format) {
                                 
                                 if (element.tagName === 'H1') {
                                     fontSize = scaledFontSize * HEADING_1_SCALE;
+                                    isHeading = true;
                                     if (element.classList.contains('isQuillHeading')) {
+                                        isQuillHeading = true;
                                         marginTop = scaleValue(QUILL_H1_MARGIN_TOP, scaledFontSize);
                                         marginBottom = scaleValue(QUILL_H1_MARGIN_BOTTOM, scaledFontSize);
                                     }
                                 } else if (element.tagName === 'H2') {
                                     fontSize = scaledFontSize * HEADING_2_SCALE;
+                                    isHeading = true;
                                     if (element.classList.contains('isQuillHeading')) {
+                                        isQuillHeading = true;
                                         marginTop = scaleValue(QUILL_H2_MARGIN_TOP, scaledFontSize);
                                         marginBottom = scaleValue(QUILL_H2_MARGIN_BOTTOM, scaledFontSize);
                                     }
                                 } else if (element.tagName === 'H3') {
                                     fontSize = scaledFontSize * HEADING_3_SCALE;
+                                    isHeading = true;
                                     if (element.classList.contains('isQuillHeading')) {
+                                        isQuillHeading = true;
                                         marginTop = scaleValue(QUILL_H3_MARGIN_TOP, scaledFontSize);
                                         marginBottom = scaleValue(QUILL_H3_MARGIN_BOTTOM, scaledFontSize);
                                     }
@@ -1299,8 +1446,6 @@ async function generatePDF(format) {
                                     elementIndex: j,
                                     totalElements: elements.length
                                 };
-                                
-                                console.log('isQuillHeading:', options.isQuillHeading, 'Item:', element);
                                 
                                 let textContent = element.innerText;
                                 const textHeight = await drawText(textContent, margin.left, y, fontSize, contentWidth, options);
@@ -1318,9 +1463,19 @@ async function generatePDF(format) {
                     // Standard-Abstand nach jedem Element hinzufügen
                     y -= scaledDefaultObjectSpacing;
                     processedElements++;
-                    if (needsPageBreakAfter) {
-                        console.log(`Vorschau-Seitenumbruch nach Element mit ID ${elementId}`);
-                        ({ page, y } = addPage());
+                    
+                    // Umbruchlogik basierend auf detaillierten Informationen
+                    if (breakInfo) {
+                        // Verwende den Umbruchtyp, falls vorhanden
+                        const breakType = breakInfo.type;
+                        console.log(`Seitenumbruch nach Element mit ID ${elementId} (Typ: ${breakType})`);
+                        
+                        // Verhindere Umbrüche nach Überschriften, es sei denn, es ist ein manueller Umbruch
+                        if (breakType === 'manual' || !isTitle(element)) {
+                            ({ page, y } = addPage());
+                        } else {
+                            console.log(`Umbruch nach Überschrift vermieden für Element: ${elementId}`);
+                        }
                     }
                 }
             }
@@ -1330,12 +1485,11 @@ async function generatePDF(format) {
         showProgress(40 + (groupIndex / elementGroups.length) * 50, "Generiere PDF-Inhalt");
     }
     
+    // Stelle sicher, dass die PDF eine gerade Seitenzahl hat (wichtig für Broschüren)
     ensureEvenPageCount(doc);
     
     console.log("PDF generation complete. Saving...");
     showProgress(90, "Finalisiere PDF");
-    const pdfBytes = await doc.save();
-    console.log("PDF saved. Checking if brochure is needed...");
     
     try {
         console.log("PDF generation complete. Saving...");
@@ -1764,8 +1918,69 @@ async function createA5orA4SchmalBrochure(inputPdf, outputPdf, pageCount, format
             await drawPageOnSheetForA5AndA4Schmal(inputPdf, outputPdf, fourthPage, 3, 0, targetWidth, targetHeight, format);
             await drawPageOnSheetForA5AndA4Schmal(inputPdf, outputPdf, fourthPage, 4, 1, targetWidth, targetHeight, format);
         }
+    } else {
+        // Implementierung für mehr als 8 Seiten
+        // Bei mehr als 8 Seiten brauchen wir eine komplexere Broschürenreihenfolge
+        const pageOrder = calculateBookletPageOrder(pageCount);
+        
+        // Seiten-Paare erstellen und auf Blätter verteilen
+        for (let i = 0; i < pageOrder.length; i += 2) {
+            const newPage = outputPdf.addPage(outputPageSize);
+            
+            // Linke Seite (Rückseite)
+            if (pageOrder[i] < pageCount) {
+                await drawPageOnSheetForA5AndA4Schmal(
+                    inputPdf, outputPdf, newPage, 
+                    pageOrder[i], 0, targetWidth, targetHeight, format
+                );
+            } else {
+                // Leere Seite für Auffüllung
+                await drawPageOnSheetForA5AndA4Schmal(
+                    inputPdf, outputPdf, newPage, 
+                    -1, 0, targetWidth, targetHeight, format
+                );
+            }
+            
+            // Rechte Seite (Vorderseite)
+            if (i + 1 < pageOrder.length && pageOrder[i + 1] < pageCount) {
+                await drawPageOnSheetForA5AndA4Schmal(
+                    inputPdf, outputPdf, newPage, 
+                    pageOrder[i + 1], 1, targetWidth, targetHeight, format
+                );
+            } else {
+                // Leere Seite für Auffüllung
+                await drawPageOnSheetForA5AndA4Schmal(
+                    inputPdf, outputPdf, newPage, 
+                    -1, 1, targetWidth, targetHeight, format
+                );
+            }
+        }
     }
 }
+
+/**
+* Berechnet die Seitenreihenfolge für eine Broschüre
+* @param {number} pageCount - Anzahl der Seiten
+* @returns {number[]} - Array mit der Reihenfolge der Seiten für den Druck
+*/
+function calculateBookletPageOrder(pageCount) {
+    // Auf eine durch 4 teilbare Seitenzahl auffüllen
+    const totalPages = Math.ceil(pageCount / 4) * 4;
+    const order = [];
+    
+    for (let i = 0; i < totalPages / 2; i += 2) {
+        // Rückseite (links, rechts)
+        order.push(totalPages - 1 - i);
+        order.push(i);
+        
+        // Vorderseite (links, rechts)
+        order.push(i + 1);
+        order.push(totalPages - 2 - i);
+    }
+    
+    return order;
+}
+
 /**
 * Zeichnet eine Seite für A5 und A4-Schmal auf ein Blatt
 * @param {PDFDocument} inputPdf - Die Eingabe-PDF
@@ -1778,7 +1993,7 @@ async function createA5orA4SchmalBrochure(inputPdf, outputPdf, pageCount, format
 * @param {string} format - Das gewählte Format
 * @returns {Promise<void>}
 */
-async function drawPageOnSheetForA5AndA4Schmal(inputPdf, outputPdf, newPage, pageIndex, position, targetWidth, targetHeight) {
+async function drawPageOnSheetForA5AndA4Schmal(inputPdf, outputPdf, newPage, pageIndex, position, targetWidth, targetHeight, format) {
     console.log(`Verarbeite Seite ${pageIndex + 1} für Position ${position + 1}`);
     try {
         // Falls pageIndex -1 ist, dann handelt es sich um eine leere Seite
@@ -1889,6 +2104,12 @@ function getPositionOnSheet(position, targetWidth, targetHeight, sheetWidth, she
             y: 0 // Immer oben auf der Y-Achse
         };
     }
+    
+    // Fallback für unbekannte Formate
+    return {
+        x: position * (sheetWidth / 2),
+        y: 0
+    };
 }
 
 /**
@@ -1940,6 +2161,7 @@ function getPagesPerSheet(format) {
     return {
         'a5': 2,
         'dl': 3,
-        'a4-schmal': 2
+        'a4-schmal': 2,
+        'a3-schmal': 2
     }[format] || 2;
 }
