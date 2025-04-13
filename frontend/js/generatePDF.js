@@ -973,6 +973,10 @@ async function generatePDF(format) {
                         continue;
                     }
                     
+                    const elementId = element.getAttribute('data-original-id') || 
+                    element.getAttribute('data-liedblatt-id');
+                    const needsPageBreakAfter = elementId && pageBreakInfo.elementIds.includes(elementId);
+                    
                     const isFirstOnPage = y === height - margin.top;
                     const afterIcon = items[processedElements - 1] && items[processedElements - 1].querySelector('.fas, .trenner-default-img');
                     
@@ -1125,6 +1129,10 @@ async function generatePDF(format) {
                         ({ page, y } = addPage());
                         continue;
                     }
+                    
+                    const elementId = element.getAttribute('data-original-id') || 
+                    element.getAttribute('data-liedblatt-id');
+                    const needsPageBreakAfter = elementId && pageBreakInfo.elementIds.includes(elementId);
                     
                     const isFirstOnPage = y === height - margin.top;
                     const afterIcon = items[processedElements - 1] && items[processedElements - 1].querySelector('.fas, .trenner-default-img');
