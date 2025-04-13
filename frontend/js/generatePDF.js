@@ -316,37 +316,85 @@ function extractPageBreaksFromPreview() {
     // Sammle alle Element-IDs, nach denen ein Umbruch erfolgen soll
     const elementIds = [];
     const manualBreakElements = [];
+    const breakInfo = []; // Detaillierte Informationen zu jedem Umbruch
     
+    // Erster Durchlauf: Identifiziere manuelle Umbrüche
     for (let i = 0; i < allElements.length; i++) {
         const element = allElements[i];
         
         // Manuellen Seitenumbruch erfassen
         if (element.classList.contains('page-break')) {
             manualBreakElements.push(element);
-            continue;
-        }
-        
-        // Vorschau-Seitenumbruch finden
-        if (element.classList.contains('preview-page-break')) {
-            // Finde das Element, nach dem der Umbruch erfolgt
-            const afterElementId = element.getAttribute('data-after-element-id');
-            if (afterElementId) {
-                elementIds.push(afterElementId);
-            } else if (i > 0) {
-                // Fallback: Verwende die ID des vorherigen Elements
-                const prevElement = allElements[i-1];
-                const prevId = prevElement.getAttribute('data-original-id') || 
-                prevElement.getAttribute('data-liedblatt-id');
-                if (prevId) {
-                    elementIds.push(prevId);
+            // Finde das Element vor dem Umbruch für die PDF-Generierung
+            if (i > 0) {
+                const prevElementId = allElements[i-1].getAttribute('data-original-id') || 
+                allElements[i-1].getAttribute('data-liedblatt-id');
+                if (prevElementId) {
+                    breakInfo.push({
+                        elementId: prevElementId,
+                        type: 'manual',
+                        element: allElements[i-1],
+                        afterIndex: i-1
+                    });
                 }
             }
         }
     }
     
+    // Zweiter Durchlauf: Identifiziere automatische Umbrüche
+    // Wir berücksichtigen nur Umbrüche, die nicht direkt nach einem manuellen Umbruch kommen
+    for (let i = 0; i < allElements.length; i++) {
+        const element = allElements[i];
+        
+        // Automatischen Vorschau-Seitenumbruch finden
+        if (element.classList.contains('preview-page-break')) {
+            // Holen das vorherige Element (nach dem der Umbruch erfolgt)
+            const afterElementId = element.getAttribute('data-after-element-id');
+            const breakType = element.getAttribute('data-break-type') || 'auto';
+            
+            if (afterElementId) {
+                // Prüfe, ob dieser Umbruch nicht mit einem manuellen kollidiert
+                const isNearManual = manualBreakElements.some(manualBreak => {
+                    const manualIndex = allElements.indexOf(manualBreak);
+                    // Ignoriere automatische Umbrüche, die zu nahe an manuellen sind
+                    return Math.abs(i - manualIndex) <= 2;
+                });
+                
+                if (!isNearManual) {
+                    elementIds.push(afterElementId);
+                    // Finde das Element für die detaillierte Information
+                    const afterElement = allElements.find(el => 
+                        (el.getAttribute('data-original-id') === afterElementId || 
+                            el.getAttribute('data-liedblatt-id') === afterElementId));
+                    
+                    if (afterElement) {
+                        breakInfo.push({
+                            elementId: afterElementId,
+                            type: breakType,
+                            element: afterElement,
+                            afterIndex: allElements.indexOf(afterElement)
+                        });
+                    }
+                }
+            }
+        }
+    }
+    
+    // Sortiere die Umbrüche nach ihrer Position im Dokument
+    breakInfo.sort((a, b) => a.afterIndex - b.afterIndex);
+    
+    // Entferne doppelte Umbrüche (wenn mehrere Umbrüche direkt hintereinander folgen)
+    const uniqueBreakInfo = breakInfo.filter((info, index, array) => {
+        if (index === 0) return true;
+        const prevInfo = array[index - 1];
+        // Wenn der vorherige Umbruch direkt vor diesem Element ist, ignoriere diesen
+        return info.afterIndex - prevInfo.afterIndex > 1;
+    });
+    
     return {
-        elementIds,
-        manualBreakElements
+        elementIds: uniqueBreakInfo.map(info => info.elementId),
+        manualBreakElements,
+        breakInfo: uniqueBreakInfo
     };
 }
 
@@ -373,6 +421,7 @@ async function generatePDF(format) {
     console.log("Loading fonts...");
     showProgress(10, "Lade Schriftarten");
     
+    // Lade Konfiguration
     let config;
     try {
         const savedConfig = localStorage.getItem('liedblattConfig');

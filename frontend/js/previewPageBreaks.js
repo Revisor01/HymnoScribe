@@ -1,4 +1,4 @@
-// previewPageBreaks.js - Optimierte Version für akkurate PDF-ähnliche Seitenumbrüche
+// previewPageBreaks.js - Verbesserte Version mit semantischen Regeln und besserer Koordination
 
 import { globalConfig } from './script.js';
 
@@ -17,20 +17,21 @@ const pageSizes = {
 };
 
 // Konstanten für Abstandsberechnungen und Formatierung
-// Optimierte Werte für weniger Seiten
 const BASE_FONT_SIZE = 14;
 const HEADING_1_SCALE = 1.6;
 const HEADING_2_SCALE = 1.4;
 const HEADING_3_SCALE = 1.2;
 const COPYRIGHT_FONT_SIZE = 10;
-const STROPHE_SPACING = 6;  // Reduziert von 8
-const DEFAULT_OBJECT_SPACING = 12; // Reduziert von 15
-const TITLE_MARGIN_BOTTOM = 6; // Reduziert von 8
-const STROPHE_MARGIN_BOTTOM = 8; // Reduziert von 10
+const STROPHE_SPACING = 6;
+const DEFAULT_OBJECT_SPACING = 12;
+const TITLE_MARGIN_BOTTOM = 6;
+const STROPHE_MARGIN_BOTTOM = 8;
 
-// Konstanten für Elemente, die nicht getrennt werden sollten
-const MIN_ELEMENT_HEIGHT_FOR_SPLIT = 180; // Reduziert von 200
-const MIN_SPACE_FOR_NEXT_GROUP = 50;      // Reduziert von 60
+// Konstanten für semantische Umbruchregeln
+const MAX_STROPHES_BEFORE_BREAK = 3;      // Maximale Anzahl Strophen vor einem Umbruch
+const MAX_PSALM_LINES_BEFORE_BREAK = 4;   // Maximale Anzahl Zeilen in Psalmen/Gebeten vor Umbruch
+const MIN_ELEMENT_HEIGHT_FOR_SPLIT = 180; // Minimale Höhe für teilbare Elemente
+const MIN_SPACE_FOR_NEXT_GROUP = 50;      // Minimaler Platz für nächste Gruppe
 
 // Debouncing-Variablen
 let calculateTimeout = null;
@@ -52,19 +53,24 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
         try {
             console.log("Aktualisiere Vorschau mit Seitenumbrüchen für Format:", format);
             
-            // Entferne vorhandene Seitenumbrüche aus der Vorschau
+            // Entferne nur automatische Seitenumbrüche, behalte manuelle
             const liedblattContent = document.getElementById('liedblatt-content');
             if (!liedblattContent) return;
             
             const existingBreaks = liedblattContent.querySelectorAll('.preview-page-break');
             existingBreaks.forEach(breakEl => breakEl.remove());
             
-            // Berechne Seitenumbrüche basierend auf der PDF-Generierungslogik
+            // Berechne Seitenumbrüche basierend auf der verbesserten Logik
             const { breakPositions } = calculatePrecisePageBreaks(format);
             
             // Füge Seitenumbruch-Marker in die Vorschau ein
             breakPositions.forEach(breakInfo => {
-                insertPageBreakMarker(breakInfo.element, breakInfo.pageNumber, format);
+                if (breakInfo.type !== 'manual') { // Für automatische Umbrüche
+                    insertPageBreakMarker(breakInfo.element, breakInfo.pageNumber, format, breakInfo.type);
+                } else {
+                    // Für manuelle Umbrüche: Seitenzahl aktualisieren
+                    updateManualPageBreakMarker(breakInfo.element, breakInfo.pageNumber, format);
+                }
             });
             
             // Speichere die Umbruchinformationen für die PDF-Generierung
@@ -79,10 +85,10 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
 }
 
 /**
-* Berechnet präzise Seitenumbruchpositionen unter Berücksichtigung semantischer Regeln
-* @param {string} format - Das gewählte Papierformat
-* @returns {Object} Informationen zu Seitenumbrüchen
-*/
+ * Berechnet präzise Seitenumbruchpositionen unter Berücksichtigung semantischer Regeln
+ * @param {string} format - Das gewählte Papierformat
+ * @returns {Object} Informationen zu Seitenumbrüchen
+ */
 function calculatePrecisePageBreaks(format) {
     const liedblattContent = document.getElementById('liedblatt-content');
     if (!liedblattContent) return { breakPositions: [] };
@@ -94,10 +100,8 @@ function calculatePrecisePageBreaks(format) {
     // Verfügbare Höhe für Inhalt auf einer Seite
     const availableHeight = pageSize.height - margin.top - margin.bottom;
     
-    // Alle Content-Elemente (ohne bestehende Umbrüche)
-    const elements = Array.from(liedblattContent.children).filter(el => 
-        !el.classList.contains('preview-page-break')
-    );
+    // Alle Content-Elemente (einschließlich manueller Umbrüche)
+    const elements = Array.from(liedblattContent.children);
     
     // Stellen sicher, dass alle Elemente eine ID haben
     elements.forEach((element, index) => {
@@ -118,6 +122,7 @@ function calculatePrecisePageBreaks(format) {
     // Semantische Zähler für die Umbruchslogik
     let stropheCounter = 0;
     let lastStropheElement = null;
+    let lastWasTitle = false;
     
     // Verarbeite alle Gruppen und entscheide über Seitenumbrüche
     elementGroups.forEach((group, groupIndex) => {
@@ -134,6 +139,7 @@ function calculatePrecisePageBreaks(format) {
             // Semantische Zähler zurücksetzen
             stropheCounter = 0;
             lastStropheElement = null;
+            lastWasTitle = false;
             return;
         }
         
@@ -145,6 +151,7 @@ function calculatePrecisePageBreaks(format) {
         if (groupHeight <= currentY) {
             // Gruppe passt komplett - prüfe auf semantische Umbrüche innerhalb der Gruppe
             let elementY = currentY;
+            let elementsWithinPage = [];
             
             for (let i = 0; i < group.length; i++) {
                 const element = group[i];
@@ -155,50 +162,128 @@ function calculatePrecisePageBreaks(format) {
                     stropheCounter++;
                     lastStropheElement = element;
                     
-                    // Nach jeder dritten Strophe/Refrain einen Umbruch einfügen
-                    if (stropheCounter > 0 && stropheCounter % 3 === 0 && i < group.length - 1) {
-                        breakPositions.push({
-                            element,
-                            pageNumber: currentPage,
-                            type: 'strophe-rule'
-                        });
-                        currentPage++;
-                        elementY = availableHeight;
-                        continue;
+                    // SEMANTISCHE REGEL: Nach jeder dritten Strophe/Refrain einen Umbruch einfügen
+                    if (stropheCounter >= MAX_STROPHES_BEFORE_BREAK && i < group.length - 1) {
+                        // Nur brechen, wenn wir nicht direkt nach einer Überschrift sind
+                        if (!lastWasTitle) {
+                            breakPositions.push({
+                                element,
+                                pageNumber: currentPage,
+                                type: 'strophe-rule'
+                            });
+                            currentPage++;
+                            elementY = availableHeight;
+                            stropheCounter = 0;
+                            elementsWithinPage = [];
+                            continue;
+                        }
                     }
+                    
+                    lastWasTitle = false;
                 } else if (isPsalmOrPrayer(element)) {
-                    // Zähle Zeilen im Gebet/Psalm
+                    // SEMANTISCHE REGEL: Bei Psalmen/Gebeten nach X Zeilen umbrechen
                     const textContent = element.textContent || '';
                     const lineCount = (textContent.match(/\n/g) || []).length + 1;
                     
-                    // Nach 4 oder mehr Zeilen einen Umbruch einfügen
-                    if (lineCount >= 4 && i < group.length - 1) {
-                        breakPositions.push({
-                            element,
-                            pageNumber: currentPage,
-                            type: 'prayer-rule'
-                        });
-                        currentPage++;
-                        elementY = availableHeight;
-                        continue;
+                    if (lineCount >= MAX_PSALM_LINES_BEFORE_BREAK && i < group.length - 1) {
+                        if (!lastWasTitle) {
+                            breakPositions.push({
+                                element,
+                                pageNumber: currentPage,
+                                type: 'psalm-rule'
+                            });
+                            currentPage++;
+                            elementY = availableHeight;
+                            stropheCounter = 0;
+                            elementsWithinPage = [];
+                            continue;
+                        }
                     }
+                    
+                    lastWasTitle = false;
+                } else if (isHeading(element)) {
+                    // SEMANTISCHE REGEL: Nach Überschriften keine Umbrüche
+                    lastWasTitle = true;
+                    stropheCounter = 0;
                 } else if (!isCloselyRelatedToStrophe(element) && !isHeading(element)) {
                     // Bei nicht-verwandten Elementen Strophenzähler zurücksetzen
                     stropheCounter = 0;
+                    lastWasTitle = false;
                 }
                 
-                // Aktuelle Höhe reduzieren
+                // Prüfe, ob das Element auf die aktuelle Seite passt
+                if (elementY - elementHeight < margin.bottom) {
+                    // Element passt nicht mehr - Umbruch einfügen
+                    // Aber NIE nach einer Überschrift umbrechen
+                    if (lastWasTitle) {
+                        if (elementsWithinPage.length > 0) {
+                            // Wenn wir gerade eine Überschrift haben, brechen wir VOR ihr (nach dem vorherigen Element)
+                            const lastElementBeforeTitle = elementsWithinPage[elementsWithinPage.length - 1];
+                            breakPositions.push({
+                                element: lastElementBeforeTitle,
+                                pageNumber: currentPage,
+                                type: 'overflow-before-title'
+                            });
+                        } else {
+                            // Wenn die Überschrift das erste Element auf der Seite ist, 
+                            // versuchen wir, sie trotzdem zu platzieren
+                            elementY -= elementHeight;
+                            elementsWithinPage.push(element);
+                            continue;
+                        }
+                    } else {
+                        // Normaler Überlaufumbruch nach dem letzten Element auf der Seite
+                        if (i > 0) {
+                            const lastElement = group[i-1];
+                            breakPositions.push({
+                                element: lastElement,
+                                pageNumber: currentPage,
+                                type: 'overflow'
+                            });
+                        } else if (elementsWithinPage.length > 0) {
+                            // Falls i=0, aber wir haben bereits Elemente
+                            const lastElement = elementsWithinPage[elementsWithinPage.length - 1];
+                            breakPositions.push({
+                                element: lastElement,
+                                pageNumber: currentPage,
+                                type: 'overflow'
+                            });
+                        }
+                    }
+                    
+                    currentPage++;
+                    elementY = availableHeight;
+                    stropheCounter = 0;
+                    elementsWithinPage = [];
+                    
+                    // Element nach dem Umbruch verarbeiten
+                    if (isStropheOrRefrain(element)) {
+                        stropheCounter = 1;
+                        lastStropheElement = element;
+                    }
+                    
+                    // Nach Umbruch Element erneut verarbeiten
+                    i--;
+                    continue;
+                }
+                
+                // Aktuelle Höhe reduzieren und Element zur Seite hinzufügen
                 elementY -= elementHeight;
+                elementsWithinPage.push(element);
                 
                 // Prüfe, ob nach diesem Element ein Umbruch erlaubt ist
-                if (canBreakAfter(element, group, i) && elementY < margin.bottom && i < group.length - 1) {
+                if (canBreakAfter(element, group, i) && 
+                    i < group.length - 1 && 
+                    elementY < MIN_SPACE_FOR_NEXT_GROUP) {
                     breakPositions.push({
                         element,
                         pageNumber: currentPage,
-                        type: 'overflow'
+                        type: 'limited-space'
                     });
                     currentPage++;
                     elementY = availableHeight;
+                    stropheCounter = 0;
+                    elementsWithinPage = [];
                 }
             }
             
@@ -209,6 +294,7 @@ function calculatePrecisePageBreaks(format) {
             // Große Gruppe, muss aufgeteilt werden
             let elementY = currentY;
             let lastBreakElement = null;
+            let elementsWithinPage = [];
             
             // Gehe durch Elemente und suche Stellen für Umbrüche
             for (let i = 0; i < group.length; i++) {
@@ -220,8 +306,8 @@ function calculatePrecisePageBreaks(format) {
                     stropheCounter++;
                     lastStropheElement = element;
                     
-                    // Nach jeder dritten Strophe einen Umbruch setzen
-                    if (stropheCounter > 0 && stropheCounter % 3 === 0) {
+                    // Nach jeder dritten Strophe einen Umbruch setzen, außer nach Überschrift
+                    if (stropheCounter >= MAX_STROPHES_BEFORE_BREAK && !lastWasTitle) {
                         breakPositions.push({
                             element,
                             pageNumber: currentPage,
@@ -229,16 +315,56 @@ function calculatePrecisePageBreaks(format) {
                         });
                         currentPage++;
                         elementY = availableHeight;
+                        stropheCounter = 0;
+                        elementsWithinPage = [];
                         continue;
                     }
+                    
+                    lastWasTitle = false;
+                } else if (isHeading(element)) {
+                    lastWasTitle = true;
+                    stropheCounter = 0;
                 } else if (!isCloselyRelatedToStrophe(element) && !isHeading(element)) {
+                    lastWasTitle = false;
                     stropheCounter = 0;
                 }
                 
                 // Prüfe, ob Element auf aktuelle Seite passt
                 if (elementHeight > elementY) {
                     // Element passt nicht mehr - Umbruch einfügen
-                    if (lastBreakElement) {
+                    
+                    // Aber NIE nach einer Überschrift umbrechen
+                    if (lastWasTitle) {
+                        if (elementsWithinPage.length > 0) {
+                            // Wenn wir gerade eine Überschrift haben, brechen wir VOR ihr
+                            const lastElementBeforeTitle = elementsWithinPage[elementsWithinPage.length - 1];
+                            breakPositions.push({
+                                element: lastElementBeforeTitle,
+                                pageNumber: currentPage,
+                                type: 'overflow-before-title'
+                            });
+                            currentPage++;
+                            elementY = availableHeight;
+                            i--; // Element erneut verarbeiten
+                            elementsWithinPage = [];
+                            continue;
+                        } else if (i > 0) {
+                            // Wenn die Überschrift das erste Element ist und nicht passt,
+                            // brechen wir VOR ihr
+                            breakPositions.push({
+                                element: group[i-1],
+                                pageNumber: currentPage,
+                                type: 'overflow-before-title'
+                            });
+                            currentPage++;
+                            elementY = availableHeight;
+                            i--; // Element erneut verarbeiten
+                            elementsWithinPage = [];
+                            continue;
+                        }
+                    }
+                    
+                    if (lastBreakElement && !lastWasTitle) {
                         breakPositions.push({
                             element: lastBreakElement,
                             pageNumber: currentPage,
@@ -247,7 +373,10 @@ function calculatePrecisePageBreaks(format) {
                         currentPage++;
                         elementY = availableHeight;
                         lastBreakElement = null;
-                    } else if (i > 0) {
+                        elementsWithinPage = [];
+                        i--; // Element erneut verarbeiten
+                        continue;
+                    } else if (i > 0 && !lastWasTitle) {
                         breakPositions.push({
                             element: group[i-1],
                             pageNumber: currentPage,
@@ -255,21 +384,36 @@ function calculatePrecisePageBreaks(format) {
                         });
                         currentPage++;
                         elementY = availableHeight;
+                        elementsWithinPage = [];
+                        i--; // Element erneut verarbeiten
+                        continue;
                     } else {
                         // Auch das erste Element passt nicht - erzwungener Umbruch
-                        breakPositions.push({
-                            element: element,
-                            pageNumber: currentPage,
-                            type: 'force'
-                        });
-                        currentPage++;
-                        elementY = availableHeight - elementHeight;
-                        continue;
+                        if (elementHeight > availableHeight) {
+                            // Element ist größer als die Seite - teilen wir es künstlich auf
+                            breakPositions.push({
+                                element: element,
+                                pageNumber: currentPage,
+                                type: 'force'
+                            });
+                            currentPage++;
+                            elementY = availableHeight;
+                            elementsWithinPage = [];
+                            continue;
+                        } else {
+                            // Element passt auf leere Seite, also neue Seite
+                            currentPage++;
+                            elementY = availableHeight;
+                            i--; // Element erneut verarbeiten
+                            elementsWithinPage = [];
+                            continue;
+                        }
                     }
                 }
                 
-                // Aktuelle Höhe reduzieren
+                // Aktuelle Höhe reduzieren und Element zur Seite hinzufügen
                 elementY -= elementHeight;
+                elementsWithinPage.push(element);
                 
                 // Bestimme, ob dies eine gute Stelle für einen möglichen Umbruch ist
                 if (canBreakAfter(element, group, i)) {
@@ -282,9 +426,9 @@ function calculatePrecisePageBreaks(format) {
         } else {
             // Gruppe passt nicht, aber ist zu klein zum Aufteilen - auf nächste Seite verschieben
             const lastElementFromPrevPage = group.length > 0 ? 
-            (groupIndex > 0 && elementGroups[groupIndex-1].length > 0 ? 
-                elementGroups[groupIndex-1][elementGroups[groupIndex-1].length-1] : null) 
-            : null;
+                (groupIndex > 0 && elementGroups[groupIndex-1].length > 0 ? 
+                    elementGroups[groupIndex-1][elementGroups[groupIndex-1].length-1] : null) 
+                : null;
             
             if (lastElementFromPrevPage) {
                 breakPositions.push({
@@ -316,7 +460,6 @@ function calculatePrecisePageBreaks(format) {
     return { breakPositions };
 }
 
-
 /**
 * Bestimmt, ob nach diesem Element ein Seitenumbruch eingefügt werden soll
 * basierend auf semantischen Regeln
@@ -331,13 +474,13 @@ function canBreakAfter(element, group, index) {
     
     const nextElement = group[index + 1];
     
-    // Nie nach Titeln umbrechen
+    // SEMANTISCHE REGEL: Nie nach Titeln umbrechen
     if (isHeading(element)) return false;
     
-    // Nie nach Copyright-Infos umbrechen
+    // SEMANTISCHE REGEL: Nie nach Copyright-Infos umbrechen
     if (element.classList.contains('copyright-info')) return false;
     
-    // SEMANTISCHE REGEL 1: Umbruch nach jeder dritten Strophe/Refrain
+    // SEMANTISCHE REGEL: Umbruch nach Strophen/Refrains erlaubt
     if (isStropheOrRefrain(element)) {
         // Zähle aufeinanderfolgende Strophen/Refrains bis zu diesem Element
         let consecutiveStrophes = 0;
@@ -345,13 +488,13 @@ function canBreakAfter(element, group, index) {
             if (isStropheOrRefrain(group[i])) {
                 consecutiveStrophes++;
             } else if (!isCloselyRelatedToStrophe(group[i])) {
-                // Bei nicht-verwandten Elementen (wie Überschriften) Zähler zurücksetzen
+                // Bei nicht-verwandten Elementen Zähler zurücksetzen
                 consecutiveStrophes = 0;
             }
         }
         
         // Nach jeder dritten Strophe einen Umbruch einfügen
-        if (consecutiveStrophes > 0 && consecutiveStrophes % 3 === 0) {
+        if (consecutiveStrophes >= MAX_STROPHES_BEFORE_BREAK) {
             console.log(`Semantischer Umbruch nach der ${consecutiveStrophes}. Strophe eingefügt`);
             return true;
         }
@@ -360,14 +503,14 @@ function canBreakAfter(element, group, index) {
         return !isStropheOrRefrain(nextElement);
     }
     
-    // SEMANTISCHE REGEL 2: Umbruch nach Gebeten/Psalmen mit vielen Zeilen
+    // SEMANTISCHE REGEL: Umbruch nach Gebeten/Psalmen mit vielen Zeilen
     if (isPsalmOrPrayer(element)) {
         // Zähle die Textzeilen
         const textContent = element.textContent || '';
         const lineCount = (textContent.match(/\n/g) || []).length + 1;
         
         // Nach 4 oder mehr Zeilen einen Umbruch einfügen
-        if (lineCount >= 4) {
+        if (lineCount >= MAX_PSALM_LINES_BEFORE_BREAK) {
             console.log(`Semantischer Umbruch nach ${lineCount} Zeilen in Gebet/Psalm eingefügt`);
             return true;
         }
@@ -376,7 +519,6 @@ function canBreakAfter(element, group, index) {
     // Standard-Fall: Erlaube Umbrüche nach den meisten anderen Elementen
     return true;
 }
-
 
 /**
 * Prüft, ob ein Element ein Gebet oder Psalm ist
@@ -404,6 +546,17 @@ function isPsalmOrPrayer(element) {
             title.includes('prayer')) {
                 return true;
             }
+    }
+    
+    // Prüfe auf charakteristische Formationen in Absätzen
+    const paragraphs = element.querySelectorAll('p');
+    if (paragraphs.length >= 3) {
+        // Typisches Muster für Psalmen ist, dass jeder Absatz kurz ist
+        let shortParagraphCount = 0;
+        paragraphs.forEach(p => {
+            if (p.textContent.length < 100) shortParagraphCount++;
+        });
+        if (shortParagraphCount >= paragraphs.length * 0.7) return true;
     }
     
     return false;
@@ -445,7 +598,7 @@ function identifySemanticGroups(elements) {
             stropheCount++;
             
             // Nach der dritten Strophe eine neue Gruppe beginnen
-            if (stropheCount > 3 && currentGroup.length > 0) {
+            if (stropheCount > MAX_STROPHES_BEFORE_BREAK && currentGroup.length > 0) {
                 groups.push([...currentGroup]);
                 currentGroup = [];
                 stropheCount = 1; // Diese Strophe ist die erste in der neuen Gruppe
@@ -454,11 +607,11 @@ function identifySemanticGroups(elements) {
                 continue;
             }
         } else if (!isCloselyRelatedToStrophe(element) && !hasCopyright) {
-            // Bei unabhängigen Elementen (nicht verwandt mit Strophen) den Zähler zurücksetzen
+            // Bei unabhängigen Elementen den Zähler zurücksetzen
             stropheCount = 0;
         }
         
-        // Reguläre Gruppenbildung wie bisher
+        // Reguläre Gruppenbildung
         if (isTitle) {
             // Titel beginnt neue Gruppe, außer wir sind bereits in einer Titelgruppe
             if (currentContext !== 'title' && currentGroup.length > 0) {
@@ -528,11 +681,11 @@ function identifySemanticGroups(elements) {
 */
 function isCloselyRelatedToPsalm(element) {
     return element.classList.contains('prayer') || 
-    element.classList.contains('psalm') ||
-    element.querySelector('.prayer') || 
-    element.querySelector('.psalm') ||
-    element.classList.contains('vater-unser') ||
-    element.classList.contains('response');
+        element.classList.contains('psalm') ||
+        element.querySelector('.prayer') || 
+        element.querySelector('.psalm') ||
+        element.classList.contains('vater-unser') ||
+        element.classList.contains('response');
 }
 
 /**
@@ -598,8 +751,8 @@ function calculateGroupHeight(group) {
     const hasCopyright = group.some(el => el.classList.contains('copyright-info'));
     
     // Zusätzlicher Puffer basierend auf Gruppenkomplexität
-    const groupBuffer = hasTitle && hasStrophe ? 15 : // Reduziert von 20
-                        hasTitle || hasStrophe ? 8 : 3; // Reduziert von 10/5
+    const groupBuffer = hasTitle && hasStrophe ? 15 : 
+                        hasTitle || hasStrophe ? 8 : 3;
     
     // Für jedes Element in der Gruppe
     group.forEach((element, index) => {
@@ -614,14 +767,11 @@ function calculateGroupHeight(group) {
             
             // Anpassungen für bestimmte Elementkombinationen
             if (isHeading(element) && !hasCopyright) {
-                // Weniger Abstand nach Überschrift
                 spacing = TITLE_MARGIN_BOTTOM;
             } else if (isStropheOrRefrain(element) && isStropheOrRefrain(nextElement)) {
-                // Strophen dichter beieinander
                 spacing = STROPHE_MARGIN_BOTTOM;
             } else if (element.classList.contains('copyright-info')) {
-                // Weniger Abstand nach Copyright
-                spacing = 4; // Reduziert von 5
+                spacing = 4;
             }
             
             // Skalierung auf die aktuelle Schriftgröße
@@ -654,11 +804,11 @@ function calculateElementHeight(element) {
     if (isHeading(element)) {
         // Überschriften haben größere Höhe
         if (element.querySelector('h1, .isQuillHeading')) {
-            baseHeight *= HEADING_1_SCALE * 0.75; // Reduziert von 0.8
+            baseHeight *= HEADING_1_SCALE * 0.75;
         } else if (element.querySelector('h2')) {
-            baseHeight *= HEADING_2_SCALE * 0.75; // Reduziert von 0.8
+            baseHeight *= HEADING_2_SCALE * 0.75;
         } else {
-            baseHeight *= HEADING_3_SCALE * 0.75; // Reduziert von 0.8
+            baseHeight *= HEADING_3_SCALE * 0.75;
         }
     }
     
@@ -670,7 +820,7 @@ function calculateElementHeight(element) {
         const lineBreaksCount = (textContent.match(/\n/g) || []).length;
         
         // Schätze Zeilenanzahl basierend auf Text und verfügbarer Breite
-        const wordsPerLine = 8; // Erhöht von 7 für kompaktere Darstellung
+        const wordsPerLine = 8;
         const words = textContent.split(/\s+/).length;
         const estimatedLines = Math.max(
             lineBreaksCount + 1,
@@ -678,7 +828,7 @@ function calculateElementHeight(element) {
         );
         
         // Berechne Höhe basierend auf Zeilen
-        baseHeight = estimatedLines * fontSize * lineHeight * 0.95; // Faktor für weniger Höhe
+        baseHeight = estimatedLines * fontSize * lineHeight * 0.95;
         
         // Zusätzlicher Abstand für Strophen
         baseHeight += scaleValue(STROPHE_SPACING, fontSize);
@@ -721,14 +871,46 @@ function getPreviousVisibleElement(allElements, currentElement) {
  * @param {HTMLElement} element - Element, nach dem der Umbruch eingefügt wird
  * @param {number} pageNumber - Seitennummer
  * @param {string} format - Das gewählte Format
+ * @param {string} type - Typ des Umbruchs (overflow, strophe-rule, etc.)
  */
-function insertPageBreakMarker(element, pageNumber, format) {
+function insertPageBreakMarker(element, pageNumber, format, type) {
     if (!element || !element.parentNode) return;
     
     const formatName = getFormatName(format);
     const pageBreakMarker = document.createElement('div');
     pageBreakMarker.className = 'preview-page-break';
-    pageBreakMarker.textContent = `Seite ${pageNumber} endet hier (${formatName})`;
+    pageBreakMarker.setAttribute('data-break-type', type);
+    
+    // Unterschiedliche Stile basierend auf dem Typ des Umbruchs
+    const typeStyles = {
+        'overflow': 'border-top: 2px dashed #ff6b6b;',
+        'strophe-rule': 'border-top: 2px dashed #4ecdc4;',
+        'psalm-rule': 'border-top: 2px dashed #45b7d1;',
+        'force': 'border-top: 2px solid #ff6b6b;',
+        'limited-space': 'border-top: 2px dotted #ffd166;',
+        'group': 'border-top: 2px dotted #06d6a0;',
+        'space': 'border-top: 2px dotted #118ab2;',
+        'split': 'border-top: 2px dashed #073b4c;',
+        'overflow-before-title': 'border-top: 2px dashed #ef476f;',
+        'default': 'border-top: 2px dashed #888;'
+    };
+    
+    pageBreakMarker.style = typeStyles[type] || typeStyles['default'];
+    
+    // Beschreibender Text basierend auf dem Typ
+    let typeDescription = '';
+    switch(type) {
+        case 'overflow': typeDescription = ' (Seitenüberlauf)'; break;
+        case 'strophe-rule': typeDescription = ' (nach Strophe)'; break;
+        case 'psalm-rule': typeDescription = ' (nach Gebet/Psalm)'; break;
+        case 'force': typeDescription = ' (erzwungen)'; break;
+        case 'limited-space': typeDescription = ' (zu wenig Platz)'; break;
+        case 'split': typeDescription = ' (aufgeteilte Gruppe)'; break;
+        case 'overflow-before-title': typeDescription = ' (vor Überschrift)'; break;
+        default: typeDescription = '';
+    }
+    
+    pageBreakMarker.textContent = `Seite ${pageNumber} endet hier (${formatName}${typeDescription})`;
     
     // Sicherstellen, dass das Element eine ID hat
     const elementId = element.getAttribute('data-original-id') || 
@@ -743,6 +925,37 @@ function insertPageBreakMarker(element, pageNumber, format) {
         element.getAttribute('data-original-id') || element.getAttribute('data-liedblatt-id'));
     
     element.parentNode.insertBefore(pageBreakMarker, element.nextSibling);
+}
+
+/**
+ * Aktualisiert die Anzeige eines manuellen Seitenumbruchs mit der Seitenzahl
+ * @param {HTMLElement} element - Das Element des manuellen Seitenumbruchs
+ * @param {number} pageNumber - Die aktuelle Seitenzahl
+ * @param {string} format - Das gewählte Format
+ */
+function updateManualPageBreakMarker(element, pageNumber, format) {
+    if (!element) return;
+    
+    const formatName = getFormatName(format);
+    
+    // Überprüfe, ob es bereits ein Label für den manuellen Umbruch gibt
+    let breakLabel = element.querySelector('.page-break-label');
+    
+    if (!breakLabel) {
+        // Erstelle ein neues Label
+        breakLabel = document.createElement('div');
+        breakLabel.className = 'page-break-label';
+        breakLabel.style.fontWeight = 'bold';
+        breakLabel.style.color = '#0066cc';
+        breakLabel.style.padding = '5px';
+        breakLabel.style.marginTop = '5px';
+        breakLabel.style.backgroundColor = '#f0f8ff';
+        breakLabel.style.borderRadius = '4px';
+        element.appendChild(breakLabel);
+    }
+    
+    // Aktualisiere den Text
+    breakLabel.textContent = `Manueller Seitenumbruch - Seite ${pageNumber} endet hier (${formatName})`;
 }
 
 /**
