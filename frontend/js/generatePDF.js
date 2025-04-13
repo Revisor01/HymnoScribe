@@ -735,6 +735,18 @@ async function generatePDF(format) {
     }
     
     const progressContainer = document.getElementById('pdf-progress-container');
+    
+    // Diese Funktion muss vor ihrer Verwendung definiert werden
+    function showProgress(percent, message = '') {
+        const progressBar = document.getElementById('pdf-progress-bar');
+        const progressText = document.getElementById('pdf-progress-text');
+        if (progressBar && progressText) {
+            progressBar.style.width = `${percent}%`;
+            progressText.textContent = `${Math.round(percent)}% ${message}`;
+        }
+        console.log(`Progress: ${percent}% ${message}`);
+    }
+    
     const pageBreakInfo = extractPageBreaksFromPreview();
     console.log("Verwende Seitenumbrüche aus der Vorschau:", pageBreakInfo);
     const progressBar = document.getElementById('pdf-progress-bar');
@@ -1134,16 +1146,6 @@ async function generatePDF(format) {
             console.error("Error drawing icon:", error);
             return 0;
         }
-    }
-    
-    function showProgress(percent, message = '') {
-        const progressBar = document.getElementById('pdf-progress-bar');
-        const progressText = document.getElementById('pdf-progress-text');
-        if (progressBar && progressText) {
-            progressBar.style.width = `${percent}%`;
-            progressText.textContent = `${Math.round(percent)}% ${message}`;
-        }
-        console.log(`Progress: ${percent}% ${message}`);
     }
     
     const liedblattContent = document.getElementById('liedblatt-content');
