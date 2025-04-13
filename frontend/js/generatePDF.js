@@ -683,7 +683,6 @@ async function generatePDF(format) {
         const { 
             bold, italic, underline, alignment, indent, isCopyright, isRefrain, isStrophe, 
             isLastElement, isHeading, isQuillHeading, afterIcon, isFirstOnPage,
-            // Diese Option wird jetzt immer aktiviert
             preventPageBreak = true
         } = options;
         
@@ -721,12 +720,18 @@ async function generatePDF(format) {
         
         // Zeichne den Text zeilenweise ohne eigene Seitenumbruchlogik
         for (const line of lines) {
-            // Keine automatischen Seitenumbrüche mehr - dies würde mit der Vorschau in Konflikt stehen
+            // KRITISCH: Dynamische X-Position basierend auf Textausrichtung
             let xPos = x + indent;
+            
+            // Wende die Textausrichtung aus globalConfig und options an
             if (alignment === 'center') {
-                xPos = x + (maxWidth - await font.widthOfTextAtSize(line, fontSize)) / 2;
+                // Zentriert: Berechne die Mitte und ziehe die halbe Textbreite ab
+                const lineWidth = await font.widthOfTextAtSize(line, fontSize);
+                xPos = x + (maxWidth - lineWidth) / 2;
             } else if (alignment === 'right') {
-                xPos = x + maxWidth - await font.widthOfTextAtSize(line, fontSize);
+                // Rechtsbündig: Platziere am rechten Rand abzüglich der Textbreite
+                const lineWidth = await font.widthOfTextAtSize(line, fontSize);
+                xPos = x + maxWidth - lineWidth;
             } else if (alignment === 'justify' && line !== lines[lines.length - 1]) {
                 await drawJustifiedText(line, x + indent, currentY, fontSize, maxWidth - indent, { bold, italic, underline });
                 currentY -= fontSize * lineHeight;
@@ -1089,12 +1094,37 @@ async function fetchAndEmbedFont(doc, fontFamily) {
 * @param {Object} context - Kontext mit Seite, Y-Position und anderen Zeichenparametern
 * @returns {Object} Aktualisierter Zeichenkontext
 */
+/**
+* Verbesserte Version der Funktion zum Hinzufügen neuer Seiten
+* Diese Funktion sollte die bestehende Funktion in generatePDF.js ersetzen
+* @returns {Object} Aktualisierte Seite und Y-Position
+*/
+function addNewPage() {
+    console.log("Füge neue Seite hinzu");
+    // Erstelle eine neue Seite mit den gleichen Dimensionen wie die erste Seite
+    page = doc.addPage([width, height]);
+    // Füge das Logo zur neuen Seite hinzu, falls vorhanden
+    addLogoToPage(page);
+    // KRITISCHE KORREKTUR: Y-Position zurücksetzen auf den Anfang der Seite
+    y = height - margin.top;
+    console.log(`Neue Seite erstellt. Y-Position zurückgesetzt auf ${y}`);
+    return { page, y };
+}
+
+/**
+* Korrekte Implementierung der Seitenumbruchverarbeitung
+* Diese Funktion ersetzt den entsprechenden Teil in processElementGroups
+* @param {Array} elementGroups - Alle zu verarbeitenden Elementgruppen
+* @param {Object} pageBreakInfo - Informationen über Seitenumbrüche
+* @param {Object} context - Der Kontext mit Seite, Y-Position und anderen Parametern
+* @returns {Object} Aktualisierter Kontext
+*/
 async function processElementGroups(elementGroups, pageBreakInfo, context) {
     // Extrahiere benötigte Kontextvariablen
     let { 
         doc, page, y, margin, contentWidth, width, height, 
         scaledFontSize, scaledIconSize, scaledIconMargin, scaledDefaultObjectSpacing, 
-        fonts, showProgress, addLogoToPage, drawIcon, drawImage, drawText, drawJustifiedText, globalConfig 
+        fonts, showProgress, addLogoToPage, drawIcon, drawImage, drawText, globalConfig 
     } = context;
     
     // Erstelle eine Map für schnellen Zugriff auf Umbruchinformationen
@@ -1113,7 +1143,9 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
         console.log("Füge neue Seite hinzu");
         page = doc.addPage([width, height]);
         addLogoToPage(page);
-        y = height - margin.top; // Reset der Y-Position auf den Seitenanfang
+        // KRITISCH: Y-Position zurücksetzen auf den Seitenanfang
+        y = height - margin.top;
+        console.log(`Neue Seite hinzugefügt. Y-Position: ${y}`);
         return { page, y };
     }
     
@@ -1137,7 +1169,10 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
             // Manueller Seitenumbruch wird direkt verarbeitet
             if (element.classList.contains('page-break')) {
                 console.log("Manueller Seitenumbruch verarbeitet");
-                ({ page, y } = addNewPage());
+                // WICHTIG: Aktualisiere Seite UND Y-Position mit dem Rückgabewert
+                const pageInfo = addNewPage();
+                page = pageInfo.page;
+                y = pageInfo.y;
                 continue;
             }
             
@@ -1265,6 +1300,7 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
                             bold: isBold,
                             italic: isItalic,
                             underline: isUnderlined,
+                            // KRITISCH: Korrekte Textausrichtung aus globaler Konfiguration übernehmen
                             alignment: textProperties.textAlign || globalConfig.textAlign,
                             indent: parseFloat(textProperties.paddingLeft) || 0,
                             isCopyright: isCopyright,
@@ -1297,7 +1333,10 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
             if (elementId && breakInfoMap[elementId]) {
                 const breakInfo = breakInfoMap[elementId];
                 console.log(`Seitenumbruch nach Element mit ID ${elementId} (Typ: ${breakInfo.type})`);
-                ({ page, y } = addNewPage());
+                // WICHTIG: Aktualisiere Seite UND Y-Position mit dem Rückgabewert
+                const pageInfo = addNewPage();
+                page = pageInfo.page;
+                y = pageInfo.y;
             }
         }
     }
