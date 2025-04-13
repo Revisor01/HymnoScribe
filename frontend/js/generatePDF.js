@@ -1121,7 +1121,8 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
     // Verarbeite alle Gruppen
     let processedElements = 0;
     
-    async function drawText(context, text, x, y, fontSize, maxWidth, options = {}) {
+    // KORREKTUR: Definiere die drawText-Funktion hier direkt innerhalb von processElementGroups
+    async function drawText(text, x, y, fontSize, maxWidth, options = {}) {
         const { 
             bold, italic, underline, alignment, indent, isCopyright, isRefrain, isStrophe, 
             isLastElement, isHeading, isQuillHeading, afterIcon, isFirstOnPage,
@@ -1130,18 +1131,18 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
         
         let font;
         if (bold && italic) {
-            font = context.fonts.boldItalic;
+            font = fonts.boldItalic;
         } else if (bold) {
-            font = context.fonts.bold;
+            font = fonts.bold;
         } else if (italic) {
-            font = context.fonts.italic;
+            font = fonts.italic;
         } else {
-            font = context.fonts.regular; 
+            font = fonts.regular; 
         }
         
         if (!font) {
             console.error(`Required font style not found for ${globalConfig.fontFamily}`);
-            font = context.fonts.regular || Object.values(context.fonts)[0];
+            font = fonts.regular || Object.values(fonts)[0];
         }
         
         console.log("Drawing text:", { 
@@ -1175,12 +1176,12 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
                 const lineWidth = await font.widthOfTextAtSize(line, fontSize);
                 xPos = x + maxWidth - lineWidth;
             } else if (alignment === 'justify' && line !== lines[lines.length - 1]) {
-                await drawJustifiedText(context, line, x + indent, currentY, fontSize, maxWidth - indent, { bold, italic, underline });
+                await drawJustifiedText(line, x + indent, currentY, fontSize, maxWidth - indent, { bold, italic, underline });
                 currentY -= fontSize * lineHeight;
                 continue;
             }
             
-            context.page.drawText(line, {
+            page.drawText(line, {
                 x: xPos,
                 y: currentY,
                 size: fontSize,
@@ -1191,7 +1192,7 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
             
             if (underline) {
                 const lineWidth = await font.widthOfTextAtSize(line, fontSize);
-                context.page.drawLine({
+                page.drawLine({
                     start: { x: xPos, y: currentY - 2 },
                     end: { x: xPos + lineWidth, y: currentY - 2 },
                     thickness: 0.5
@@ -1216,49 +1217,152 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
         // Gib die tatsächlich verwendete Texthöhe zurück
         return startY - currentY;
     }
-
-    // Hilfsfunktion für das Zeichnen von Text, die den aktuellen Kontext verwendet
-    async function drawTextWithContext(text, fontSize, options = {}) {
-        const textHeight = await drawText(
-            { doc, page, y, margin, contentWidth, width, height, fonts },
-            text, 
-            margin.left, 
-            y, 
-            fontSize, 
-            contentWidth, 
-            options
-        );
-        // Aktualisiere die Y-Position nach dem Zeichnen
-        y -= textHeight;
-        return textHeight;
+    
+    // KORREKTUR: Definiere die drawJustifiedText-Funktion ebenfalls hier
+    async function drawJustifiedText(line, x, y, fontSize, maxWidth, options = {}) {
+        const { bold, italic, underline } = options;
+        
+        // Font-Auswahl analog zu drawText
+        let font;
+        if (bold && italic) {
+            font = fonts.boldItalic;
+        } else if (bold) {
+            font = fonts.bold;
+        } else if (italic) {
+            font = fonts.italic;
+        } else {
+            font = fonts.regular; 
+        }
+        
+        // Wortabstände berechnen
+        const words = line.split(' ');
+        const totalWordsWidth = await words.reduce(async (accPromise, word) => {
+            const acc = await accPromise;
+            const wordWidth = await font.widthOfTextAtSize(word, fontSize);
+            return acc + wordWidth;
+        }, Promise.resolve(0));
+        
+        const spaceCount = words.length - 1;
+        if (spaceCount <= 0) {
+            // Einzelnes Wort kann nicht ausgerichtet werden
+            page.drawText(line, { x, y, size: fontSize, font });
+            return;
+        }
+        
+        const extraSpace = maxWidth - totalWordsWidth;
+        const spaceWidth = extraSpace / spaceCount;
+        
+        let currentX = x;
+        for (let i = 0; i < words.length; i++) {
+            const word = words[i];
+            page.drawText(word, { x: currentX, y, size: fontSize, font });
+            
+            const wordWidth = await font.widthOfTextAtSize(word, fontSize);
+            currentX += wordWidth;
+            
+            // Nach jedem Wort außer dem letzten einen Abstand hinzufügen
+            if (i < words.length - 1) {
+                currentX += spaceWidth;
+            }
+        }
+        
+        if (underline) {
+            page.drawLine({
+                start: { x, y: y - 2 },
+                end: { x: x + maxWidth, y: y - 2 },
+                thickness: 0.5
+            });
+        }
     }
     
-    // Hilfsfunktion für das Zeichnen von Bildern, die den aktuellen Kontext verwendet
-    async function drawImageWithContext(imgSrc, imgWidth) {
-        const imageHeight = await drawImage(
-            { doc, page, y, margin, contentWidth, width, height },
-            imgSrc, 
-            margin.left, 
-            y, 
-            imgWidth
-        );
-        // Aktualisiere die Y-Position nach dem Zeichnen
-        y -= imageHeight;
-        return imageHeight;
+    // KORREKTUR: Definiere die drawImage-Funktion innerhalb von processElementGroups
+    async function drawImage(imgSrc, x, y, imgWidth) {
+        console.log("Drawing image:", { imgSrc, x, y, imgWidth });
+        try {
+            const response = await fetch(imgSrc);
+            const imgArrayBuffer = await response.arrayBuffer();
+            const imgType = getImageType(imgArrayBuffer);
+            
+            let img;
+            if (imgType === 'png') {
+                img = await doc.embedPng(imgArrayBuffer);
+            } else if (imgType === 'jpeg') {
+                img = await doc.embedJpg(imgArrayBuffer);
+            } else {
+                throw new Error('Unsupported image type');
+            }
+            
+            const scaledDims = img.scale(imgWidth / img.width);
+            
+            // Überprüfe, ob das Bild auf die aktuelle Seite passt
+            if (y - scaledDims.height < margin.bottom) {
+                // Wenn nicht, füge eine neue Seite hinzu
+                const pageInfo = addNewPage();
+                page = pageInfo.page;
+                y = pageInfo.y;
+            }
+            
+            // Berücksichtigen Sie den oberen Abstand
+            y -= scaleValue(IMAGE_MARGIN_TOP, scaledFontSize);
+            
+            page.drawImage(img, {
+                x,
+                y: y - scaledDims.height,
+                width: scaledDims.width,
+                height: scaledDims.height
+            });
+            
+            return scaledDims.height + scaleValue(IMAGE_MARGIN_TOP, scaledFontSize) + scaleValue(IMAGE_MARGIN_BOTTOM, scaledFontSize);
+        } catch (error) {
+            console.error("Error embedding image:", error);
+            return scaleValue(IMAGE_MARGIN_TOP, scaledFontSize) + scaleValue(IMAGE_MARGIN_BOTTOM, scaledFontSize);
+        }
     }
     
-    // Hilfsfunktion für das Zeichnen von Icons, die den aktuellen Kontext verwendet
-    async function drawIconWithContext(iconName, size) {
-        const iconHeight = await drawIcon(
-            { doc, page, y, margin, contentWidth, width, height, doc },
-            iconName, 
-            margin.left, 
-            y, 
-            size
-        );
-        // Aktualisiere die Y-Position nach dem Zeichnen
-        y -= iconHeight;
-        return iconHeight;
+    // KORREKTUR: Definiere die drawIcon-Funktion innerhalb von processElementGroups
+    async function drawIcon(iconName, x, y, size) {
+        console.log("Drawing icon:", { iconName, x, y, size });
+        const iconPaths = {
+            'star': '/api/icons/star.png',
+            'herz': '/api/icons/herz.png',
+            'cross': '/api/icons/cross.png',
+            'dove': '/api/icons/dove.png',
+            'default': '/api/icons/default.png'
+        };
+        
+        const iconPath = iconPaths[iconName] || iconPaths['default'];
+        
+        try {
+            const response = await fetch(iconPath);
+            const imgArrayBuffer = await response.arrayBuffer();
+            const img = await doc.embedPng(imgArrayBuffer);
+            
+            let iconWidth, iconHeight;
+            
+            if (iconName === 'default') {
+                iconWidth = 150;
+                iconHeight = (iconWidth / img.width) * img.height;
+            } else {
+                const scaledSize = Math.min(size, contentWidth);
+                const scaledDims = img.scale(scaledSize / img.width);
+                iconWidth = scaledDims.width;
+                iconHeight = scaledDims.height;
+            }
+            
+            const xCentered = x + (contentWidth - iconWidth) / 2;
+            
+            page.drawImage(img, {
+                x: xCentered,
+                y: y - iconHeight,
+                width: iconWidth,
+                height: iconHeight
+            });
+            
+            return iconHeight;
+        } catch (error) {
+            console.error("Error drawing icon:", error);
+            return 0;
+        }
     }
     
     for (let groupIndex = 0; groupIndex < elementGroups.length; groupIndex++) {
@@ -1306,8 +1410,8 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
                 if (iconElement.classList.contains('fa-dove')) iconType = 'dove';
                 
                 // Zeichne das Icon und aktualisiere die Y-Position
-                await drawIconWithContext(iconType, scaledIconSize);
-                y -= scaledIconMargin;
+                const iconHeight = await drawIcon(iconType, margin.left, y, scaledIconSize);
+                y -= iconHeight + scaledIconMargin;
             } else {
                 // Zeichne Standardelemente (Text, Bilder, etc.)
                 // Finde alle relevanten Unterelemente
@@ -1324,7 +1428,8 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
                     
                     // Verarbeite Bilder
                     if (subElement.tagName === 'IMG') {
-                        await drawImageWithContext(subElement.src, contentWidth);
+                        const imgHeight = await drawImage(subElement.src, margin.left, y, contentWidth);
+                        y -= imgHeight;
                     } else {
                         // Verarbeite Textelemente mit präziser Textformatierung
                         let fontSize = scaledFontSize;
@@ -1425,7 +1530,8 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
                         
                         // Zeichne den Text und aktualisiere die Y-Position präzise
                         const textContent = subElement.innerText;
-                        await drawTextWithContext(textContent, fontSize, options);
+                        const textHeight = await drawText(textContent, margin.left, y, fontSize, contentWidth, options);
+                        y -= textHeight;
                         y += marginBottom; // Berücksichtige unteren Abstand
                     }
                 }
