@@ -53,14 +53,14 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
         try {
             console.log("Aktualisiere Vorschau mit Seitenumbrüchen für Format:", format);
             
-            // Entferne nur automatische Seitenumbrüche, behalte manuelle
+            // Entferne vorhandene automatische Seitenumbrüche
             const liedblattContent = document.getElementById('liedblatt-content');
             if (!liedblattContent) return;
             
-            const existingBreaks = liedblattContent.querySelectorAll('.preview-page-break');
-            existingBreaks.forEach(breakEl => breakEl.remove());
+            const existingAutoBreaks = liedblattContent.querySelectorAll('.preview-page-break');
+            existingAutoBreaks.forEach(breakEl => breakEl.remove());
             
-            // Berechne Seitenumbrüche basierend auf der verbesserten Logik
+            // Berechne Seitenumbrüche
             const { breakPositions } = calculatePrecisePageBreaks(format);
             
             // Füge Seitenumbruch-Marker in die Vorschau ein
@@ -83,7 +83,6 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
         }
     }, 300);
 }
-
 /**
  * Berechnet präzise Seitenumbruchpositionen unter Berücksichtigung semantischer Regeln
  * @param {string} format - Das gewählte Papierformat
@@ -867,12 +866,12 @@ function getPreviousVisibleElement(allElements, currentElement) {
 }
 
 /**
- * Fügt einen Seitenumbruch nach dem angegebenen Element ein
- * @param {HTMLElement} element - Element, nach dem der Umbruch eingefügt wird
- * @param {number} pageNumber - Seitennummer
- * @param {string} format - Das gewählte Format
- * @param {string} type - Typ des Umbruchs (overflow, strophe-rule, etc.)
- */
+* Fügt einen Seitenumbruch nach dem angegebenen Element ein
+* @param {HTMLElement} element - Element, nach dem der Umbruch eingefügt wird
+* @param {number} pageNumber - Seitennummer
+* @param {string} format - Das gewählte Format
+* @param {string} type - Typ des Umbruchs (overflow, auto, etc.)
+*/
 function insertPageBreakMarker(element, pageNumber, format, type) {
     if (!element || !element.parentNode) return;
     
@@ -881,51 +880,30 @@ function insertPageBreakMarker(element, pageNumber, format, type) {
     pageBreakMarker.className = 'preview-page-break';
     pageBreakMarker.setAttribute('data-break-type', type);
     
-    // Unterschiedliche Stile basierend auf dem Typ des Umbruchs
-    const typeStyles = {
-        'overflow': 'border-top: 2px dashed #ff6b6b;',
-        'strophe-rule': 'border-top: 2px dashed #4ecdc4;',
-        'psalm-rule': 'border-top: 2px dashed #45b7d1;',
-        'force': 'border-top: 2px solid #ff6b6b;',
-        'limited-space': 'border-top: 2px dotted #ffd166;',
-        'group': 'border-top: 2px dotted #06d6a0;',
-        'space': 'border-top: 2px dotted #118ab2;',
-        'split': 'border-top: 2px dashed #073b4c;',
-        'overflow-before-title': 'border-top: 2px dashed #ef476f;',
-        'default': 'border-top: 2px dashed #888;'
-    };
+    // Einheitlicher Stil für alle automatischen Umbrüche 
+    // (reduzierte Komplexität gegenüber verschiedenen Stilen pro Typ)
+    pageBreakMarker.style.borderTop = '2px dashed #4285f4';
+    pageBreakMarker.style.margin = '10px 0';
+    pageBreakMarker.style.position = 'relative';
+    pageBreakMarker.style.padding = '10px 0';
     
-    pageBreakMarker.style = typeStyles[type] || typeStyles['default'];
-    
-    // Beschreibender Text basierend auf dem Typ
-    let typeDescription = '';
-    switch(type) {
-        case 'overflow': typeDescription = ' (Seitenüberlauf)'; break;
-        case 'strophe-rule': typeDescription = ' (nach Strophe)'; break;
-        case 'psalm-rule': typeDescription = ' (nach Gebet/Psalm)'; break;
-        case 'force': typeDescription = ' (erzwungen)'; break;
-        case 'limited-space': typeDescription = ' (zu wenig Platz)'; break;
-        case 'split': typeDescription = ' (aufgeteilte Gruppe)'; break;
-        case 'overflow-before-title': typeDescription = ' (vor Überschrift)'; break;
-        default: typeDescription = '';
-    }
-    
-    pageBreakMarker.textContent = `Seite ${pageNumber} endet hier (${formatName}${typeDescription})`;
+    pageBreakMarker.textContent = `Seite ${pageNumber} endet hier (${formatName})`;
     
     // Sicherstellen, dass das Element eine ID hat
     const elementId = element.getAttribute('data-original-id') || 
-                     element.getAttribute('data-liedblatt-id');
+    element.getAttribute('data-liedblatt-id');
     
     if (!elementId) {
         element.setAttribute('data-liedblatt-id', `auto-id-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
     }
     
-    // Speichere die ID des Elements auch im Umbruchmarker
+    // Speichere die ID des Elements im Umbruchmarker
     pageBreakMarker.setAttribute('data-after-element-id', 
         element.getAttribute('data-original-id') || element.getAttribute('data-liedblatt-id'));
     
     element.parentNode.insertBefore(pageBreakMarker, element.nextSibling);
 }
+
 
 /**
  * Aktualisiert die Anzeige eines manuellen Seitenumbruchs mit der Seitenzahl

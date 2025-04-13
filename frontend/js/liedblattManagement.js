@@ -101,7 +101,7 @@ export function addPageBreak() {
     const pageBreakObject = {
         id: Date.now(),
         typ: 'Seitenumbruch',
-        titel: 'Seitenumbruch',
+        titel: 'Manueller Seitenumbruch',
         inhalt: 'pagebreak'
     };
     addToSelected(pageBreakObject);
@@ -109,14 +109,13 @@ export function addPageBreak() {
     // Nach dem Hinzufügen eines manuellen Umbruchs die Vorschau aktualisieren
     requestAnimationFrame(() => {
         setTimeout(() => {
-            // Hole das aktuell ausgewählte Format aus dem Dropdown
             const previewFormatSelect = document.getElementById('previewFormat');
             if (previewFormatSelect) {
                 const selectedFormat = previewFormatSelect.value;
-                // Importiere die Funktion dynamisch, um Zirkelbezüge zu vermeiden
+                // Dynamischer Import zur Vermeidung von Zirkelabhängigkeiten
                 import('./previewPageBreaks.js').then(module => {
                     module.updatePreviewWithPageBreaks(selectedFormat);
-                }).catch(err => console.error('Fehler beim Aktualisieren der Seitenumbrüche:', err));
+                }).catch(err => console.error('Fehler bei Aktualisierung der Seitenumbrüche:', err));
             }
         }, 300);
     });
@@ -300,20 +299,20 @@ export function updateLiedblatt() {
         if (objekt.typ === 'Seitenumbruch') {
             const pageBreak = document.createElement('div');
             pageBreak.classList.add('page-break');
-            pageBreak.style.borderTop = '2px solid #0066cc'; // Deutlichere Linie für manuelle Umbrüche
+            pageBreak.style.borderTop = '2px solid #e53935'; // Rot für manuelle Umbrüche
             pageBreak.style.margin = '20px 0';
             pageBreak.style.position = 'relative';
             
-            // Füge ein Icon oder Symbol für den manuellen Umbruch hinzu
+            // Deutlicheres Icon für manuellen Umbruch
             const pageBreakIcon = document.createElement('div');
-            pageBreakIcon.innerHTML = '📄 ↓'; // Symbol für Seitenumbruch
+            pageBreakIcon.innerHTML = '📄 ↓ MANUELLER SEITENUMBRUCH';
             pageBreakIcon.style.position = 'absolute';
             pageBreakIcon.style.left = '50%';
             pageBreakIcon.style.transform = 'translateX(-50%)';
             pageBreakIcon.style.top = '-12px';
             pageBreakIcon.style.backgroundColor = '#fff';
             pageBreakIcon.style.padding = '0 10px';
-            pageBreakIcon.style.color = '#0066cc';
+            pageBreakIcon.style.color = '#e53935';
             pageBreakIcon.style.fontWeight = 'bold';
             
             pageBreak.appendChild(pageBreakIcon);
