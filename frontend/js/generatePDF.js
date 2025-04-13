@@ -1121,6 +1121,102 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
     // Verarbeite alle Gruppen
     let processedElements = 0;
     
+    async function drawText(context, text, x, y, fontSize, maxWidth, options = {}) {
+        const { 
+            bold, italic, underline, alignment, indent, isCopyright, isRefrain, isStrophe, 
+            isLastElement, isHeading, isQuillHeading, afterIcon, isFirstOnPage,
+            preventPageBreak = true
+        } = options;
+        
+        let font;
+        if (bold && italic) {
+            font = context.fonts.boldItalic;
+        } else if (bold) {
+            font = context.fonts.bold;
+        } else if (italic) {
+            font = context.fonts.italic;
+        } else {
+            font = context.fonts.regular; 
+        }
+        
+        if (!font) {
+            console.error(`Required font style not found for ${globalConfig.fontFamily}`);
+            font = context.fonts.regular || Object.values(context.fonts)[0];
+        }
+        
+        console.log("Drawing text:", { 
+            text: text.substring(0, 20) + "...", 
+            x, y, fontSize, bold, italic, underline, alignment, indent, 
+            isCopyright, isRefrain, isStrophe, isHeading 
+        });
+        
+        const lineHeight = (isRefrain || isStrophe) 
+        ? globalConfig.lineHeight * 1
+        : globalConfig.lineHeight;
+        
+        const lines = await splitTextToLines(text, font, fontSize, maxWidth - indent);
+        let currentY = y;
+        
+        // Speichere Ausgangspunkt zur Höhenberechnung
+        const startY = y;
+        
+        // Zeichne den Text zeilenweise ohne eigene Seitenumbruchlogik
+        for (const line of lines) {
+            // KRITISCH: Dynamische X-Position basierend auf Textausrichtung
+            let xPos = x + indent;
+            
+            // Wende die Textausrichtung aus globalConfig und options an
+            if (alignment === 'center') {
+                // Zentriert: Berechne die Mitte und ziehe die halbe Textbreite ab
+                const lineWidth = await font.widthOfTextAtSize(line, fontSize);
+                xPos = x + (maxWidth - lineWidth) / 2;
+            } else if (alignment === 'right') {
+                // Rechtsbündig: Platziere am rechten Rand abzüglich der Textbreite
+                const lineWidth = await font.widthOfTextAtSize(line, fontSize);
+                xPos = x + maxWidth - lineWidth;
+            } else if (alignment === 'justify' && line !== lines[lines.length - 1]) {
+                await drawJustifiedText(context, line, x + indent, currentY, fontSize, maxWidth - indent, { bold, italic, underline });
+                currentY -= fontSize * lineHeight;
+                continue;
+            }
+            
+            context.page.drawText(line, {
+                x: xPos,
+                y: currentY,
+                size: fontSize,
+                font: font,
+                lineHeight: lineHeight,
+                maxWidth: maxWidth - indent
+            });
+            
+            if (underline) {
+                const lineWidth = await font.widthOfTextAtSize(line, fontSize);
+                context.page.drawLine({
+                    start: { x: xPos, y: currentY - 2 },
+                    end: { x: xPos + lineWidth, y: currentY - 2 },
+                    thickness: 0.5
+                });
+            }
+            
+            currentY -= fontSize * lineHeight;
+        }
+        
+        // Anwenden des Abstands nach der Überschrift
+        if (isHeading) {
+            const headingSpacing = fontSize * 0.5;
+            console.log("Adding spacing after heading:", headingSpacing);
+            currentY -= headingSpacing;
+        }
+        
+        // Füge Abstand für Strophen und Refrains hinzu
+        if (isStrophe || isRefrain) {
+            currentY -= STROPHE_SPACING;
+        }
+        
+        // Gib die tatsächlich verwendete Texthöhe zurück
+        return startY - currentY;
+    }
+
     // Hilfsfunktion für das Zeichnen von Text, die den aktuellen Kontext verwendet
     async function drawTextWithContext(text, fontSize, options = {}) {
         const textHeight = await drawText(
