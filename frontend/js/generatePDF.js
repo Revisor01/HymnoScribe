@@ -833,7 +833,6 @@ function showProgress(percent, message = '') {
     console.log(`Progress: ${percent}% ${message}`);
 }
 
-
 async function generatePDF(format) {
     // Sicherheitsmechanismus für fehlende Funktionen
     if (typeof estimatePDFElementHeight !== 'function') {
@@ -843,20 +842,7 @@ async function generatePDF(format) {
     const progressContainer = document.getElementById('pdf-progress-container');
     const pageBreakInfo = extractPageBreaksFromPreview();
     console.log("Verwende Seitenumbrüche aus der Vorschau:", pageBreakInfo);
-    const progressBar = document.getElementById('pdf-progress-bar');
-    const progressText = document.getElementById('pdf-progress-text');
     progressContainer.style.display = 'block';
-    
-    // Definition der showProgress-Funktion
-    function showProgress(percent, message = '') {
-        const progressBar = document.getElementById('pdf-progress-bar');
-        const progressText = document.getElementById('pdf-progress-text');
-        if (progressBar && progressText) {
-            progressBar.style.width = `${percent}%`;
-            progressText.textContent = `${Math.round(percent)}% ${message}`;
-        }
-        console.log(`Progress: ${percent}% ${message}`);
-    }
     
     showProgress(0, "Initialisiere PDF-Erstellung");
     console.log("Starting PDF generation for format:", format);
@@ -921,8 +907,7 @@ async function generatePDF(format) {
     // Dies ist der KRITISCHE FIX für das Problem
     const pdfContext = {
         doc,
-        page: doc.addPage([width, height]),
-        y: height - margin.top,
+        y: 0,
         width,
         height,
         margin,
@@ -933,10 +918,10 @@ async function generatePDF(format) {
         scaledDefaultObjectSpacing,
         scaledStropheSpacing,
         fonts,
-        logoImage: null
+        logoImage: null,
+        showProgress
     };
     
-    // Erste Seite erstellen
     pdfContext.page = doc.addPage([width, height]);
     pdfContext.y = height - margin.top;
     
@@ -1151,8 +1136,8 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
                 if (iconElement.classList.contains('fa-dove')) iconType = 'dove';
                 
                 // Zeichne das Icon und aktualisiere die Y-Position
-                const iconHeight = await drawIcon(context, iconType, context.margin.left, context.y, globalConfig.fontSize * (ICON_SIZE / BASE_FONT_SIZE));
-                context.y -= iconHeight + globalConfig.fontSize * (ICON_MARGIN / BASE_FONT_SIZE);
+                const iconHeight = await drawIcon(context, iconType, context.margin.left, context.y, context.scaledIconSize);
+                context.y -= iconHeight + context.scaledIconMargin;
             } else {
                 // Standardelemente (Text, Bilder, etc.)
                 const elements = element.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
