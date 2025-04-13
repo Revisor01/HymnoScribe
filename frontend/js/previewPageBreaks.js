@@ -318,31 +318,6 @@ function calculatePrecisePageBreaks(format) {
 
 
 /**
- * Bestimmt, ob nach diesem Element ein Seitenumbruch eingefügt werden kann
- * @param {HTMLElement} element - Das zu prüfende Element
- * @param {Array} group - Die Gruppe, zu der das Element gehört
- * @param {number} index - Index innerhalb der Gruppe
- * @returns {boolean} Kann nach diesem Element umgebrochen werden
- */
-function canBreakAfter(element, group, index) {
-    // Niemals nach Elementen brechen, die eng mit dem nächsten verbunden sind
-    if (index === group.length - 1) return true;
-    
-    const nextElement = group[index + 1];
-    
-    // Nicht nach Titeln oder vor Absätzen/Strophen brechen
-    if (isHeading(element)) return false;
-    
-    // Nicht zwischen Copyright-Info und Inhalt brechen
-    if (element.classList.contains('copyright-info')) return false;
-    
-    // Nicht zwischen aufeinanderfolgenden Strophen brechen
-    if (isStropheOrRefrain(element) && isStropheOrRefrain(nextElement)) return false;
-    
-    return true;
-}
-
-/**
 * Bestimmt, ob nach diesem Element ein Seitenumbruch eingefügt werden soll
 * basierend auf semantischen Regeln
 * @param {HTMLElement} element - Das zu prüfende Element
@@ -401,6 +376,7 @@ function canBreakAfter(element, group, index) {
     // Standard-Fall: Erlaube Umbrüche nach den meisten anderen Elementen
     return true;
 }
+
 
 /**
 * Prüft, ob ein Element ein Gebet oder Psalm ist
