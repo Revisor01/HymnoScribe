@@ -894,7 +894,6 @@ async function generatePDF(format) {
         drawIcon,
         drawImage,
         drawText,
-        drawJustifiedText,
         globalConfig // Wichtig: Globale Konfiguration übergeben
     };
     
