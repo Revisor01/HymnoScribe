@@ -683,8 +683,8 @@ async function generatePDF(format) {
         const { 
             bold, italic, underline, alignment, indent, isCopyright, isRefrain, isStrophe, 
             isLastElement, isHeading, isQuillHeading, afterIcon, isFirstOnPage,
-            // Neue Option zum Deaktivieren von automatischen Seitenumbrüchen
-            preventPageBreak = false
+            // Diese Option wird jetzt immer aktiviert
+            preventPageBreak = true
         } = options;
         
         let font;
@@ -705,9 +705,8 @@ async function generatePDF(format) {
         
         console.log("Drawing text:", { 
             text: text.substring(0, 20) + "...", 
-            x, y, fontSize, bold, italic, underline, 
-            alignment, indent, isCopyright, isRefrain, 
-            isStrophe, isHeading, preventPageBreak 
+            x, y, fontSize, bold, italic, underline, alignment, indent, 
+            isCopyright, isRefrain, isStrophe, isHeading 
         });
         
         const lineHeight = (isRefrain || isStrophe) 
@@ -717,18 +716,12 @@ async function generatePDF(format) {
         const lines = await splitTextToLines(text, font, fontSize, maxWidth - indent);
         let currentY = y;
         
-        // Behalte die ursprüngliche Y-Position bei
+        // Speichere Ausgangspunkt zur Höhenberechnung
         const startY = y;
         
-        // Zeichne den Text zeilenweise
+        // Zeichne den Text zeilenweise ohne eigene Seitenumbruchlogik
         for (const line of lines) {
-            // Prüfe, ob die aktuelle Zeile auf die Seite passt
-            if (currentY - fontSize < margin.bottom && !preventPageBreak) {
-                // Bei aktivierter Seitenumbruchprävention: Breche diese Funktion ab
-                // und signalisiere dem Aufrufer, dass ein Umbruch nötig ist
-                return y - startY; // Return height used so far
-            }
-            
+            // Keine automatischen Seitenumbrüche mehr - dies würde mit der Vorschau in Konflikt stehen
             let xPos = x + indent;
             if (alignment === 'center') {
                 xPos = x + (maxWidth - await font.widthOfTextAtSize(line, fontSize)) / 2;
@@ -763,7 +756,7 @@ async function generatePDF(format) {
         
         // Anwenden des Abstands nach der Überschrift
         if (isHeading) {
-            const headingSpacing = fontSize * 0.5; // Standard-Headingabstand
+            const headingSpacing = fontSize * 0.5;
             console.log("Adding spacing after heading:", headingSpacing);
             currentY -= headingSpacing;
         }
@@ -773,43 +766,8 @@ async function generatePDF(format) {
             currentY -= STROPHE_SPACING;
         }
         
-        // Berechne die tatsächlich verwendete Höhe
+        // Gib die tatsächlich verwendete Texthöhe zurück
         return startY - currentY;
-    }
-    
-    async function drawJustifiedText(text, x, y, fontSize, maxWidth, options = {}) {
-        const { bold, italic, underline } = options;
-        const font = fonts[globalConfig.fontFamily];
-        const words = text.split(' ');
-        const spaceWidth = await font.widthOfTextAtSize(' ', fontSize);
-        const wordWidths = await Promise.all(words.map(word => font.widthOfTextAtSize(word, fontSize)));
-        const totalWordWidth = wordWidths.reduce((sum, width) => sum + width, 0);
-        const totalSpaces = words.length - 1;
-        const extraSpace = maxWidth - totalWordWidth;
-        const extraSpacePerWord = extraSpace / totalSpaces;
-        
-        let currentX = x;
-        for (let i = 0; i < words.length; i++) {
-            page.drawText(words[i], {
-                x: currentX,
-                y,
-                size: fontSize,
-                font: font
-            });
-            
-            if (underline) {
-                const wordWidth = wordWidths[i];
-                page.drawLine({
-                    start: { x: currentX, y: y - 2 },
-                    end: { x: currentX + wordWidth, y: y - 2 },
-                    thickness: 0.5,
-                });
-            }
-            
-            if (i < words.length - 1) {
-                currentX += wordWidths[i] + spaceWidth + extraSpacePerWord;
-            }
-        }
     }
     
     async function drawImage(imgSrc, x, y, imgWidth) {
@@ -919,15 +877,25 @@ async function generatePDF(format) {
     
     // Erstelle Kontext für die Elementverarbeitung
     const processingContext = {
-        doc, page, y, margin, contentWidth, width, height, 
-        scaledFontSize, scaledIconSize, scaledIconMargin, 
-        scaledDefaultObjectSpacing, fonts, showProgress,
-        // Diese Funktionen müssen explizit übergeben werden
+        doc, 
+        page, 
+        y, 
+        margin, 
+        contentWidth, 
+        width, 
+        height, 
+        scaledFontSize, 
+        scaledIconSize, 
+        scaledIconMargin, 
+        scaledDefaultObjectSpacing, 
+        fonts, 
+        showProgress,
         addLogoToPage, 
         drawIcon,
         drawImage,
         drawText,
-        drawJustifiedText
+        drawJustifiedText,
+        globalConfig // Wichtig: Globale Konfiguration übergeben
     };
     
     // Verarbeite alle Elementgruppen mit Umbruchinformationen aus der Vorschau
@@ -1116,7 +1084,7 @@ async function fetchAndEmbedFont(doc, fontFamily) {
 }
 
 /**
-* Verarbeitet alle Elementgruppen und setzt Seitenumbrüche basierend auf Vorschaumarkierungen
+* Verarbeitet alle Elementgruppen unter strenger Einhaltung der Vorschauumbrüche
 * @param {Array} elementGroups - Alle identifizierten Elementgruppen
 * @param {Object} pageBreakInfo - Aus der Vorschau extrahierte Umbruchinformationen
 * @param {Object} context - Kontext mit Seite, Y-Position und anderen Zeichenparametern
@@ -1127,7 +1095,7 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
     let { 
         doc, page, y, margin, contentWidth, width, height, 
         scaledFontSize, scaledIconSize, scaledIconMargin, scaledDefaultObjectSpacing, 
-        fonts, showProgress, addLogoToPage, drawIcon, drawImage, drawText, drawJustifiedText 
+        fonts, showProgress, addLogoToPage, drawIcon, drawImage, drawText, drawJustifiedText, globalConfig 
     } = context;
     
     // Erstelle eine Map für schnellen Zugriff auf Umbruchinformationen
@@ -1141,90 +1109,36 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
     console.log("Verarbeite Elementgruppen mit Umbruchinformationen:", 
         Object.keys(breakInfoMap).length ? "Gefunden" : "Keine Umbrüche gefunden");
     
-    // Funktion für Seitenumbrüche - Zentralisiert die Umbruchlogik
+    // Zentrale Funktion für Seitenumbrüche - Wird nur an definierten Stellen aufgerufen
     function addNewPage() {
         console.log("Füge neue Seite hinzu");
         page = doc.addPage([width, height]);
         addLogoToPage(page);
-        y = height - margin.top;
+        y = height - margin.top; // Reset der Y-Position auf den Seitenanfang
         return { page, y };
     }
     
     // Verarbeite alle Gruppen
     let processedElements = 0;
-    let currentPageElements = 0; // Zählt Elemente auf der aktuellen Seite
     
     for (let groupIndex = 0; groupIndex < elementGroups.length; groupIndex++) {
         const group = elementGroups[groupIndex];
         showProgress(40 + (groupIndex / elementGroups.length) * 50, "Generiere PDF-Inhalt");
         
-        // Prüfe, ob die Gruppe einen Titel enthält
-        const hasTitle = group.some(el => 
-            el.querySelector('.item-title') !== null || 
-            el.querySelector('h1, h2, h3') !== null
-        );
-        
-        // Schätze die Höhe der gesamten Gruppe
-        let estimatedGroupHeight = 0;
-        for (const element of group) {
-            // Einfache Höhenschätzung basierend auf Element-Typ
-            if (element.classList.contains('page-break')) {
-                continue; // Seitenumbrüche haben keine Höhe
-            } else if (element.querySelector('.fas, .trenner-default-img')) {
-                estimatedGroupHeight += scaledIconSize + scaledIconMargin;
-            } else {
-                const textElements = element.querySelectorAll('h1, h2, h3, p');
-                for (const textEl of textElements) {
-                    const textLength = textEl.textContent.length;
-                    const fontSize = textEl.tagName === 'H1' ? scaledFontSize * HEADING_1_SCALE :
-                    textEl.tagName === 'H2' ? scaledFontSize * HEADING_2_SCALE :
-                    textEl.tagName === 'H3' ? scaledFontSize * HEADING_3_SCALE :
-                    scaledFontSize;
-                    // Schätze Texthöhe basierend auf Inhaltslänge und Zeilenumbrüchen
-                    const charsPerLine = 50; // Durchschnittliche Zeichen pro Zeile
-                    const lines = Math.max(1, Math.ceil(textLength / charsPerLine));
-                    estimatedGroupHeight += lines * fontSize * 1.2;
-                }
-                
-                // Bilder
-                const imgElements = element.querySelectorAll('img');
-                for (const img of imgElements) {
-                    estimatedGroupHeight += 150; // Standardhöhe für Bilder
-                }
-            }
-        }
-        
-        // Prüfe, ob die gesamte Gruppe auf die aktuelle Seite passt
-        const availableSpace = height - margin.top - margin.bottom - (height - margin.top - y);
-        const groupWillFit = estimatedGroupHeight <= availableSpace;
-        
-        // Wenn die Gruppe einen Titel hat und nicht auf die Seite passt, starte eine neue Seite
-        if (hasTitle && !groupWillFit && currentPageElements > 0) {
-            console.log(`Gruppe ${groupIndex + 1} mit Titel passt nicht auf aktuelle Seite - Seitenumbruch`);
-            ({ page, y } = addNewPage());
-            currentPageElements = 0;
-        }
-        
         // Verarbeite alle Elemente der Gruppe
-        let groupElements = [];
-        let titleElement = null;
-        
-        // Finde zunächst alle Titel in der Gruppe
-        for (const element of group) {
-            if (element.querySelector('.item-title') || element.querySelector('h1, h2, h3')) {
-                titleElement = element;
-                break;
-            }
-        }
-        
         for (let elementIndex = 0; elementIndex < group.length; elementIndex++) {
             const element = group[elementIndex];
+            
+            // Spezieller Fall: Preview-Page-Break-Element (aus der Vorschau) überspringen
+            if (element.classList.contains('preview-page-break')) {
+                console.log("Vorschau-Seitenumbruch übersprungen - wird separat verarbeitet");
+                continue;
+            }
             
             // Manueller Seitenumbruch wird direkt verarbeitet
             if (element.classList.contains('page-break')) {
                 console.log("Manueller Seitenumbruch verarbeitet");
                 ({ page, y } = addNewPage());
-                currentPageElements = 0;
                 continue;
             }
             
@@ -1232,20 +1146,11 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
             const elementId = element.getAttribute('data-original-id') || 
             element.getAttribute('data-liedblatt-id');
             
-            // Prüfe, ob für dieses Element ein Umbruch definiert ist
-            const breakInfo = elementId ? breakInfoMap[elementId] : null;
-            
-            // Bestimme, ob das Element das erste auf der Seite ist
-            const isFirstOnPage = currentPageElements === 0;
-            
             // Prüfe, ob das vorherige Element ein Icon hatte
             const afterIcon = (elementIndex > 0 && group[elementIndex-1]) ? 
             group[elementIndex-1].querySelector('.fas, .trenner-default-img') : null;
             
-            // Speichere die Startposition für dieses Element
-            const startY = y;
-            
-            // Verarbeite verschiedene Elementtypen
+            // Verarbeite verschiedene Elementtypen mit präziser Positionierung
             if (element.querySelector('.fas, .trenner-default-img')) {
                 // Zeichne Icon-Elemente
                 let iconType = 'default';
@@ -1261,78 +1166,9 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
                 const iconHeight = await drawIcon(iconType, margin.left, y, scaledIconSize);
                 y -= iconHeight + scaledIconMargin;
             } else {
+                // Zeichne Standardelemente (Text, Bilder, etc.)
                 // Finde alle relevanten Unterelemente
                 const elements = element.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
-                
-                // Sammle Informationen für Titel und Strophen
-                const isElementTitle = element.querySelector('.item-title') !== null || 
-                element.querySelector('h1, h2, h3') !== null;
-                
-                const isElementStrophe = element.querySelector('.strophe') !== null || 
-                element.querySelector('.refrain') !== null;
-                
-                // Erstelle ein Array für Textunterteile
-                const textParts = [];
-                
-                // Schätze die Gesamthöhe der Unterelemente
-                let estimatedElementHeight = 0;
-                
-                // Analysiere zunächst alle Unterelemente
-                for (let j = 0; j < elements.length; j++) {
-                    const subElement = elements[j];
-                    
-                    // Überspringe Nummerierungen (z.B. "1.")
-                    if (subElement.tagName === 'STRONG' && /^\d+\.$/.test(subElement.textContent.trim())) {
-                        continue;
-                    }
-                    
-                    if (subElement.tagName === 'IMG') {
-                        // Für Bilder: Grobe Schätzung der Höhe
-                        estimatedElementHeight += 150; // Standardhöhe
-                    } else {
-                        // Für Text: Schätze Höhe basierend auf Inhalt und Stil
-                        const text = subElement.innerText;
-                        const isCopyright = subElement.classList.contains('copyright-info');
-                        const isRefrain = subElement.classList.contains('refrain');
-                        const isStrophe = subElement.classList.contains('strophe');
-                        const isHeading = subElement.tagName === 'H1' || 
-                        subElement.tagName === 'H2' || 
-                        subElement.tagName === 'H3';
-                        
-                        // Bestimme Schriftgröße
-                        let fontSize = scaledFontSize;
-                        if (subElement.tagName === 'H1') fontSize = scaledFontSize * HEADING_1_SCALE;
-                        else if (subElement.tagName === 'H2') fontSize = scaledFontSize * HEADING_2_SCALE;
-                        else if (subElement.tagName === 'H3') fontSize = scaledFontSize * HEADING_3_SCALE;
-                        if (isCopyright) fontSize = scaleValue(COPYRIGHT_FONT_SIZE, scaledFontSize);
-                        
-                        // Schätze Texthöhe basierend auf Inhaltslänge und Zeilenumbrüchen
-                        const charsPerLine = 50; // Durchschnittliche Zeichen pro Zeile
-                        const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
-                        estimatedElementHeight += lines * fontSize * 1.2;
-                        
-                        // Speichere Informationen für spätere Verarbeitung
-                        textParts.push({
-                            text, 
-                            fontSize,
-                            isHeading,
-                            isStrophe,
-                            isRefrain,
-                            isCopyright
-                        });
-                    }
-                }
-                
-                // Prüfe, ob dieses Element auf die aktuelle Seite passt
-                const willElementFit = y - estimatedElementHeight >= margin.bottom;
-                
-                // Strophen und Titel erfordern spezielle Behandlung
-                if (isElementTitle && !willElementFit && currentPageElements > 0) {
-                    // Titel passt nicht auf diese Seite, mache einen Seitenumbruch
-                    console.log(`Titel passt nicht auf aktuelle Seite - Seitenumbruch`);
-                    ({ page, y } = addNewPage());
-                    currentPageElements = 0;
-                }
                 
                 // Verarbeite jedes Unterelement
                 for (let j = 0; j < elements.length; j++) {
@@ -1348,7 +1184,7 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
                         const imgHeight = await drawImage(subElement.src, margin.left, y, contentWidth);
                         y -= imgHeight;
                     } else {
-                        // Verarbeite Textelemente
+                        // Verarbeite Textelemente mit präziser Textformatierung
                         let fontSize = scaledFontSize;
                         let marginTop = 0;
                         let marginBottom = 0;
@@ -1398,11 +1234,13 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
                             marginBottom = 1;
                         }
                         
+                        // Anwendung des oberen Abstands, außer bei ersten Elementen auf einer Seite
+                        const isFirstOnPage = y === height - margin.top;
                         if (j !== 0 || !isFirstOnPage) {
                             y -= marginTop;
                         }
                         
-                        // Definiere Texteigenschaften
+                        // Präzise Textformatierung basierend auf den CSS-Eigenschaften
                         const textProperties = {
                             fontWeight: window.getComputedStyle(subElement).fontWeight,
                             fontStyle: window.getComputedStyle(subElement).fontStyle,
@@ -1423,15 +1261,13 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
                         const isUnderlined = subElement.tagName === 'U' || 
                         textProperties.textDecoration.includes('underline');
                         
-                        // Spezielle Optionen für Überschriften und Strophen
-                        // - Titel sollten nie von ihrem Inhalt getrennt werden
-                        // - Strophen sollten nie intern getrennt werden
-                        const textOptions = {
+                        // Optionen für drawText - KEINE eigene Umbruchlogik
+                        const options = {
                             bold: isBold,
                             italic: isItalic,
                             underline: isUnderlined,
-                            alignment: window.getComputedStyle(subElement).textAlign || globalConfig.textAlign,
-                            indent: parseFloat(window.getComputedStyle(subElement).paddingLeft) || 0,
+                            alignment: textProperties.textAlign || globalConfig.textAlign,
+                            indent: parseFloat(textProperties.paddingLeft) || 0,
                             isCopyright: isCopyright,
                             isRefrain: isRefrain,
                             isStrophe: isStrophe,
@@ -1440,46 +1276,15 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
                             isQuillHeading: isQuillHeading,
                             afterIcon: afterIcon,
                             isFirstOnPage: isFirstOnPage,
-                            // Deaktiviere automatische Seitenumbrüche in drawText
-                            // Sie werden hier in processElementGroups zentral verwaltet
+                            // Kritisch: Deaktiviere automatische Seitenumbrüche in drawText
                             preventPageBreak: true
                         };
                         
-                        // Textinhalt
+                        // Zeichne den Text und aktualisiere die Y-Position präzise
                         const textContent = subElement.innerText;
-                        
-                        // Schätze die Texthöhe
-                        const lines = textContent.split('\n');
-                        const estimatedTextHeight = lines.length * fontSize * 1.2;
-                        
-                        // Prüfe, ob der Text auf die aktuelle Seite passt
-                        if (y - estimatedTextHeight < margin.bottom) {
-                            // Text passt nicht auf die Seite
-                            
-                            // Bei Überschriften: Mache einen Seitenumbruch VOR der Überschrift
-                            if (isHeading) {
-                                console.log("Überschrift passt nicht auf die Seite - Seitenumbruch");
-                                ({ page, y } = addNewPage());
-                                currentPageElements = 0;
-                            }
-                            // Bei Strophen: Mache einen Seitenumbruch VOR der Strophe
-                            else if (isStrophe || isRefrain) {
-                                console.log("Strophe/Refrain passt nicht auf die Seite - Seitenumbruch");
-                                ({ page, y } = addNewPage());
-                                currentPageElements = 0;
-                            }
-                            // Normaler Text: Wenn es auf eine leere Seite nicht passt, trotzdem versuchen
-                            else if (!isFirstOnPage) {
-                                console.log("Text passt nicht auf die Seite - Seitenumbruch");
-                                ({ page, y } = addNewPage());
-                                currentPageElements = 0;
-                            }
-                        }
-                        
-                        // Zeichne Text und behalte die genaue Höhe bei
-                        const textHeight = await drawText(textContent, margin.left, y, fontSize, contentWidth, textOptions);
+                        const textHeight = await drawText(textContent, margin.left, y, fontSize, contentWidth, options);
                         y -= textHeight;
-                        y += marginBottom;
+                        y += marginBottom; // Berücksichtige unteren Abstand
                     }
                 }
             }
@@ -1487,19 +1292,13 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
             // Standard-Abstand nach jedem Element hinzufügen
             y -= scaledDefaultObjectSpacing;
             processedElements++;
-            currentPageElements++;
             
-            // Nach dem Element: Prüfe auf Seitenumbruch aus der Vorschau
-            if (breakInfo) {
+            // KRITISCH: Überprüfe, ob für dieses Element ein Umbruch in der Vorschau definiert ist
+            // Dies ist der einzige Ort, an dem Seitenumbrüche erzeugt werden (außer manuellen)
+            if (elementId && breakInfoMap[elementId]) {
+                const breakInfo = breakInfoMap[elementId];
                 console.log(`Seitenumbruch nach Element mit ID ${elementId} (Typ: ${breakInfo.type})`);
                 ({ page, y } = addNewPage());
-                currentPageElements = 0;
-            } 
-            // Wenn das Element zu nahe am unteren Rand ist, Seitenumbruch einfügen
-            else if (y < margin.bottom + 20) {
-                console.log("Element zu nahe am unteren Rand - Seitenumbruch");
-                ({ page, y } = addNewPage());
-                currentPageElements = 0;
             }
         }
     }
