@@ -525,12 +525,12 @@ async function generatePDF(format) {
     }
     
     const progressContainer = document.getElementById('pdf-progress-container');
-    
     const pageBreakInfo = extractPageBreaksFromPreview();
     console.log("Verwende Seitenumbrüche aus der Vorschau:", pageBreakInfo);
     const progressBar = document.getElementById('pdf-progress-bar');
     const progressText = document.getElementById('pdf-progress-text');
     progressContainer.style.display = 'block';
+    
     showProgress(0, "Initialisiere PDF-Erstellung");
     console.log("Starting PDF generation for format:", format);
     const { PDFDocument } = window.PDFLib;
@@ -838,6 +838,7 @@ async function generatePDF(format) {
             }
         }
     }
+    
     async function drawImage(imgSrc, x, y, imgWidth) {
         console.log("Drawing image:", { imgSrc, x, y, imgWidth });
         try {
@@ -945,10 +946,9 @@ async function generatePDF(format) {
     
     // Erstelle Kontext für die Elementverarbeitung
     const processingContext = {
-        doc, page, y, margin, contentWidth, 
+        doc, page, y, margin, contentWidth, width, height, addLogoToPage,
         scaledFontSize, scaledIconSize, scaledIconMargin, 
-        scaledDefaultObjectSpacing, fonts,
-        height, width
+        scaledDefaultObjectSpacing, fonts, showProgress
     };
     
     // Verarbeite alle Elementgruppen mit Umbruchinformationen aus der Vorschau
@@ -1145,8 +1145,8 @@ async function fetchAndEmbedFont(doc, fontFamily) {
 */
 async function processElementGroups(elementGroups, pageBreakInfo, context) {
     // Extrahiere benötigte Kontextvariablen
-    let { page, y, margin, contentWidth, scaledFontSize, scaledIconSize, 
-        scaledIconMargin, scaledDefaultObjectSpacing, fonts } = context;
+    let { page, y, margin, contentWidth, width, height, doc, addLogoToPage,
+        scaledFontSize, scaledIconSize, scaledIconMargin, scaledDefaultObjectSpacing, fonts } = context;
     
     // Erstelle eine Map für schnellen Zugriff auf Umbruchinformationen
     const breakInfoMap = {};
@@ -1163,7 +1163,7 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
     let processedElements = 0;
     for (let groupIndex = 0; groupIndex < elementGroups.length; groupIndex++) {
         const group = elementGroups[groupIndex];
-        showProgress(40 + (groupIndex / elementGroups.length) * 50, "Generiere PDF-Inhalt");
+        context.showProgress(40 + (groupIndex / elementGroups.length) * 50, "Generiere PDF-Inhalt");
         
         // Verarbeite alle Elemente der Gruppe
         for (let elementIndex = 0; elementIndex < group.length; elementIndex++) {
@@ -1356,7 +1356,6 @@ async function processElementGroups(elementGroups, pageBreakInfo, context) {
     // Gib aktualisierten Kontext zurück
     return { page, y, processedElements };
 }
-
 
 
 /**
