@@ -299,21 +299,29 @@ export function updateLiedblatt() {
         if (objekt.typ === 'Seitenumbruch') {
             const pageBreak = document.createElement('div');
             pageBreak.classList.add('page-break');
-            pageBreak.style.borderTop = '2px solid #e53935'; // Rot für manuelle Umbrüche
-            pageBreak.style.margin = '20px 0';
+            // ÄNDERUNG: Stil anpassen, um dem automatischen Umbruch ähnlicher zu sein
+            pageBreak.style.borderTop = '2px dashed #e53935'; // Gestrichelte Linie wie bei auto
+            pageBreak.style.margin = '15px 0';
             pageBreak.style.position = 'relative';
+            pageBreak.style.padding = '8px 0';
+            pageBreak.style.textAlign = 'center';
+            pageBreak.style.fontSize = '12px';
+            pageBreak.style.color = '#e53935';
+            pageBreak.style.backgroundColor = 'rgba(229, 57, 53, 0.1)';
+            pageBreak.style.borderRadius = '4px';
+            pageBreak.style.fontWeight = 'bold';
             
-            // Deutlicheres Icon für manuellen Umbruch
-            const pageBreakIcon = document.createElement('div');
-            pageBreakIcon.innerHTML = '📄 ↓ MANUELLER SEITENUMBRUCH';
+            // Deutlicheres Label für manuellen Umbruch
+            pageBreak.textContent = 'MANUELLER SEITENUMBRUCH';
+            
+            // Schere-Symbol hinzufügen (ähnlich wie bei automatischen Umbrüchen)
+            const pageBreakIcon = document.createElement('span');
+            pageBreakIcon.innerHTML = '✂️';
             pageBreakIcon.style.position = 'absolute';
-            pageBreakIcon.style.left = '50%';
-            pageBreakIcon.style.transform = 'translateX(-50%)';
-            pageBreakIcon.style.top = '-12px';
-            pageBreakIcon.style.backgroundColor = '#fff';
-            pageBreakIcon.style.padding = '0 10px';
-            pageBreakIcon.style.color = '#e53935';
-            pageBreakIcon.style.fontWeight = 'bold';
+            pageBreakIcon.style.left = '10px';
+            pageBreakIcon.style.top = '50%';
+            pageBreakIcon.style.transform = 'translateY(-50%)';
+            pageBreakIcon.style.fontSize = '16px';
             
             pageBreak.appendChild(pageBreakIcon);
             liedblattContent.appendChild(pageBreak);

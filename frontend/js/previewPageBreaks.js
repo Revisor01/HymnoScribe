@@ -481,25 +481,22 @@ function canBreakAfter(element, group, index) {
     
     // SEMANTISCHE REGEL: Umbruch nach Strophen/Refrains erlaubt
     if (isStropheOrRefrain(element)) {
-        // Zähle aufeinanderfolgende Strophen/Refrains bis zu diesem Element
-        let consecutiveStrophes = 0;
-        for (let i = 0; i <= index; i++) {
-            if (isStropheOrRefrain(group[i])) {
-                consecutiveStrophes++;
-            } else if (!isCloselyRelatedToStrophe(group[i])) {
-                // Bei nicht-verwandten Elementen Zähler zurücksetzen
-                consecutiveStrophes = 0;
+        const nextElement = index < group.length - 1 ? group[index + 1] : null;
+        
+        // Umbruch erzwingen wenn:
+        // 1. Eine Strophe auf ein Refrain folgt oder umgekehrt
+        if (nextElement && isStropheOrRefrain(nextElement)) {
+            const currentIsRefrain = element.classList.contains('refrain') || 
+            element.querySelector('.refrain');
+            const nextIsRefrain = nextElement.classList.contains('refrain') || 
+            nextElement.querySelector('.refrain');
+            
+            // Wenn eines ein Refrain ist und das andere eine Strophe, erlaube Umbruch
+            if (currentIsRefrain !== nextIsRefrain) {
+                console.log("Umbruch zwischen Strophe und Refrain");
+                return true;
             }
         }
-        
-        // Nach jeder dritten Strophe einen Umbruch einfügen
-        if (consecutiveStrophes >= MAX_STROPHES_BEFORE_BREAK) {
-            console.log(`Semantischer Umbruch nach der ${consecutiveStrophes}. Strophe eingefügt`);
-            return true;
-        }
-        
-        // Sonst nur Umbruch, wenn das nächste Element kein Strophe/Refrain ist
-        return !isStropheOrRefrain(nextElement);
     }
     
     // SEMANTISCHE REGEL: Umbruch nach Gebeten/Psalmen mit vielen Zeilen
@@ -799,49 +796,56 @@ function calculateElementHeight(element) {
     const fontSize = parseFloat(globalConfig.fontSize || BASE_FONT_SIZE);
     const lineHeight = parseFloat(globalConfig.lineHeight || 1.5);
     
+    // VERBESSERT: Korrekturfaktor für genauere Berechnungen
+    const heightCorrectionFactor = 1.15; // 15% mehr Höhe als Puffer
+    
     // Spezialbehandlung für verschiedene Elementtypen
     if (isHeading(element)) {
         // Überschriften haben größere Höhe
         if (element.querySelector('h1, .isQuillHeading')) {
-            baseHeight *= HEADING_1_SCALE * 0.75;
+            baseHeight *= HEADING_1_SCALE * 0.8;
         } else if (element.querySelector('h2')) {
-            baseHeight *= HEADING_2_SCALE * 0.75;
+            baseHeight *= HEADING_2_SCALE * 0.8;
         } else {
-            baseHeight *= HEADING_3_SCALE * 0.75;
+            baseHeight *= HEADING_3_SCALE * 0.8;
         }
     }
     
     if (isStropheOrRefrain(element)) {
-        // Bessere Berechnung für Strophen basierend auf Text und Zeilen
+        // VERBESSERT: Bessere Berechnung für Strophen
         const textContent = element.textContent || '';
         
         // Zähle tatsächliche Zeilenumbrüche
         const lineBreaksCount = (textContent.match(/\n/g) || []).length;
         
         // Schätze Zeilenanzahl basierend auf Text und verfügbarer Breite
-        const wordsPerLine = 8;
+        const contentWidth = element.offsetWidth - 
+        (parseFloat(computedStyle.paddingLeft) || 0) - 
+        (parseFloat(computedStyle.paddingRight) || 0);
+        const avgCharWidth = fontSize * 0.6; // Durchschnittliche Zeichenbreite
+        const charsPerLine = Math.floor(contentWidth / avgCharWidth);
+        
         const words = textContent.split(/\s+/).length;
         const estimatedLines = Math.max(
             lineBreaksCount + 1,
-            Math.ceil(words / wordsPerLine)
+            Math.ceil(textContent.length / Math.max(1, charsPerLine)),
+            Math.ceil(words / 8) // Durchschnittlich 8 Wörter pro Zeile
         );
         
-        // Berechne Höhe basierend auf Zeilen
-        baseHeight = estimatedLines * fontSize * lineHeight * 0.95;
-        
-        // Zusätzlicher Abstand für Strophen
-        baseHeight += scaleValue(STROPHE_SPACING, fontSize);
-    }
-    
-    if (element.classList.contains('copyright-info')) {
-        // Copyright-Info hat spezielle Größe
-        baseHeight = scaleValue(COPYRIGHT_FONT_SIZE, fontSize) * 1.2;
+        // VERBESSERT: Genauere Höhenberechnung für Strophen
+        baseHeight = (estimatedLines * fontSize * lineHeight) + STROPHE_SPACING;
     }
     
     // Bilder direkt messen
     if (element.querySelector('img')) {
         const img = element.querySelector('img');
-        baseHeight = img.offsetHeight || 150; // Fallback, falls noch nicht geladen
+        if (img.complete && img.naturalHeight) {
+            // Wenn Bild geladen, verwende die tatsächliche Höhe
+            baseHeight = img.offsetHeight || 150;
+        } else {
+            // Fallback, falls noch nicht geladen
+            baseHeight = 200; // Konservativere Schätzung
+        }
     }
     
     // Ränder hinzufügen
@@ -849,8 +853,8 @@ function calculateElementHeight(element) {
     const marginBottom = parseFloat(computedStyle.marginBottom) || 0;
     baseHeight += marginTop + marginBottom;
     
-    // In PT umrechnen für PDF-Kompatibilität
-    return baseHeight * PX_TO_PT_RATIO;
+    // Korrekturfaktor anwenden und in PT umrechnen
+    return baseHeight * PX_TO_PT_RATIO * heightCorrectionFactor;
 }
 
 /**
