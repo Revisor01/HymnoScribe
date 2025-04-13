@@ -802,6 +802,8 @@ async function generatePDF(format) {
             
             // Verarbeite alle Elemente der Gruppe
             for (const element of group) {
+                // Elemente verarbeiten - Code aus der vorherigen Version
+                
                 // Manueller Seitenumbruch
                 if (element.classList.contains('page-break')) {
                     console.log("Manual page break detected");
@@ -809,7 +811,6 @@ async function generatePDF(format) {
                     continue;
                 }
                 
-                // Prüfe auf Seitenumbrüche aus der Vorschau
                 const elementId = element.getAttribute('data-original-id') || 
                 element.getAttribute('data-liedblatt-id');
                 const needsPageBreakAfter = elementId && pageBreakInfo.elementIds.includes(elementId);
@@ -948,14 +949,318 @@ async function generatePDF(format) {
                 // Standard-Abstand nach jedem Element hinzufügen
                 y -= scaledDefaultObjectSpacing;
                 processedElements++;
-                
-                // Nach der Verarbeitung: Seitenumbruch einfügen, wenn von der Vorschau markiert
                 if (needsPageBreakAfter) {
                     console.log(`Vorschau-Seitenumbruch nach Element mit ID ${elementId}`);
                     ({ page, y } = addPage());
                 }
             }
+        } else {
+            // Gruppe passt nicht auf die aktuelle Seite
+            console.log(`Gruppe ${groupIndex + 1} passt nicht - Seitenumbruch nach Element ${processedElements}`);
+            
+            if (processedElements > 0) {
+                // Seitenumbruch einfügen
+                console.log("Group doesn't fit on current page, adding page break");
+                ({ page, y } = addPage());
+                
+                // Verarbeite die Gruppe auf der neuen Seite
+                for (const element of group) {
+                    // Gleicher Verarbeitungscode wie oben
+                    // Manueller Seitenumbruch
+                    if (element.classList.contains('page-break')) {
+                        console.log("Manual page break detected");
+                        ({ page, y } = addPage());
+                        continue;
+                    }
+                    
+                    const isFirstOnPage = y === height - margin.top;
+                    const afterIcon = items[processedElements - 1] && items[processedElements - 1].querySelector('.fas, .trenner-default-img');
+                    
+                    // Zeichne Icons
+                    if (element.querySelector('.fas, .trenner-default-img')) {
+                        let iconType = 'default';
+                        const iconElement = element.querySelector('.fas, .trenner-default-img');
+                        if (iconElement.classList.contains('fa-heart')) iconType = 'herz';
+                        if (iconElement.classList.contains('fa-star')) iconType = 'star';
+                        if (iconElement.classList.contains('fa-cross')) iconType = 'cross';
+                        if (iconElement.classList.contains('fa-dove')) iconType = 'dove';
+                        
+                        const iconHeight = await drawIcon(iconType, margin.left, y, scaledIconSize);
+                        y -= iconHeight + scaledIconMargin;
+                    } else {
+                        const elements = element.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
+                        
+                        // Verarbeite die einzelnen Elemente in der Gruppe
+                        for (let j = 0; j < elements.length; j++) {
+                            const element = elements[j];
+                            
+                            if (element.tagName === 'STRONG' && /^\d+\.$/.test(element.textContent.trim())) {
+                                continue;
+                            }
+                            
+                            if (element.tagName === 'IMG') {
+                                const imgHeight = await drawImage(element.src, margin.left, y, contentWidth);
+                                y -= imgHeight;
+                            } else {
+                                let fontSize = scaledFontSize;
+                                let marginTop = 0;
+                                let marginBottom = 0;
+                                let isHeading = false;
+                                let isQuillHeading = false;
+                                const isCopyright = element.classList.contains('copyright-info');
+                                const isRefrain = element.classList.contains('refrain');
+                                
+                                if (element.tagName === 'H1') {
+                                    fontSize = scaledFontSize * HEADING_1_SCALE;
+                                    if (element.classList.contains('isQuillHeading')) {
+                                        marginTop = scaleValue(QUILL_H1_MARGIN_TOP, scaledFontSize);
+                                        marginBottom = scaleValue(QUILL_H1_MARGIN_BOTTOM, scaledFontSize);
+                                    }
+                                } else if (element.tagName === 'H2') {
+                                    fontSize = scaledFontSize * HEADING_2_SCALE;
+                                    if (element.classList.contains('isQuillHeading')) {
+                                        marginTop = scaleValue(QUILL_H2_MARGIN_TOP, scaledFontSize);
+                                        marginBottom = scaleValue(QUILL_H2_MARGIN_BOTTOM, scaledFontSize);
+                                    }
+                                } else if (element.tagName === 'H3') {
+                                    fontSize = scaledFontSize * HEADING_3_SCALE;
+                                    if (element.classList.contains('isQuillHeading')) {
+                                        marginTop = scaleValue(QUILL_H3_MARGIN_TOP, scaledFontSize);
+                                        marginBottom = scaleValue(QUILL_H3_MARGIN_BOTTOM, scaledFontSize);
+                                    }
+                                }
+                                
+                                if (isCopyright) { 
+                                    fontSize = scaleValue(COPYRIGHT_FONT_SIZE, scaledFontSize);
+                                    marginTop = scaleValue(COPYRIGHT_MARGIN_TOP, scaledFontSize);
+                                    marginBottom = scaleValue(COPYRIGHT_MARGIN_BOTTOM, scaledFontSize);
+                                }
+                                
+                                const nextElement = elements[j + 1];
+                                const isNextCopyright = nextElement && nextElement.classList.contains('copyright-info');
+                                
+                                if (isHeading && isNextCopyright) {
+                                    marginBottom = 1;
+                                }
+                                
+                                if (j !== 0 || !isFirstOnPage) {
+                                    y -= marginTop;
+                                }
+                                
+                                // Definiere gemeinsame Eigenschaften für Textdarstellung
+                                const textProperties = {
+                                    fontWeight: window.getComputedStyle(element).fontWeight,
+                                    fontStyle: window.getComputedStyle(element).fontStyle,
+                                    textDecoration: window.getComputedStyle(element).textDecoration,
+                                    textAlign: window.getComputedStyle(element).textAlign,
+                                    paddingLeft: window.getComputedStyle(element).paddingLeft
+                                };
+                                
+                                // Bestimme Formateigenschaften
+                                const isBold = element.tagName === 'STRONG' || 
+                                textProperties.fontWeight === 'bold' || 
+                                parseInt(textProperties.fontWeight) >= 700;
+                                
+                                const isItalic = isRefrain || 
+                                element.tagName === 'EM' || 
+                                textProperties.fontStyle === 'italic';
+                                
+                                const isUnderlined = element.tagName === 'U' || 
+                                textProperties.textDecoration.includes('underline');
+                                
+                                // Optionen für drawText mit Gruppenzugehörigkeit
+                                const options = {
+                                    bold: isBold,
+                                    italic: isItalic,
+                                    underline: isUnderlined,
+                                    alignment: window.getComputedStyle(element).textAlign || globalConfig.textAlign,
+                                    indent: parseFloat(window.getComputedStyle(element).paddingLeft) || 0,
+                                    isCopyright: isCopyright,
+                                    isRefrain: isRefrain,
+                                    isStrophe: element.classList.contains('strophe'),
+                                    isLastElement: j === elements.length - 1,
+                                    isHeading: isHeading,
+                                    isQuillHeading: isQuillHeading,
+                                    afterIcon: afterIcon,
+                                    isFirstOnPage: isFirstOnPage,
+                                    // Gruppeninformationen
+                                    isInGroup: true,
+                                    groupIndex: groupIndex,
+                                    elementIndex: j,
+                                    totalElements: elements.length
+                                };
+                                
+                                console.log('isQuillHeading:', options.isQuillHeading, 'Item:', element);
+                                
+                                let textContent = element.innerText;
+                                const textHeight = await drawText(textContent, margin.left, y, fontSize, contentWidth, options);
+                                y -= textHeight;
+                                y += marginBottom;
+                            }
+                            
+                            if (y < margin.bottom) {
+                                ({ page, y } = addPage());
+                            }
+                        }
+                    }
+                    
+                    // Standard-Abstand nach jedem Element hinzufügen
+                    y -= scaledDefaultObjectSpacing;
+                    processedElements++;
+                }
+            } else {
+                // Erste Gruppe auf der Seite, aber zu groß
+                console.log(`Gruppe ${groupIndex + 1} zu groß für die Seite, wird aufgeteilt`);
+                
+                // Versuche trotzdem, so viele Elemente wie möglich zu platzieren
+                for (const element of group) {
+                    // Gleicher Verarbeitungscode wie oben
+                    // Manueller Seitenumbruch
+                    if (element.classList.contains('page-break')) {
+                        console.log("Manual page break detected");
+                        ({ page, y } = addPage());
+                        continue;
+                    }
+                    
+                    const isFirstOnPage = y === height - margin.top;
+                    const afterIcon = items[processedElements - 1] && items[processedElements - 1].querySelector('.fas, .trenner-default-img');
+                    
+                    // Zeichne Icons
+                    if (element.querySelector('.fas, .trenner-default-img')) {
+                        let iconType = 'default';
+                        const iconElement = element.querySelector('.fas, .trenner-default-img');
+                        if (iconElement.classList.contains('fa-heart')) iconType = 'herz';
+                        if (iconElement.classList.contains('fa-star')) iconType = 'star';
+                        if (iconElement.classList.contains('fa-cross')) iconType = 'cross';
+                        if (iconElement.classList.contains('fa-dove')) iconType = 'dove';
+                        
+                        const iconHeight = await drawIcon(iconType, margin.left, y, scaledIconSize);
+                        y -= iconHeight + scaledIconMargin;
+                    } else {
+                        const elements = element.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
+                        
+                        // Verarbeite die einzelnen Elemente in der Gruppe
+                        for (let j = 0; j < elements.length; j++) {
+                            const element = elements[j];
+                            
+                            if (element.tagName === 'STRONG' && /^\d+\.$/.test(element.textContent.trim())) {
+                                continue;
+                            }
+                            
+                            if (element.tagName === 'IMG') {
+                                const imgHeight = await drawImage(element.src, margin.left, y, contentWidth);
+                                y -= imgHeight;
+                            } else {
+                                let fontSize = scaledFontSize;
+                                let marginTop = 0;
+                                let marginBottom = 0;
+                                let isHeading = false;
+                                let isQuillHeading = false;
+                                const isCopyright = element.classList.contains('copyright-info');
+                                const isRefrain = element.classList.contains('refrain');
+                                
+                                if (element.tagName === 'H1') {
+                                    fontSize = scaledFontSize * HEADING_1_SCALE;
+                                    if (element.classList.contains('isQuillHeading')) {
+                                        marginTop = scaleValue(QUILL_H1_MARGIN_TOP, scaledFontSize);
+                                        marginBottom = scaleValue(QUILL_H1_MARGIN_BOTTOM, scaledFontSize);
+                                    }
+                                } else if (element.tagName === 'H2') {
+                                    fontSize = scaledFontSize * HEADING_2_SCALE;
+                                    if (element.classList.contains('isQuillHeading')) {
+                                        marginTop = scaleValue(QUILL_H2_MARGIN_TOP, scaledFontSize);
+                                        marginBottom = scaleValue(QUILL_H2_MARGIN_BOTTOM, scaledFontSize);
+                                    }
+                                } else if (element.tagName === 'H3') {
+                                    fontSize = scaledFontSize * HEADING_3_SCALE;
+                                    if (element.classList.contains('isQuillHeading')) {
+                                        marginTop = scaleValue(QUILL_H3_MARGIN_TOP, scaledFontSize);
+                                        marginBottom = scaleValue(QUILL_H3_MARGIN_BOTTOM, scaledFontSize);
+                                    }
+                                }
+                                
+                                if (isCopyright) { 
+                                    fontSize = scaleValue(COPYRIGHT_FONT_SIZE, scaledFontSize);
+                                    marginTop = scaleValue(COPYRIGHT_MARGIN_TOP, scaledFontSize);
+                                    marginBottom = scaleValue(COPYRIGHT_MARGIN_BOTTOM, scaledFontSize);
+                                }
+                                
+                                const nextElement = elements[j + 1];
+                                const isNextCopyright = nextElement && nextElement.classList.contains('copyright-info');
+                                
+                                if (isHeading && isNextCopyright) {
+                                    marginBottom = 1;
+                                }
+                                
+                                if (j !== 0 || !isFirstOnPage) {
+                                    y -= marginTop;
+                                }
+                                
+                                // Definiere gemeinsame Eigenschaften für Textdarstellung
+                                const textProperties = {
+                                    fontWeight: window.getComputedStyle(element).fontWeight,
+                                    fontStyle: window.getComputedStyle(element).fontStyle,
+                                    textDecoration: window.getComputedStyle(element).textDecoration,
+                                    textAlign: window.getComputedStyle(element).textAlign,
+                                    paddingLeft: window.getComputedStyle(element).paddingLeft
+                                };
+                                
+                                // Bestimme Formateigenschaften
+                                const isBold = element.tagName === 'STRONG' || 
+                                textProperties.fontWeight === 'bold' || 
+                                parseInt(textProperties.fontWeight) >= 700;
+                                
+                                const isItalic = isRefrain || 
+                                element.tagName === 'EM' || 
+                                textProperties.fontStyle === 'italic';
+                                
+                                const isUnderlined = element.tagName === 'U' || 
+                                textProperties.textDecoration.includes('underline');
+                                
+                                // Optionen für drawText mit Gruppenzugehörigkeit
+                                const options = {
+                                    bold: isBold,
+                                    italic: isItalic,
+                                    underline: isUnderlined,
+                                    alignment: window.getComputedStyle(element).textAlign || globalConfig.textAlign,
+                                    indent: parseFloat(window.getComputedStyle(element).paddingLeft) || 0,
+                                    isCopyright: isCopyright,
+                                    isRefrain: isRefrain,
+                                    isStrophe: element.classList.contains('strophe'),
+                                    isLastElement: j === elements.length - 1,
+                                    isHeading: isHeading,
+                                    isQuillHeading: isQuillHeading,
+                                    afterIcon: afterIcon,
+                                    isFirstOnPage: isFirstOnPage,
+                                    // Gruppeninformationen
+                                    isInGroup: true,
+                                    groupIndex: groupIndex,
+                                    elementIndex: j,
+                                    totalElements: elements.length
+                                };
+                                
+                                console.log('isQuillHeading:', options.isQuillHeading, 'Item:', element);
+                                
+                                let textContent = element.innerText;
+                                const textHeight = await drawText(textContent, margin.left, y, fontSize, contentWidth, options);
+                                y -= textHeight;
+                                y += marginBottom;
+                            }
+                            
+                            // Nach jedem Element prüfen, ob noch Platz ist
+                            if (y < margin.bottom && processedElements < items.length - 1) {
+                                ({ page, y } = addPage());
+                            }
+                        }
+                    }
+                    
+                    // Standard-Abstand nach jedem Element hinzufügen
+                    y -= scaledDefaultObjectSpacing;
+                    processedElements++;
+                }
+            }
         }
+        
         // Fortschritt anzeigen
         showProgress(40 + (groupIndex / elementGroups.length) * 50, "Generiere PDF-Inhalt");
     }

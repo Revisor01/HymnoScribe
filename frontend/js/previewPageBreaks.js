@@ -79,10 +79,10 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
 }
 
 /**
- * Berechnet präzise Seitenumbruchpositionen ähnlich zur PDF-Generierung
- * @param {string} format - Das gewählte Papierformat
- * @returns {Object} Informationen zu Seitenumbrüchen
- */
+* Berechnet präzise Seitenumbruchpositionen unter Berücksichtigung semantischer Regeln
+* @param {string} format - Das gewählte Papierformat
+* @returns {Object} Informationen zu Seitenumbrüchen
+*/
 function calculatePrecisePageBreaks(format) {
     const liedblattContent = document.getElementById('liedblatt-content');
     if (!liedblattContent) return { breakPositions: [] };
@@ -115,6 +115,10 @@ function calculatePrecisePageBreaks(format) {
     let currentPage = 1;
     const breakPositions = [];
     
+    // Semantische Zähler für die Umbruchslogik
+    let stropheCounter = 0;
+    let lastStropheElement = null;
+    
     // Verarbeite alle Gruppen und entscheide über Seitenumbrüche
     elementGroups.forEach((group, groupIndex) => {
         // Manuellen Seitenumbruch prüfen
@@ -126,6 +130,10 @@ function calculatePrecisePageBreaks(format) {
             });
             currentPage++;
             currentY = availableHeight;
+            
+            // Semantische Zähler zurücksetzen
+            stropheCounter = 0;
+            lastStropheElement = null;
             return;
         }
         
@@ -135,8 +143,67 @@ function calculatePrecisePageBreaks(format) {
         
         // Entscheide, ob die Gruppe auf die aktuelle Seite passt
         if (groupHeight <= currentY) {
-            // Gruppe passt komplett
-            currentY -= groupHeight;
+            // Gruppe passt komplett - prüfe auf semantische Umbrüche innerhalb der Gruppe
+            let elementY = currentY;
+            
+            for (let i = 0; i < group.length; i++) {
+                const element = group[i];
+                const elementHeight = calculateElementHeight(element);
+                
+                // Prüfe semantische Umbruchregeln
+                if (isStropheOrRefrain(element)) {
+                    stropheCounter++;
+                    lastStropheElement = element;
+                    
+                    // Nach jeder dritten Strophe/Refrain einen Umbruch einfügen
+                    if (stropheCounter > 0 && stropheCounter % 3 === 0 && i < group.length - 1) {
+                        breakPositions.push({
+                            element,
+                            pageNumber: currentPage,
+                            type: 'strophe-rule'
+                        });
+                        currentPage++;
+                        elementY = availableHeight;
+                        continue;
+                    }
+                } else if (isPsalmOrPrayer(element)) {
+                    // Zähle Zeilen im Gebet/Psalm
+                    const textContent = element.textContent || '';
+                    const lineCount = (textContent.match(/\n/g) || []).length + 1;
+                    
+                    // Nach 4 oder mehr Zeilen einen Umbruch einfügen
+                    if (lineCount >= 4 && i < group.length - 1) {
+                        breakPositions.push({
+                            element,
+                            pageNumber: currentPage,
+                            type: 'prayer-rule'
+                        });
+                        currentPage++;
+                        elementY = availableHeight;
+                        continue;
+                    }
+                } else if (!isCloselyRelatedToStrophe(element) && !isHeading(element)) {
+                    // Bei nicht-verwandten Elementen Strophenzähler zurücksetzen
+                    stropheCounter = 0;
+                }
+                
+                // Aktuelle Höhe reduzieren
+                elementY -= elementHeight;
+                
+                // Prüfe, ob nach diesem Element ein Umbruch erlaubt ist
+                if (canBreakAfter(element, group, i) && elementY < margin.bottom && i < group.length - 1) {
+                    breakPositions.push({
+                        element,
+                        pageNumber: currentPage,
+                        type: 'overflow'
+                    });
+                    currentPage++;
+                    elementY = availableHeight;
+                }
+            }
+            
+            // Aktualisiere die verbleibende Höhe
+            currentY = elementY;
             console.log(`Gruppe ${groupIndex + 1} passt auf Seite ${currentPage}`);
         } else if (groupHeight > availableHeight && group.length > 1) {
             // Große Gruppe, muss aufgeteilt werden
@@ -147,6 +214,26 @@ function calculatePrecisePageBreaks(format) {
             for (let i = 0; i < group.length; i++) {
                 const element = group[i];
                 const elementHeight = calculateElementHeight(element);
+                
+                // Prüfe semantische Regeln
+                if (isStropheOrRefrain(element)) {
+                    stropheCounter++;
+                    lastStropheElement = element;
+                    
+                    // Nach jeder dritten Strophe einen Umbruch setzen
+                    if (stropheCounter > 0 && stropheCounter % 3 === 0) {
+                        breakPositions.push({
+                            element,
+                            pageNumber: currentPage,
+                            type: 'strophe-rule'
+                        });
+                        currentPage++;
+                        elementY = availableHeight;
+                        continue;
+                    }
+                } else if (!isCloselyRelatedToStrophe(element) && !isHeading(element)) {
+                    stropheCounter = 0;
+                }
                 
                 // Prüfe, ob Element auf aktuelle Seite passt
                 if (elementHeight > elementY) {
@@ -192,13 +279,12 @@ function calculatePrecisePageBreaks(format) {
             
             // Aktualisiere die verbleibende Höhe für die nächste Gruppe
             currentY = elementY;
-            
         } else {
             // Gruppe passt nicht, aber ist zu klein zum Aufteilen - auf nächste Seite verschieben
             const lastElementFromPrevPage = group.length > 0 ? 
-                (groupIndex > 0 && elementGroups[groupIndex-1].length > 0 ? 
-                    elementGroups[groupIndex-1][elementGroups[groupIndex-1].length-1] : null) 
-                : null;
+            (groupIndex > 0 && elementGroups[groupIndex-1].length > 0 ? 
+                elementGroups[groupIndex-1][elementGroups[groupIndex-1].length-1] : null) 
+            : null;
             
             if (lastElementFromPrevPage) {
                 breakPositions.push({
@@ -230,6 +316,7 @@ function calculatePrecisePageBreaks(format) {
     return { breakPositions };
 }
 
+
 /**
  * Bestimmt, ob nach diesem Element ein Seitenumbruch eingefügt werden kann
  * @param {HTMLElement} element - Das zu prüfende Element
@@ -256,14 +343,106 @@ function canBreakAfter(element, group, index) {
 }
 
 /**
- * Identifiziert semantisch zusammengehörige Elementgruppen
- * @param {Array} elements - Alle Elemente des Dokuments
- * @returns {Array} Array von Element-Gruppen
- */
+* Bestimmt, ob nach diesem Element ein Seitenumbruch eingefügt werden soll
+* basierend auf semantischen Regeln
+* @param {HTMLElement} element - Das zu prüfende Element
+* @param {Array} group - Die Gruppe, zu der das Element gehört
+* @param {number} index - Index innerhalb der Gruppe
+* @returns {boolean} True, wenn nach diesem Element ein Umbruch erfolgen soll
+*/
+function canBreakAfter(element, group, index) {
+    // Wenn es das letzte Element in der Gruppe ist, immer Umbruch erlauben
+    if (index === group.length - 1) return true;
+    
+    const nextElement = group[index + 1];
+    
+    // Nie nach Titeln umbrechen
+    if (isHeading(element)) return false;
+    
+    // Nie nach Copyright-Infos umbrechen
+    if (element.classList.contains('copyright-info')) return false;
+    
+    // SEMANTISCHE REGEL 1: Umbruch nach jeder dritten Strophe/Refrain
+    if (isStropheOrRefrain(element)) {
+        // Zähle aufeinanderfolgende Strophen/Refrains bis zu diesem Element
+        let consecutiveStrophes = 0;
+        for (let i = 0; i <= index; i++) {
+            if (isStropheOrRefrain(group[i])) {
+                consecutiveStrophes++;
+            } else if (!isCloselyRelatedToStrophe(group[i])) {
+                // Bei nicht-verwandten Elementen (wie Überschriften) Zähler zurücksetzen
+                consecutiveStrophes = 0;
+            }
+        }
+        
+        // Nach jeder dritten Strophe einen Umbruch einfügen
+        if (consecutiveStrophes > 0 && consecutiveStrophes % 3 === 0) {
+            console.log(`Semantischer Umbruch nach der ${consecutiveStrophes}. Strophe eingefügt`);
+            return true;
+        }
+        
+        // Sonst nur Umbruch, wenn das nächste Element kein Strophe/Refrain ist
+        return !isStropheOrRefrain(nextElement);
+    }
+    
+    // SEMANTISCHE REGEL 2: Umbruch nach Gebeten/Psalmen mit vielen Zeilen
+    if (isPsalmOrPrayer(element)) {
+        // Zähle die Textzeilen
+        const textContent = element.textContent || '';
+        const lineCount = (textContent.match(/\n/g) || []).length + 1;
+        
+        // Nach 4 oder mehr Zeilen einen Umbruch einfügen
+        if (lineCount >= 4) {
+            console.log(`Semantischer Umbruch nach ${lineCount} Zeilen in Gebet/Psalm eingefügt`);
+            return true;
+        }
+    }
+    
+    // Standard-Fall: Erlaube Umbrüche nach den meisten anderen Elementen
+    return true;
+}
+
+/**
+* Prüft, ob ein Element ein Gebet oder Psalm ist
+* @param {HTMLElement} element - Das zu prüfende Element
+* @returns {boolean} True, wenn es ein Gebet oder Psalm ist
+*/
+function isPsalmOrPrayer(element) {
+    // Direkte Klassen prüfen
+    if (element.classList.contains('psalm') || 
+        element.classList.contains('prayer') ||
+        element.classList.contains('gebet')) return true;
+    
+    // Klassen in untergeordneten Elementen prüfen
+    if (element.querySelector('.psalm') || 
+        element.querySelector('.prayer') ||
+        element.querySelector('.gebet')) return true;
+    
+    // Titel prüfen, die auf Gebet oder Psalm hindeuten
+    const titleEl = element.querySelector('.item-title, h1, h2, h3');
+    if (titleEl) {
+        const title = titleEl.textContent.toLowerCase();
+        if (title.includes('psalm') || 
+            title.includes('gebet') || 
+            title.includes('vater unser') ||
+            title.includes('prayer')) {
+                return true;
+            }
+    }
+    
+    return false;
+}
+
+/**
+* Identifiziert semantisch zusammengehörige Elementgruppen mit optimierter Strophenerkennung
+* @param {Array} elements - Alle Elemente des Dokuments
+* @returns {Array} Array von Element-Gruppen
+*/
 function identifySemanticGroups(elements) {
     const groups = [];
     let currentGroup = [];
-    let currentContext = null; // 'title', 'strophe', 'other'
+    let currentContext = null; // 'title', 'strophe', 'prayer', 'psalm', 'other'
+    let stropheCount = 0;
     
     for (let i = 0; i < elements.length; i++) {
         const element = elements[i];
@@ -276,14 +455,34 @@ function identifySemanticGroups(elements) {
             }
             groups.push([element]);
             currentContext = null;
+            stropheCount = 0;
             continue;
         }
         
         const isTitle = isHeading(element);
         const isStrophe = isStropheOrRefrain(element);
         const hasCopyright = element.classList.contains('copyright-info');
+        const isPsalm = isPsalmOrPrayer(element);
         
-        // Fallunterscheidungen für semantische Gruppierungen
+        // Regel: Nach 3 aufeinanderfolgenden Strophen neue Gruppe beginnen
+        if (isStrophe) {
+            stropheCount++;
+            
+            // Nach der dritten Strophe eine neue Gruppe beginnen
+            if (stropheCount > 3 && currentGroup.length > 0) {
+                groups.push([...currentGroup]);
+                currentGroup = [];
+                stropheCount = 1; // Diese Strophe ist die erste in der neuen Gruppe
+                currentContext = 'strophe';
+                currentGroup.push(element);
+                continue;
+            }
+        } else if (!isCloselyRelatedToStrophe(element) && !hasCopyright) {
+            // Bei unabhängigen Elementen (nicht verwandt mit Strophen) den Zähler zurücksetzen
+            stropheCount = 0;
+        }
+        
+        // Reguläre Gruppenbildung wie bisher
         if (isTitle) {
             // Titel beginnt neue Gruppe, außer wir sind bereits in einer Titelgruppe
             if (currentContext !== 'title' && currentGroup.length > 0) {
@@ -292,6 +491,7 @@ function identifySemanticGroups(elements) {
             }
             currentGroup.push(element);
             currentContext = 'title';
+            stropheCount = 0;
         } 
         else if (hasCopyright) {
             // Copyright-Info gehört immer zur aktuellen Gruppe
@@ -310,19 +510,30 @@ function identifySemanticGroups(elements) {
             }
             currentGroup.push(element);
         }
+        else if (isPsalm) {
+            // Psalm/Gebet nach Titel: bleibt in der Gruppe
+            // Sonst: neue Gruppe
+            if (currentContext !== 'title' && currentGroup.length > 0) {
+                groups.push([...currentGroup]);
+                currentGroup = [];
+            }
+            currentGroup.push(element);
+            currentContext = isPsalmOrPrayer(element) ? 'psalm' : 'prayer';
+        }
         else {
             // Anderes Element, prüfen ob es zur aktuellen Gruppe gehört
             if ((currentContext === 'title' && isCloselyRelatedToTitle(element)) || 
-                (currentContext === 'strophe' && isCloselyRelatedToStrophe(element))) {
-                currentGroup.push(element);
-            } else {
-                // Sonst: Neue Gruppe beginnen
-                if (currentGroup.length > 0) {
-                    groups.push([...currentGroup]);
+                (currentContext === 'strophe' && isCloselyRelatedToStrophe(element)) ||
+                (currentContext === 'psalm' && isCloselyRelatedToPsalm(element))) {
+                    currentGroup.push(element);
+                } else {
+                    // Sonst: Neue Gruppe beginnen
+                    if (currentGroup.length > 0) {
+                        groups.push([...currentGroup]);
+                    }
+                    currentGroup = [element];
+                    currentContext = 'other';
                 }
-                currentGroup = [element];
-                currentContext = 'other';
-            }
         }
     }
     
@@ -332,6 +543,20 @@ function identifySemanticGroups(elements) {
     }
     
     return groups;
+}
+
+/**
+* Prüft, ob ein Element eng mit einem Psalm/Gebet verbunden ist
+* @param {HTMLElement} element - Das zu prüfende Element
+* @returns {boolean} Ist mit Psalm/Gebet verbunden
+*/
+function isCloselyRelatedToPsalm(element) {
+    return element.classList.contains('prayer') || 
+    element.classList.contains('psalm') ||
+    element.querySelector('.prayer') || 
+    element.querySelector('.psalm') ||
+    element.classList.contains('vater-unser') ||
+    element.classList.contains('response');
 }
 
 /**
