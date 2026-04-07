@@ -69,36 +69,36 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SEC-01 | — | Pending |
-| SEC-02 | — | Pending |
-| SEC-03 | — | Pending |
-| SEC-04 | — | Pending |
-| SEC-05 | — | Pending |
-| SEC-06 | — | Pending |
-| SEC-07 | — | Pending |
-| SEC-08 | — | Pending |
-| BACK-01 | — | Pending |
-| BACK-02 | — | Pending |
-| LYOT-01 | — | Pending |
-| LYOT-02 | — | Pending |
-| LYOT-03 | — | Pending |
-| LYOT-04 | — | Pending |
-| LYOT-05 | — | Pending |
-| LYOT-06 | — | Pending |
-| WYSI-01 | — | Pending |
-| WYSI-02 | — | Pending |
-| WYSI-03 | — | Pending |
-| WYSI-04 | — | Pending |
-| WYSI-05 | — | Pending |
-| ELEM-01 | — | Pending |
-| ELEM-02 | — | Pending |
-| ELEM-03 | — | Pending |
+| SEC-01 | Phase 1 | Pending |
+| SEC-02 | Phase 1 | Pending |
+| SEC-03 | Phase 1 | Pending |
+| SEC-04 | Phase 1 | Pending |
+| SEC-05 | Phase 1 | Pending |
+| SEC-06 | Phase 1 | Pending |
+| SEC-07 | Phase 1 | Pending |
+| SEC-08 | Phase 1 | Pending |
+| BACK-01 | Phase 1 | Pending |
+| BACK-02 | Phase 1 | Pending |
+| LYOT-01 | Phase 2 | Pending |
+| LYOT-02 | Phase 2 | Pending |
+| LYOT-03 | Phase 2 | Pending |
+| LYOT-04 | Phase 2 | Pending |
+| LYOT-05 | Phase 2 | Pending |
+| LYOT-06 | Phase 2 | Pending |
+| WYSI-01 | Phase 3 | Pending |
+| WYSI-02 | Phase 3 | Pending |
+| WYSI-03 | Phase 3 | Pending |
+| WYSI-04 | Phase 3 | Pending |
+| WYSI-05 | Phase 3 | Pending |
+| ELEM-01 | Phase 3 | Pending |
+| ELEM-02 | Phase 3 | Pending |
+| ELEM-03 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 24 total
-- Mapped to phases: 0
-- Unmapped: 24 ⚠️
+- Mapped to phases: 24
+- Unmapped: 0 
 
 ---
 *Requirements defined: 2026-04-07*
-*Last updated: 2026-04-07 after initial definition*
+*Last updated: 2026-04-07 after roadmap creation*
