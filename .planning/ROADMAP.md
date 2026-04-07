@@ -27,7 +27,13 @@ HymnoScribe wird in vier Phasen modernisiert: Zuerst werden kritische Sicherheit
   3. Anfragen von nicht-autorisierten Origins werden vom Server abgelehnt
   4. Ein neues Passwort wird nur akzeptiert, wenn es mindestens 8 Zeichen und Komplexitatsregeln erfullt
   5. server.js ist aufgeteilt — Routes, Controller und Middleware liegen in eigenen Dateien
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 01-01-PLAN.md — Libraries installieren + app.js Grundgerüst mit Middleware-Reihenfolge (SEC-04, BACK-02)
+- [ ] 01-02-PLAN.md — Hotfixes in server.js: Credential-Logging, TLS, SQL-Injection (SEC-02, SEC-03, SEC-05)
+- [ ] 01-03-PLAN.md — Middleware-Module: Auth, Rate Limiter, Validierungsketten (SEC-01, SEC-06, SEC-07, SEC-08)
+- [ ] 01-04-PLAN.md — Services: db/pool.js, emailService.js, imageCleanupService.js (BACK-01)
+- [ ] 01-05-PLAN.md — Routes extrahieren + server.js als Bootstrapper + Checkpoint (BACK-01, SEC-01, SEC-06, SEC-08)
 **UI hint**: no
 
 ### Phase 2: Unified Layout Engine
@@ -72,7 +78,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Security & Backend | 0/? | Not started | - |
+| 1. Security & Backend | 0/5 | Not started | - |
 | 2. Unified Layout Engine | 0/? | Not started | - |
 | 3. WYSIWYG Controls & Element-Reihenfolge | 0/? | Not started | - |
 | 4. Intra-Element-Umbruche | 0/? | Not started | - |
