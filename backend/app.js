@@ -58,8 +58,8 @@ app.use('/api/icons', express.static(path.join(__dirname, 'icons')));
 app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/ttf', express.static(path.join(__dirname, 'ttf')));
 
-// 6. API-Router — wird in Plan 05 (BACK-01) eingehängt wenn die Routes-Extraktion abgeschlossen ist.
-// app.use('/api', require('./routes'));
+// 6. API-Router (BACK-01)
+app.use('/api', require('./routes'));
 
 // 7. Frontend Static Serving
 app.use(express.static(path.join(__dirname, '../frontend')));
