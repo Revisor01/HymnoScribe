@@ -14,13 +14,6 @@ const compression = require('compression');
 const crypto = require('crypto');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
-console.log('Database config:', {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME
-});
-
 const pool = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -347,11 +340,9 @@ apiRouter.post('/reset-password', async (req, res) => {
 
 // Login-Route
 apiRouter.post('/login', async (req, res) => {
-    console.log('Login attempt:', req.body);
     const { usernameOrEmail, password } = req.body;
     try {
         const [users] = await pool.query('SELECT * FROM users WHERE username = ? OR email = ?', [usernameOrEmail, usernameOrEmail]);
-        console.log('Query result:', users);
         if (users.length === 0) {
             return res.status(400).json({ error: 'Benutzer nicht gefunden' });
         }
@@ -380,7 +371,6 @@ apiRouter.post('/super-login', async (req, res) => {
         const token = jwt.sign({ role: 'super-admin' }, process.env.JWT_SECRET, { expiresIn: '1h' });
         res.json({ token, role: 'super-admin' });
     } else {
-        console.log('Super-login failed: Invalid password');
         res.status(401).json({ error: 'Ungültiges Super-Passwort' });
     }
 });
