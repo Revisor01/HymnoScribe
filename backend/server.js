@@ -1220,8 +1220,13 @@ async function initializeDatabase() {
     }
 }
 
+const ALLOWED_TABLES = ['users', 'institutions', 'objekte', 'sessions', 'vorlagen'];
+
 async function createOrUpdateTable(conn, tableName, createTableSQL) {
     try {
+        if (!ALLOWED_TABLES.includes(tableName)) {
+            throw new Error(`Ungültiger Tabellenname: ${tableName}`);
+        }
         const [rows] = await conn.query(`SHOW TABLES LIKE '${tableName}'`);
         if (rows.length === 0) {
             await conn.query(createTableSQL);
@@ -1236,12 +1241,18 @@ async function createOrUpdateTable(conn, tableName, createTableSQL) {
 
 async function addColumnIfNotExists(conn, tableName, columnName, columnDefinition) {
     try {
+        if (!ALLOWED_TABLES.includes(tableName)) {
+            throw new Error(`Ungültiger Tabellenname: ${tableName}`);
+        }
         const [rows] = await conn.query(`
             SELECT COLUMN_NAME
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_NAME = '${tableName}' AND COLUMN_NAME = '${columnName}'
         `);
         if (rows.length === 0) {
+            if (!ALLOWED_TABLES.includes(tableName)) {
+                throw new Error(`Ungültiger Tabellenname: ${tableName}`);
+            }
             await conn.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
             console.log(`Spalte ${columnName} zu Tabelle ${tableName} hinzugefügt.`);
         } else {
@@ -1274,10 +1285,6 @@ function createTransporter() {
         auth: {
             user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_PASS,
-        },
-        tls: {
-            // Deaktivieren Sie dies nicht in der Produktion
-            rejectUnauthorized: false
         }
     });
 }
