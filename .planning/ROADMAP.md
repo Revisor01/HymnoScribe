@@ -29,11 +29,11 @@ HymnoScribe wird in vier Phasen modernisiert: Zuerst werden kritische Sicherheit
   5. server.js ist aufgeteilt — Routes, Controller und Middleware liegen in eigenen Dateien
 **Plans**: 5 plans
 Plans:
-- [ ] 01-01-PLAN.md — Libraries installieren + app.js Grundgerüst mit Middleware-Reihenfolge (SEC-04, BACK-02)
-- [ ] 01-02-PLAN.md — Hotfixes in server.js: Credential-Logging, TLS, SQL-Injection (SEC-02, SEC-03, SEC-05)
-- [ ] 01-03-PLAN.md — Middleware-Module: Auth, Rate Limiter, Validierungsketten (SEC-01, SEC-06, SEC-07, SEC-08)
-- [ ] 01-04-PLAN.md — Services: db/pool.js, emailService.js, imageCleanupService.js (BACK-01)
-- [ ] 01-05-PLAN.md — Routes extrahieren + server.js als Bootstrapper + Checkpoint (BACK-01, SEC-01, SEC-06, SEC-08)
+- [x] 01-01-PLAN.md — Libraries installieren + app.js Grundgerüst mit Middleware-Reihenfolge (SEC-04, BACK-02)
+- [x] 01-02-PLAN.md — Hotfixes in server.js: Credential-Logging, TLS, SQL-Injection (SEC-02, SEC-03, SEC-05)
+- [x] 01-03-PLAN.md — Middleware-Module: Auth, Rate Limiter, Validierungsketten (SEC-01, SEC-06, SEC-07, SEC-08)
+- [x] 01-04-PLAN.md — Services: db/pool.js, emailService.js, imageCleanupService.js (BACK-01)
+- [x] 01-05-PLAN.md — Routes extrahieren + server.js als Bootstrapper + Checkpoint (BACK-01, SEC-01, SEC-06, SEC-08)
 **UI hint**: no
 
 ### Phase 2: Unified Layout Engine
