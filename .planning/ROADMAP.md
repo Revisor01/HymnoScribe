@@ -79,7 +79,9 @@ Plans:
   1. Eine Strophe, die nicht mehr auf die aktuelle Seite passt, wird automatisch auf der nachsten Seite fortgesetzt
   2. Der Seitenumbruch innerhalb einer Strophe ist in der Vorschau sichtbar und stimmt mit dem PDF uberein
   3. Manuell gesetzte Umbruche innerhalb eines Elements bleiben beim PDF-Export erhalten
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 04-01-PLAN.md — pushTextBlock() Split-Logik in engine.js + MIN_LINES_BEFORE_SPLIT in constants.js (ELEM-03)
 
 ## Progress
 
@@ -91,4 +93,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Security & Backend | 0/5 | Not started | - |
 | 2. Unified Layout Engine | 0/4 | Not started | - |
 | 3. WYSIWYG Controls & Element-Reihenfolge | 0/4 | Not started | - |
-| 4. Intra-Element-Umbruche | 0/? | Not started | - |
+| 4. Intra-Element-Umbruche | 0/1 | Not started | - |
