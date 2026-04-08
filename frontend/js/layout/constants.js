@@ -51,6 +51,7 @@ export const LAYOUT = {
     MAX_STROPHES_BEFORE_BREAK: 3,
     MAX_PSALM_LINES_BEFORE_BREAK: 4,
     MIN_SPACE_FOR_NEXT_GROUP: 50,  // pt — Mindestplatz für nächste Gruppe
+    MIN_LINES_BEFORE_SPLIT: 2,     // Mindestzeilen auf einer Seite vor Split (Orphan-Schutz)
 };
 
 // DOM-Renderer: pt → px Umrechnungsfaktor (96 DPI / 72 pt per inch)
