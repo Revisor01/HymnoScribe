@@ -63,7 +63,12 @@ Plans:
   3. Schriftgrosse kann frei gewahlt werden (nicht mehr nur H1/H2/H3)
   4. Das Format (A5/A4/A3/DIN-Lang) kann gewechselt werden und die Vorschau baut sich sofort neu auf
   5. Ein Refrain kann als erstes Element eines Liedes gesetzt und die Reihenfolge aller Elemente verandert werden
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 03-01-PLAN.md — overrideState.js + engine.js Signatur + Font-Size-Presets + Format-Switch + Seitenumbruch-Marker (WYSI-03, WYSI-04, WYSI-05)
+- [ ] 03-02-PLAN.md — Drag-Handles: Spacing + Bild-Resize in domRenderer + Event-Delegation (WYSI-01, WYSI-02)
+- [ ] 03-03-PLAN.md — Element-Reihenfolge: SortableJS-Strophenliste + Refrain-Duplikation + Strophenauswahl (ELEM-01, ELEM-02)
+- [ ] 03-04-PLAN.md — Session-Serialisierung Overrides + PDF-Override-Übergabe + Checkpoint (WYSI-01, WYSI-02, WYSI-03, WYSI-04, WYSI-05, ELEM-01, ELEM-02)
 **UI hint**: yes
 
 ### Phase 4: Intra-Element-Umbruche
@@ -85,5 +90,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Security & Backend | 0/5 | Not started | - |
 | 2. Unified Layout Engine | 0/4 | Not started | - |
-| 3. WYSIWYG Controls & Element-Reihenfolge | 0/? | Not started | - |
+| 3. WYSIWYG Controls & Element-Reihenfolge | 0/4 | Not started | - |
 | 4. Intra-Element-Umbruche | 0/? | Not started | - |
