@@ -194,17 +194,19 @@ function initLazyLoading() {
 export function createLiedOptions(lied) {
     const liedOptions = document.createElement('div');
     liedOptions.classList.add('lied-options');
-    
+
+    // Toggle-Button
     const toggleButton = document.createElement('button');
     toggleButton.textContent = 'Optionen anzeigen/ausblenden';
     toggleButton.classList.add('toggle-options');
     liedOptions.appendChild(toggleButton);
-    
+
     const optionsContent = document.createElement('div');
     optionsContent.classList.add('options-content');
     optionsContent.style.display = 'none';
     liedOptions.appendChild(optionsContent);
-    
+
+    // --- Noten-Option (wie bisher) ---
     const showNotesDiv = document.createElement('div');
     const showNotesCheckbox = document.createElement('input');
     showNotesCheckbox.type = 'checkbox';
@@ -215,7 +217,7 @@ export function createLiedOptions(lied) {
     showNotesDiv.appendChild(showNotesCheckbox);
     showNotesDiv.appendChild(showNotesLabel);
     optionsContent.appendChild(showNotesDiv);
-    
+
     const noteTypeDiv = document.createElement('div');
     noteTypeDiv.style.display = 'none';
     const noteTypeRadio1 = document.createElement('input');
@@ -228,7 +230,6 @@ export function createLiedOptions(lied) {
     noteTypeLabel1.textContent = 'Noten ohne Text';
     noteTypeDiv.appendChild(noteTypeRadio1);
     noteTypeDiv.appendChild(noteTypeLabel1);
-    
     const noteTypeRadio2 = document.createElement('input');
     noteTypeRadio2.type = 'radio';
     noteTypeRadio2.name = `noteType-${lied.id}`;
@@ -239,75 +240,191 @@ export function createLiedOptions(lied) {
     noteTypeLabel2.textContent = 'Noten mit Text';
     noteTypeDiv.appendChild(noteTypeRadio2);
     noteTypeDiv.appendChild(noteTypeLabel2);
-    
     optionsContent.appendChild(noteTypeDiv);
-    
+
     showNotesCheckbox.addEventListener('change', function() {
         noteTypeDiv.style.display = this.checked ? 'block' : 'none';
-        if (!this.checked) {
-            noteTypeRadio1.checked = false;
-            noteTypeRadio2.checked = false;
-        }
+        if (!this.checked) { noteTypeRadio1.checked = false; noteTypeRadio2.checked = false; }
+        updateLiedblatt();
     });
-    
-    const strophenContainer = document.createElement('div');
-    strophenContainer.classList.add('strophen-container');
-    optionsContent.appendChild(strophenContainer);
-    
+    [noteTypeRadio1, noteTypeRadio2].forEach(r => r.addEventListener('change', updateLiedblatt));
+
+    // --- Sortierbare Element-Liste (NEU: D-05, D-06, D-07, D-08) ---
+    const sortableContainer = document.createElement('div');
+    sortableContainer.classList.add('element-order-list');
+    sortableContainer.id = `elementOrder-${lied.id}`;
+    optionsContent.appendChild(sortableContainer);
+
+    // Strophen parsen
     let strophen = lied.strophen;
     if (typeof strophen === 'string') {
-        try {
-            strophen = JSON.parse(strophen);
-        } catch (e) {
-            strophen = strophen.split('\n').filter(s => s.trim() !== '');
+        try { strophen = JSON.parse(strophen); }
+        catch (e) { strophen = strophen.split('\n').filter(s => s.trim() !== ''); }
+    }
+    if (!Array.isArray(strophen)) strophen = [strophen];
+
+    // elementOrder aus gespeichertem Zustand ODER Default aufbauen
+    // Default: [strophe-0, refrain(falls vorhanden), strophe-1, refrain, ...]
+    let elementOrder = lied.elementOrder || null;
+    let elementConfig = lied.elementConfig || {};
+
+    if (!elementOrder) {
+        elementOrder = [];
+        strophen.forEach((_, i) => {
+            elementOrder.push(`strophe-${i}`);
+            if (lied.refrain) elementOrder.push('refrain');
+        });
+    }
+
+    // Duplikate von 'refrain' eindeutig machen mit counter-Suffix: refrain, refrain-2, refrain-3 ...
+    const refrainCounts = {};
+    const normalizedOrder = elementOrder.map(key => {
+        if (key === 'refrain' || key.startsWith('refrain-')) {
+            const base = 'refrain';
+            refrainCounts[base] = (refrainCounts[base] || 0) + 1;
+            return refrainCounts[base] === 1 ? base : `${base}-${refrainCounts[base]}`;
         }
-    }
-    if (!Array.isArray(strophen)) {
-        strophen = [strophen];
-    }
-    
-    strophen.forEach((strophe, index) => {
-        const stropheDiv = document.createElement('div');
-        stropheDiv.classList.add('strophe-option');
-        
+        return key;
+    });
+
+    // Globaler Counter fuer neue Refrain-Duplikate (counter-basiert, statt Date.now())
+    let refrainCounter = (refrainCounts['refrain'] || 1);
+
+    // Sortierbare Items erstellen
+    function createStropheItem(stropheIndex, key) {
+        const item = document.createElement('div');
+        item.classList.add('sortable-item', 'strophe-item');
+        item.dataset.key = key;
+        item.dataset.type = 'strophe';
+        item.dataset.stropheIndex = stropheIndex;
+
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
-        checkbox.id = `strophe-${lied.id}-${index}`;
-        checkbox.value = index;
-        
-        const label = document.createElement('label');
-        label.htmlFor = checkbox.id;
-        label.textContent = `Strophe ${index + 1}`;
-        
-        const refrainSelect = document.createElement('select');
-        refrainSelect.id = `refrain-${lied.id}-${index}`;
-        refrainSelect.innerHTML = `
-            <option value="none">Kein Refrain</option>
-            <option value="full">Vollständiger Refrain</option>
-            <option value="short">Verweis Refrain</option>
-        `;
-        refrainSelect.style.display = lied.refrain ? 'inline-block' : 'none';
-        
-        // Setze den gespeicherten Refrain-Wert, falls vorhanden
-        if (lied.refrainOptions && lied.refrainOptions[index]) {
-            refrainSelect.value = lied.refrainOptions[index];
+        checkbox.classList.add('strophe-active-check');
+        checkbox.checked = elementConfig[key]?.active !== false; // default: aktiv
+        checkbox.addEventListener('change', updateLiedblatt);
+
+        const label = document.createElement('span');
+        // Ersten 30 Zeichen des Strophen-Texts als Preview
+        const stropheText = typeof strophen[stropheIndex] === 'string'
+            ? strophen[stropheIndex].replace(/<[^>]+>/g, '').trim().slice(0, 30)
+            : `Strophe ${stropheIndex + 1}`;
+        label.textContent = `${stropheIndex + 1}. ${stropheText}${stropheText.length >= 30 ? '\u2026' : ''}`;
+        label.classList.add('strophe-label');
+
+        const handle = document.createElement('span');
+        handle.classList.add('drag-handle');
+        handle.textContent = '\u28FF';
+        handle.title = 'Ziehen zum Sortieren';
+
+        item.appendChild(handle);
+        item.appendChild(checkbox);
+        item.appendChild(label);
+        return item;
+    }
+
+    function createRefrainItem(key, mode) {
+        const item = document.createElement('div');
+        item.classList.add('sortable-item', 'refrain-item');
+        item.dataset.key = key;
+        item.dataset.type = 'refrain';
+
+        const handle = document.createElement('span');
+        handle.classList.add('drag-handle');
+        handle.textContent = '\u28FF';
+        handle.title = 'Ziehen zum Sortieren';
+
+        const labelSpan = document.createElement('span');
+        labelSpan.textContent = 'Refrain';
+        labelSpan.classList.add('refrain-label');
+
+        // Toggle Vollständig / Nur Verweis (D-08)
+        const toggleFull = document.createElement('input');
+        toggleFull.type = 'radio';
+        toggleFull.name = `refrainMode-${lied.id}-${key}`;
+        toggleFull.value = 'full';
+        toggleFull.checked = (mode !== 'short');
+        const toggleFullLabel = document.createElement('label');
+        toggleFullLabel.textContent = 'Vollständig';
+
+        const toggleShort = document.createElement('input');
+        toggleShort.type = 'radio';
+        toggleShort.name = `refrainMode-${lied.id}-${key}`;
+        toggleShort.value = 'short';
+        toggleShort.checked = (mode === 'short');
+        const toggleShortLabel = document.createElement('label');
+        toggleShortLabel.textContent = 'Verweis';
+
+        // Refrain duplizieren (D-06) — counter-basierter Key
+        const dupButton = document.createElement('button');
+        dupButton.textContent = '+';
+        dupButton.title = 'Refrain duplizieren';
+        dupButton.classList.add('refrain-dup-btn');
+        dupButton.type = 'button';
+        dupButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Max. 10 Refrain-Items pro Lied (DoS-Schutz, T-03-03-03)
+            if (sortableContainer.querySelectorAll('.refrain-item').length >= 10) return;
+            refrainCounter += 1;
+            const newKey = `refrain-${refrainCounter}`;
+            const newItem = createRefrainItem(newKey, 'full');
+            item.insertAdjacentElement('afterend', newItem);
+            updateLiedblatt();
+        });
+
+        // Remove-Button (fuer Duplikate)
+        const removeButton = document.createElement('button');
+        removeButton.textContent = '\xD7';
+        removeButton.title = 'Refrain entfernen';
+        removeButton.classList.add('refrain-remove-btn');
+        removeButton.type = 'button';
+        removeButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            item.remove();
+            updateLiedblatt();
+        });
+
+        [toggleFull, toggleShort].forEach(r => r.addEventListener('change', updateLiedblatt));
+
+        item.appendChild(handle);
+        item.appendChild(labelSpan);
+        item.appendChild(toggleFull);
+        item.appendChild(toggleFullLabel);
+        item.appendChild(toggleShort);
+        item.appendChild(toggleShortLabel);
+        item.appendChild(dupButton);
+        item.appendChild(removeButton);
+        return item;
+    }
+
+    // Items aus normalizedOrder erstellen
+    normalizedOrder.forEach(key => {
+        if (key.startsWith('strophe-')) {
+            const idx = parseInt(key.replace('strophe-', ''));
+            if (idx >= 0 && idx < strophen.length) {
+                sortableContainer.appendChild(createStropheItem(idx, key));
+            }
+        } else if ((key === 'refrain' || key.startsWith('refrain-')) && lied.refrain) {
+            const cfg = elementConfig[key] || {};
+            sortableContainer.appendChild(createRefrainItem(key, cfg.mode || 'full'));
         }
-        
-        stropheDiv.appendChild(checkbox);
-        stropheDiv.appendChild(label);
-        stropheDiv.appendChild(refrainSelect);
-        strophenContainer.appendChild(stropheDiv);
     });
-    
-    [showNotesCheckbox, noteTypeRadio1, noteTypeRadio2, ...strophenContainer.querySelectorAll('input, select')].forEach(el => {
-        el.addEventListener('change', updateLiedblatt);
-    });
-    
+
+    // SortableJS initialisieren (D-05)
+    if (typeof Sortable !== 'undefined') {
+        Sortable.create(sortableContainer, {
+            handle: '.drag-handle',
+            animation: 150,
+            onEnd: updateLiedblatt
+        });
+    }
+
+    // Toggle-Button Event
     toggleButton.addEventListener('click', function(e) {
         e.preventDefault();
         optionsContent.style.display = optionsContent.style.display === 'none' ? 'block' : 'none';
     });
-    
+
     return liedOptions;
 }
 
