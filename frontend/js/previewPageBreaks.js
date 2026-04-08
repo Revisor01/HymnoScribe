@@ -1,6 +1,9 @@
-// previewPageBreaks.js - Verbesserte Version mit semantischen Regeln und besserer Koordination
+// previewPageBreaks.js - Thin-Wrapper für die Unified Layout Engine
 
 import { globalConfig } from './script.js';
+import { calculateLayout } from './layout/engine.js';
+import { renderToDOM } from './layout/domRenderer.js';
+import { loadFontArrayBuffers, embedFontsInDoc } from './layout/fontManager.js';
 
 // Umrechnungskonstanten für Maßeinheiten
 const mmToPt = (mm) => mm * 2.83465;
@@ -42,46 +45,53 @@ let isCalculating = false;
  * @param {string} format - Das gewählte Papierformat (a5, dl, usw.)
  */
 export function updatePreviewWithPageBreaks(format = 'a5') {
-    if (calculateTimeout) {
-        clearTimeout(calculateTimeout);
-    }
-    
-    calculateTimeout = setTimeout(() => {
+    if (calculateTimeout) clearTimeout(calculateTimeout);
+
+    calculateTimeout = setTimeout(async () => {
         if (isCalculating) return;
         isCalculating = true;
-        
+
         try {
-            console.log("Aktualisiere Vorschau mit Seitenumbrüchen für Format:", format);
-            
-            // Entferne vorhandene automatische Seitenumbrüche
-            const liedblattContent = document.getElementById('liedblatt-content');
-            if (!liedblattContent) return;
-            
-            const existingAutoBreaks = liedblattContent.querySelectorAll('.preview-page-break');
-            existingAutoBreaks.forEach(breakEl => breakEl.remove());
-            
-            // Berechne Seitenumbrüche
-            const { breakPositions } = calculatePrecisePageBreaks(format);
-            
-            // Füge Seitenumbruch-Marker in die Vorschau ein
-            breakPositions.forEach(breakInfo => {
-                if (breakInfo.type !== 'manual') { // Für automatische Umbrüche
-                    insertPageBreakMarker(breakInfo.element, breakInfo.pageNumber, format, breakInfo.type);
-                } else {
-                    // Für manuelle Umbrüche: Seitenzahl aktualisieren
-                    updateManualPageBreakMarker(breakInfo.element, breakInfo.pageNumber, format);
-                }
-            });
-            
-            // Speichere die Umbruchinformationen für die PDF-Generierung
-            window.lastCalculatedBreakPositions = breakPositions;
-            
+            const container = document.getElementById('liedblatt-content');
+            if (!container) return;
+
+            // Config aus localStorage laden
+            let config;
+            try {
+                const saved = localStorage.getItem('liedblattConfig');
+                config = saved ? JSON.parse(saved) : {};
+            } catch (e) { config = {}; }
+
+            config.format = format;
+            const fontSizePt = (parseFloat(config.fontSize) || 12) * 0.75;
+            const engineConfig = {
+                format,
+                fontSize: fontSizePt,
+                lineHeight: parseFloat(config.lineHeight) || 1.5,
+                textAlign: config.textAlign || 'left',
+                fontFamily: config.fontFamily || 'Jost',
+            };
+
+            // Font-Objekte für Engine (calculateLayout braucht PDFFont.widthOfTextAtSize)
+            const arrayBuffers = await loadFontArrayBuffers(engineConfig.fontFamily);
+            const { PDFDocument } = window.PDFLib;
+            const fontkit = window.fontkit;
+            const tempDoc = await PDFDocument.create();
+            tempDoc.registerFontkit(fontkit);
+            const fonts = await embedFontsInDoc(tempDoc, arrayBuffers);
+
+            const items = Array.from(container.children);
+            const layoutResult = await calculateLayout(items, engineConfig, fonts);
+
+            // DOM-Renderer befüllt container komplett neu (seitenweise Blätter)
+            renderToDOM(layoutResult, engineConfig, container);
+
         } catch (error) {
-            console.error("Fehler bei der Seitenumbruchberechnung:", error);
+            console.error("Fehler bei der Vorschau-Aktualisierung:", error);
         } finally {
             isCalculating = false;
         }
-    }, 300);
+    }, 150); // war 300ms — per Entscheidung auf 150ms
 }
 /**
  * Berechnet präzise Seitenumbruchpositionen unter Berücksichtigung semantischer Regeln
@@ -1001,8 +1011,4 @@ export function initPreviewFormatSelector() {
     });
 }
 
-// Exportieren der Funktionen
-export default {
-    updatePreviewWithPageBreaks,
-    initPreviewFormatSelector
-};
+// Named exports sind ausreichend — kein default export nötig

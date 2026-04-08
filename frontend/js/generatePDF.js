@@ -1,6 +1,9 @@
 // generatePDF.js
 
 import { globalConfig } from './script.js';
+import { calculateLayout } from './layout/engine.js';
+import { renderToPDF } from './layout/pdfRenderer.js';
+import { loadFontArrayBuffers, embedFontsInDoc } from './layout/fontManager.js';
 const { PDFDocument, rgb } = PDFLib;
 
 window.generatePDF = generatePDF;
@@ -835,238 +838,82 @@ function showProgress(percent, message = '') {
 }
 
 async function generatePDF(format) {
-    // Sicherheitsmechanismus für fehlende Funktionen
-    if (typeof estimatePDFElementHeight !== 'function') {
-        console.warn("estimatePDFElementHeight nicht definiert, Funktion wurde nun implementiert");
-    }
-    
     const progressContainer = document.getElementById('pdf-progress-container');
-    const pageBreakInfo = extractPageBreaksFromPreview();
-    console.log("Verwende Seitenumbrüche aus der Vorschau:", pageBreakInfo);
     progressContainer.style.display = 'block';
-    
+
     showProgress(0, "Initialisiere PDF-Erstellung");
-    console.log("Starting PDF generation for format:", format);
-    const { PDFDocument } = window.PDFLib;
-    const fontkit = window.fontkit;
-    
-    const doc = await PDFDocument.create();
-    doc.registerFontkit(fontkit);
-    
-    console.log("Loading fonts...");
-    showProgress(10, "Lade Schriftarten");
-    
-    // Lade Konfiguration
+
+    // Config aus localStorage laden
     let config;
     try {
-        const savedConfig = localStorage.getItem('liedblattConfig');
-        if (savedConfig) {
-            config = JSON.parse(savedConfig);
-            console.log("Loaded config from localStorage:", config);
-        } else {
-            throw new Error("No saved config found in localStorage");
-        }
-    } catch (error) {
-        console.error("Error loading config from localStorage:", error);
-        config = {
-            fontFamily: 'Jost',
-            fontSize: 12,
-            lineHeight: 1.2,
-            textAlign: 'center',
-            format: 'a5',
-            churchLogo: null
-        };
+        const saved = localStorage.getItem('liedblattConfig');
+        config = saved ? JSON.parse(saved) : {};
+    } catch (e) {
+        config = {};
     }
-    
-    const globalConfig = {
-        fontFamily: config.fontFamily || 'Jost',
-        fontSize: pxToPt(parseFloat(config.fontSize || 12)),
-        lineHeight: parseFloat(config.lineHeight || 1.5),
+    config.format = format || config.format || 'a5';
+
+    // fontSize: script.js speichert px-Werte, Engine erwartet pt
+    const fontSizePt = (parseFloat(config.fontSize) || 12) * 0.75;
+
+    const engineConfig = {
+        format: config.format,
+        fontSize: fontSizePt,
+        lineHeight: parseFloat(config.lineHeight) || 1.5,
         textAlign: config.textAlign || 'left',
-        format: config.format || 'a5',
-        churchLogo: config.churchLogo
+        fontFamily: config.fontFamily || 'Jost',
     };
-    
-    const scaledFontSize = globalConfig.fontSize;
-    const scaledIconSize = scaleValue(ICON_SIZE, scaledFontSize);
-    const scaledIconMargin = scaleValue(ICON_MARGIN, scaledFontSize);
-    const scaledDefaultObjectSpacing = scaleValue(DEFAULT_OBJECT_SPACING, scaledFontSize);
-    const scaledStropheSpacing = scaleValue(STROPHE_SPACING, scaledFontSize);
-    
-    console.log("Global config for PDF generation:", globalConfig);
-    
-    console.log("Loading selected font...");
-    showProgress(10, "Lade ausgewählte Schriftart");
-    const fonts = await fetchAndEmbedFont(doc, config.fontFamily);
-    console.log("Font loaded:", config.fontFamily);
-    
-    const { width, height } = pageSizes[format];
-    const margin = { top: 30, right: 20, bottom: 20, left: 20 };
-    const contentWidth = width - margin.left - margin.right;
-    
-    // PDF-Kontext als zentrale Verwaltung des aktuellen Zustands
-    // Dies ist der KRITISCHE FIX für das Problem
-    const pdfContext = {
-        doc,
-        y: 0,
-        width,
-        height,
-        margin,
-        contentWidth,
-        scaledFontSize,
-        scaledIconSize,
-        scaledIconMargin,
-        scaledDefaultObjectSpacing,
-        scaledStropheSpacing,
-        fonts,
-        logoImage: null,
-        showProgress
-    };
-    
-    pdfContext.page = doc.addPage([width, height]);
-    pdfContext.y = height - margin.top;
-    
-    console.log("Page size:", { width, height, contentWidth });
-    console.log("Current global config:", JSON.stringify(globalConfig));
-    
-    let logoImage = null;
-    if (globalConfig.churchLogo) {
-        showProgress(30, "Lade Logo");
-        console.log("Fetching church logo from:", globalConfig.churchLogo);
+
+    showProgress(10, "Lade Schriftarten");
+    const arrayBuffers = await loadFontArrayBuffers(engineConfig.fontFamily);
+
+    // Temporäres PDFDocument für font.widthOfTextAtSize (Engine braucht PDFFont-Objekte)
+    const { PDFDocument } = window.PDFLib;
+    const fontkit = window.fontkit;
+    const tempDoc = await PDFDocument.create();
+    tempDoc.registerFontkit(fontkit);
+    const fonts = await embedFontsInDoc(tempDoc, arrayBuffers);
+
+    showProgress(30, "Berechne Layout");
+    const items = Array.from(document.getElementById('liedblatt-content').children);
+    const layoutResult = await calculateLayout(items, engineConfig, fonts);
+
+    showProgress(60, "Rendere PDF");
+
+    // Logo-ArrayBuffer laden falls vorhanden
+    let logoArrayBuffer = null;
+    if (config.churchLogo) {
         try {
-            const logoUrl = `${globalConfig.churchLogo}`;
-            console.log("Full logo URL:", logoUrl);
-            const logoResponse = await fetch(logoUrl);
-            if (!logoResponse.ok) throw new Error(`HTTP error! Status: ${logoResponse.status}`);
-            const logoArrayBuffer = await logoResponse.arrayBuffer();
-            
-            const logoType = getImageType(logoArrayBuffer);
-            
-            if (logoType === 'png') {
-                logoImage = await doc.embedPng(logoArrayBuffer);
-            } else if (logoType === 'jpeg') {
-                logoImage = await doc.embedJpg(logoArrayBuffer);
-            } else {
-                throw new Error('Unsupported logo image type');
-            }
-            
-            // Speichere Logo im PDF-Kontext
-            pdfContext.logoImage = logoImage;
-            
-            console.log("Church logo embedded successfully");
-        } catch (error) {
-            console.error("Error embedding church logo:", error);
-        }
-    } else {
-        console.log("No church logo path found in global config");
-    }
-    
-    function getImageType(arrayBuffer) {
-        const uint8Array = new Uint8Array(arrayBuffer);
-        const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
-        const jpegSignature = [255, 216, 255];
-        
-        if (pngSignature.every((byte, index) => uint8Array[index] === byte)) {
-            return 'png';
-        } else if (jpegSignature.every((byte, index) => uint8Array[index] === byte)) {
-            return 'jpeg';
-        } else {
-            return 'unknown';
-        }
-    }
-    
-    // Logo zur aktuellen Seite hinzufügen
-    addLogoToPage(pdfContext);
-    
-    /**
-    * Fügt das Logo zu einer Seite hinzu
-    * @param {Object} context - Der PDF-Kontext
-    */
-    function addLogoToPage(context) {
-        if (context.logoImage) {
-            const { width, height } = context.page.getSize();
-            const logoHeight = 30; // Fixed height of 30px
-            const aspectRatio = context.logoImage.width / context.logoImage.height;
-            const logoWidth = logoHeight * aspectRatio;
-            
-            context.page.drawImage(context.logoImage, {
-                x: width - logoWidth - 20,
-                y: height - logoHeight - 20,
-                width: logoWidth,
-                height: logoHeight,
-                opacity: 0.3
+            const token = localStorage.getItem('token');
+            const logoRes = await fetch(config.churchLogo, {
+                headers: { 'Authorization': `Bearer ${token}` }
             });
+            if (logoRes.ok) logoArrayBuffer = await logoRes.arrayBuffer();
+        } catch (e) {
+            console.warn('generatePDF: Logo nicht ladbar:', e.message);
         }
     }
-        
-    const liedblattContent = document.getElementById('liedblatt-content');
-    const items = Array.from(liedblattContent.children);
-    
-    // Analysiere die Dokument-Struktur für bessere Umbruchentscheidungen
-    const elementGroups = identifyElementGroups(items);
-    console.log("Gruppenerkennung für PDF:", elementGroups.length, "Gruppen identifiziert");
-    
-    // Debug-Ausgabe für Gruppen
-    elementGroups.forEach((group, idx) => {
-        const types = group.map(el => {
-            const classes = Array.from(el.classList).join(' ');
-            return `${el.tagName}${classes ? ' (' + classes + ')' : ''}`;
-        });
-        console.log(`Gruppe ${idx + 1}: ${types.join(', ')}`);
-    });
-    
-    // Erstelle Kontext für die Elementverarbeitung
-    const processingContext = {
-        ...pdfContext,
-        scaledFontSize, 
-        scaledIconSize, 
-        scaledIconMargin, 
-        scaledDefaultObjectSpacing, 
-        showProgress
-    };
-    
-    // Verarbeite alle Elementgruppen mit Umbruchinformationen aus der Vorschau
-    showProgress(40, "Verarbeite Inhalte");
-    
-    // KRITISCH: Diese Funktion muss den aktualisierten Kontext zurückgeben
-    // const updatedContext = await processElementGroups(elementGroups, pageBreakInfo, processingContext);
-    const result = await processElementGroups(elementGroups, pageBreakInfo, pdfContext);
-    
-    // Stelle sicher, dass die PDF eine gerade Seitenzahl hat (wichtig für Broschüren)
-    ensureEvenPageCount(pdfContext.doc);
-    
-    console.log("PDF generation complete. Saving...");
+
+    const pdfDoc = await renderToPDF(layoutResult, engineConfig, arrayBuffers, logoArrayBuffer);
+
     showProgress(90, "Finalisiere PDF");
-    
+    const pdfBytes = await pdfDoc.save();
+
+    // Broschüren-Option bleibt erhalten
+    const brochureCheckbox = document.getElementById('createBrochure');
+    const makeBrochure = brochureCheckbox && brochureCheckbox.checked;
+
     try {
-        console.log("PDF generation complete. Saving...");
-        let pdfBytes = await doc.save();
-        console.log(`Generated PDF size: ${pdfBytes.length} bytes`);
-        
-        const createBrochureChecked = document.getElementById('createBrochure').checked;
-        if (createBrochureChecked) {
-            console.log("Creating brochure...");
+        if (makeBrochure) {
             showProgress(95, "Erstelle Broschüre");
-            
-            const tempDoc = await PDFDocument.load(pdfBytes);
-            let pageCount = tempDoc.getPageCount();
-            console.log(`Original page count: ${pageCount}`);
-            
-            console.log(`Final page count: ${pageCount}`);
-            pdfBytes = await tempDoc.save();
-            
-            const brochurePdfBytes = await createBrochure(pdfBytes, format);
-            console.log(`Generated brochure PDF size: ${brochurePdfBytes.length} bytes`);
-            console.log("Brochure created. Downloading...");
-            downloadPDF(brochurePdfBytes, `liedblatt_brochure_${format}.pdf`);
+            const brochurePdfBytes = await createBrochure(pdfBytes, config.format);
+            downloadPDF(brochurePdfBytes, `liedblatt_brochure_${config.format}.pdf`);
         } else {
-            console.log("Downloading standard PDF...");
-            downloadPDF(pdfBytes, `liedblatt_${format}.pdf`);
+            downloadPDF(pdfBytes, `liedblatt_${config.format}.pdf`);
         }
-        
         showProgress(100, "PDF-Erstellung abgeschlossen");
     } catch (error) {
-        console.error("Error during PDF generation or brochure creation:", error);
+        console.error("Fehler bei der PDF-Erstellung:", error);
         await customAlert(`Fehler bei der PDF-Erstellung: ${error.message}`);
     } finally {
         progressContainer.style.display = 'none';
