@@ -324,11 +324,18 @@ export function updateLiedblatt() {
         if (!objekt) return;
         
         const content = document.createElement('div');
-        const uniqueId = `liedblatt-item-${index}-${Date.now()}`; 
+        const uniqueId = `liedblatt-item-${index}-${Date.now()}`;
         content.setAttribute('data-liedblatt-id', uniqueId);
         content.setAttribute('data-original-id', objekt.id);
         content.classList.add('liedblatt-item'); // Add this class to all items
         selected.setAttribute('data-unique-id', uniqueId);
+
+        // Stabiler Override-Key: objekt.id + Positions-Index
+        // Format: '{objekt.id}:{index}' — stabil solange Reihenfolge gleich
+        const overrideKey = `${objekt.id}:${index}`;
+        content.setAttribute('data-override-key', overrideKey);
+        // Auch am selected-item fuer spaetere Deserialisierung (Plan 04)
+        selected.setAttribute('data-override-key', overrideKey);
         
         const showTitleCheckbox = selected.querySelector('input[id^="showTitle"]');
         const showTitle = showTitleCheckbox ? showTitleCheckbox.checked : true;

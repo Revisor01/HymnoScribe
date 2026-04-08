@@ -292,12 +292,17 @@ export async function calculateLayout(items, config, fonts, overrides = {}) {
                 data: {
                     src: imgEl.src,
                     naturalWidth: imgEl.naturalWidth,
-                    naturalHeight: imgEl.naturalHeight
+                    naturalHeight: imgEl.naturalHeight,
+                    overrideKey: itemKey,  // NEU: fuer domRenderer Bild-Resize-Handle
+                    widthFraction: imgSizeOverride ? imgSizeOverride.widthFraction : 1.0
                 }
             });
             currentY += imgHeight + scaledImgBottom;
             continue;
         }
+
+        // overrideKey des aktuellen Items — fuer alle Bloecke dieses Items
+        const currentItemOverrideKey = item.getAttribute('data-override-key') || '';
 
         // Freier Text (Quill) — item.classList enthält 'freier-text'
         const quillEditor = item.querySelector('.ql-editor');
@@ -331,10 +336,24 @@ export async function calculateLayout(items, config, fonts, overrides = {}) {
 
                 currentY += marginTop;
                 await pushTextBlock(run.text, fontSize, fontStyle, run.alignment,
-                    marginBottom, { isQuillHeading: run.isQuillHeading });
+                    marginBottom, { isQuillHeading: run.isQuillHeading, overrideKey: currentItemOverrideKey });
             }
 
             currentY += scaleValue(SPACING.OBJECT_DEFAULT, scaledFontSize);
+
+            // Spacing-Override-Marker nach Item einfuegen (fuer Spacing-Handle in domRenderer)
+            const spacingOv = spacingOverrides[currentItemOverrideKey];
+            if (spacingOv && typeof spacingOv.after === 'number') {
+                currentBlocks.push({
+                    type: 'spacing-override-marker',
+                    x: MARGINS.left,
+                    y: currentY,
+                    width: contentWidth,
+                    height: 0,
+                    data: { overrideKey: currentItemOverrideKey, afterPt: spacingOv.after }
+                });
+                currentY += spacingOv.after;
+            }
             continue;
         }
 
@@ -377,10 +396,24 @@ export async function calculateLayout(items, config, fonts, overrides = {}) {
 
             currentY += marginTop;
             await pushTextBlock(text, fontSize, fontStyle, config.textAlign,
-                marginBottom, { isCopyright, isRefrain, isStrophe });
+                marginBottom, { isCopyright, isRefrain, isStrophe, overrideKey: currentItemOverrideKey });
         }
 
         currentY += scaleValue(SPACING.OBJECT_DEFAULT, scaledFontSize);
+
+        // Spacing-Override-Marker nach Item einfuegen (fuer Spacing-Handle in domRenderer)
+        const spacingOvStd = spacingOverrides[currentItemOverrideKey];
+        if (spacingOvStd && typeof spacingOvStd.after === 'number') {
+            currentBlocks.push({
+                type: 'spacing-override-marker',
+                x: MARGINS.left,
+                y: currentY,
+                width: contentWidth,
+                height: 0,
+                data: { overrideKey: currentItemOverrideKey, afterPt: spacingOvStd.after }
+            });
+            currentY += spacingOvStd.after;
+        }
     }
 
     // Letzte Seite abschließen (auch wenn leer, aber nur wenn mindestens ein Block)
