@@ -181,7 +181,8 @@ export async function calculateLayout(items, config, fonts, overrides = {}) {
 
     /**
      * Berechnet Text-Block-Höhe und fügt Block zur aktuellen Seite hinzu.
-     * Löst automatisch Seitenumbruch aus, wenn der Block nicht mehr passt.
+     * Splittet Blöcke zeilenweise wenn sie die Seite überschreiten (ELEM-03).
+     * While-Loop stellt mehrstufige Splits korrekt dar (Block > eine Seite).
      *
      * @param {string} text - Vollständiger Text (noch nicht in Zeilen aufgeteilt)
      * @param {number} fontSize - pt
@@ -196,30 +197,61 @@ export async function calculateLayout(items, config, fonts, overrides = {}) {
         const font = getFontForStyle(fonts, isBold, isItalic);
         const lines = await splitTextToLines(text, font, fontSize, contentWidth);
         const lineHeightPt = fontSize * lineHeightFactor;
-        const blockHeight = lines.length * lineHeightPt;
 
-        // Seitenumbruch falls kein Platz
-        if (currentY + blockHeight > pageSize.height - MARGINS.bottom) {
-            newPage();
-        }
+        // Zeilenweiser Split — While-Loop für mehrstufige Splits (Block > eine Seite)
+        let remaining = lines;
+        let isFirstChunk = true;
 
-        currentBlocks.push({
-            type: 'text',
-            x: MARGINS.left,
-            y: currentY,
-            width: contentWidth,
-            height: blockHeight,
-            data: {
-                lines,          // vorberechnete Zeilen — Renderer müssen nicht mehr splitten
-                fontSize,
-                fontStyle,
-                alignment: alignment || config.textAlign || 'left',
-                lineHeight: lineHeightFactor,
-                ...flags
+        while (remaining.length > 0) {
+            const available = (pageSize.height - MARGINS.bottom) - currentY;
+            const fitsCount = Math.floor(available / lineHeightPt);
+
+            // Zu wenig Platz für MIN_LINES_BEFORE_SPLIT Zeilen → Seitenumbruch, neu berechnen
+            if (fitsCount < LAYOUT.MIN_LINES_BEFORE_SPLIT) {
+                newPage();
+                continue; // naechste While-Iteration berechnet fitsCount auf neuer Seite neu
             }
-        });
 
-        currentY += blockHeight + (extraSpacingAfter || 0);
+            let chunk;
+            let spacingAfter;
+
+            if (fitsCount >= remaining.length) {
+                // Alles passt auf diese Seite — kein Split nötig
+                chunk = remaining;
+                remaining = [];
+                spacingAfter = extraSpacingAfter;
+            } else {
+                // Split: erste fitsCount Zeilen auf diese Seite, Rest auf naechste
+                chunk = remaining.slice(0, fitsCount);
+                remaining = remaining.slice(fitsCount);
+                spacingAfter = 0; // kein Abstand nach erstem Teil (Seite voll)
+            }
+
+            currentBlocks.push({
+                type: 'text',
+                x: MARGINS.left,
+                y: currentY,
+                width: contentWidth,
+                height: chunk.length * lineHeightPt,
+                data: {
+                    lines: chunk,   // vorberechnete Zeilen — Renderer müssen nicht mehr splitten
+                    fontSize,
+                    fontStyle,
+                    alignment: alignment || config.textAlign || 'left',
+                    lineHeight: lineHeightFactor,
+                    isSplitContinuation: !isFirstChunk, // Fortsetzung eines gesplitteten Blocks
+                    ...flags
+                }
+            });
+
+            currentY += chunk.length * lineHeightPt + spacingAfter;
+            isFirstChunk = false;
+
+            // Seitenumbruch nach diesem Chunk falls noch Zeilen verbleiben
+            if (remaining.length > 0) {
+                newPage();
+            }
+        }
     }
 
     // ---------------------------------------------------------------------------
