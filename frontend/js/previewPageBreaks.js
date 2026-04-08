@@ -4,6 +4,7 @@ import { globalConfig } from './script.js';
 import { calculateLayout } from './layout/engine.js';
 import { renderToDOM } from './layout/domRenderer.js';
 import { loadFontArrayBuffers, embedFontsInDoc } from './layout/fontManager.js';
+import { getOverrides } from './layout/overrideState.js';
 
 // Umrechnungskonstanten für Maßeinheiten
 const mmToPt = (mm) => mm * 2.83465;
@@ -81,7 +82,7 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
             const fonts = await embedFontsInDoc(tempDoc, arrayBuffers);
 
             const items = Array.from(container.children);
-            const layoutResult = await calculateLayout(items, engineConfig, fonts);
+            const layoutResult = await calculateLayout(items, engineConfig, fonts, getOverrides());
 
             // DOM-Renderer befüllt container komplett neu (seitenweise Blätter)
             renderToDOM(layoutResult, engineConfig, container);
@@ -988,7 +989,7 @@ export function initPreviewFormatSelector() {
     // Event-Listener für Formatänderungen
     previewFormatSelect.addEventListener('change', (e) => {
         const selectedFormat = e.target.value;
-        
+
         // Format in Konfiguration speichern
         if (globalConfig) {
             globalConfig.previewFormat = selectedFormat;
@@ -998,11 +999,55 @@ export function initPreviewFormatSelector() {
                 console.error("Fehler beim Speichern der Konfiguration:", error);
             }
         }
-        
-        // Vorschau aktualisieren
+
+        // Vorschau aktualisieren — overrides bleiben erhalten (getOverrides() aus overrideState)
         updatePreviewWithPageBreaks(selectedFormat);
     });
-    
+
+    // Font-Size-Presets Handler (WYSI-03)
+    const fontSizePresets = document.getElementById('fontSizePresets');
+    const fontSizeCustom = document.getElementById('fontSizeCustom');
+
+    if (fontSizePresets) {
+        fontSizePresets.addEventListener('change', () => {
+            if (fontSizePresets.value === 'custom') {
+                fontSizeCustom.style.display = 'inline-block';
+                fontSizeCustom.focus();
+            } else {
+                fontSizeCustom.style.display = 'none';
+                // pt-Wert → globalConfig.fontSize (px): Engine konvertiert intern mit * 0.75
+                const ptValue = parseFloat(fontSizePresets.value);
+                if (globalConfig) {
+                    globalConfig.fontSize = ptValue / 0.75;
+                    try {
+                        localStorage.setItem('liedblattConfig', JSON.stringify(globalConfig));
+                    } catch (e) {
+                        console.error('Fehler beim Speichern der Schriftgröße:', e);
+                    }
+                }
+                const currentFormat = previewFormatSelect.value || 'a5';
+                updatePreviewWithPageBreaks(currentFormat);
+            }
+        });
+
+        fontSizeCustom.addEventListener('change', () => {
+            // Guard gegen NaN/Infinity (T-03-01-02)
+            const raw = parseFloat(fontSizeCustom.value);
+            const ptValue = Math.max(6, Math.min(36, isFinite(raw) ? raw : 12));
+            fontSizeCustom.value = ptValue;
+            if (globalConfig) {
+                globalConfig.fontSize = ptValue / 0.75;
+                try {
+                    localStorage.setItem('liedblattConfig', JSON.stringify(globalConfig));
+                } catch (e) {
+                    console.error('Fehler beim Speichern der Schriftgröße:', e);
+                }
+            }
+            const currentFormat = previewFormatSelect.value || 'a5';
+            updatePreviewWithPageBreaks(currentFormat);
+        });
+    }
+
     // Initiale Aktualisierung der Vorschau
     requestAnimationFrame(() => {
         setTimeout(() => {

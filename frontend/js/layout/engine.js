@@ -155,15 +155,18 @@ export function parseQuillHTML(htmlString) {
  * @param {HTMLElement[]} items - Array.from(liedblattContent.children)
  * @param {Object} config - { format, fontSize, lineHeight, textAlign, fontFamily }
  * @param {Object} fonts - { regular, bold, italic, bolditalic } PDFFont-Objekte
+ * @param {Object} overrides - { spacingOverrides, imageSizeOverrides, fontSizeOverrides } aus overrideState.js
  * @returns {Promise<{pages: Array<{pageNumber: number, blocks: Array}>, totalPages: number}>}
  */
-export async function calculateLayout(items, config, fonts) {
+export async function calculateLayout(items, config, fonts, overrides = {}) {
     const format = config.format || 'a5';
     const pageSize = PAGE_SIZES[format] || PAGE_SIZES['a5'];
     const globalFontSize = config.fontSize || FONT.BASE_SIZE;
     const scaledFontSize = scaleValue(FONT.BASE_SIZE, globalFontSize);
     const lineHeightFactor = config.lineHeight || FONT.LINE_HEIGHT;
     const contentWidth = pageSize.width - MARGINS.left - MARGINS.right;
+
+    const { spacingOverrides = {}, imageSizeOverrides = {}, fontSizeOverrides = {} } = overrides;
 
     const pages = [];
     let currentBlocks = [];
@@ -224,8 +227,16 @@ export async function calculateLayout(items, config, fonts) {
     // ---------------------------------------------------------------------------
     for (const item of items) {
 
-        // Manueller Seitenumbruch
+        // Manueller Seitenumbruch — Marker am Ende der aktuellen Seite fuer domRenderer
         if (item.classList.contains('page-break')) {
+            currentBlocks.push({
+                type: 'page-break-marker',
+                x: MARGINS.left,
+                y: currentY,
+                width: contentWidth,
+                height: 16,
+                data: { label: 'Manueller Seitenumbruch' }
+            });
             newPage();
             continue;
         }
@@ -253,8 +264,15 @@ export async function calculateLayout(items, config, fonts) {
         // Bild-Element (custom-image oder beliebiges img-Element)
         const imgEl = item.querySelector('img');
         if (imgEl) {
+            // imageSizeOverride: widthFraction (0.1–1.0) skaliert Bildbreite
+            const itemKey = item.getAttribute('data-override-key') || '';
+            const imgSizeOverride = imageSizeOverrides[itemKey];
+            const effectiveWidth = imgSizeOverride
+                ? Math.max(10, imgSizeOverride.widthFraction * contentWidth)
+                : contentWidth;
+
             const imgHeight = (imgEl.naturalHeight && imgEl.naturalWidth)
-                ? (imgEl.naturalHeight / imgEl.naturalWidth) * contentWidth
+                ? (imgEl.naturalHeight / imgEl.naturalWidth) * effectiveWidth
                 : 150; // Fallback falls naturalWidth/Height noch 0
 
             const scaledImgTop    = scaleValue(Math.abs(SPACING.IMAGE_TOP),    scaledFontSize);
@@ -269,7 +287,7 @@ export async function calculateLayout(items, config, fonts) {
                 type: 'image',
                 x: MARGINS.left,
                 y: currentY,
-                width: contentWidth,
+                width: effectiveWidth,
                 height: imgHeight,
                 data: {
                     src: imgEl.src,

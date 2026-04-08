@@ -95,6 +95,8 @@ function _createBlockElement(block, config) {
         return _createImageElement(x, y, width, height, data);
     } else if (type === 'icon') {
         return _createIconElement(x, y, width, height, data);
+    } else if (type === 'page-break-marker') {
+        return _createPageBreakMarkerElement(x, y, width, data);
     }
     // type='spacing' — kein DOM-Element nötig
     return null;
@@ -192,6 +194,33 @@ function _createIconElement(x, y, width, height, data) {
     hr.style.margin    = '0';
     el.appendChild(hr);
 
+    return el;
+}
+
+/**
+ * Erstellt einen visuellen Marker fuer manuelle Seitenumbrueche in der Vorschau.
+ * Roter gestrichelter Balken — sichtbar aber nicht druckbar (pointerEvents: none).
+ */
+function _createPageBreakMarkerElement(x, y, width, data) {
+    const el = document.createElement('div');
+    el.className = 'page-break-marker';
+    el.style.position       = 'absolute';
+    el.style.left           = `${_ptToPx(x)}px`;
+    el.style.top            = `${_ptToPx(y)}px`;
+    el.style.width          = `${_ptToPx(width)}px`;
+    el.style.height         = '16px';
+    el.style.borderTop      = '2px dashed #e74c3c';
+    el.style.display        = 'flex';
+    el.style.alignItems     = 'center';
+    el.style.justifyContent = 'center';
+    el.style.fontSize       = '10px';
+    el.style.color          = '#e74c3c';
+    el.style.pointerEvents  = 'none';
+    el.style.userSelect     = 'none';
+
+    const label = document.createElement('span');
+    label.textContent = data.label || 'Seitenumbruch';
+    el.appendChild(label);
     return el;
 }
 
