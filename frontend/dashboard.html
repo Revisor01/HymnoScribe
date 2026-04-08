@@ -202,6 +202,22 @@
                     </select>
                     <div class="preview-info">Zeigt automatische Seitenumbrüche in der Vorschau an.</div>
                 </div>
+                <div class="font-size-control-container">
+                    <label for="fontSizePresets">Schriftgröße:</label>
+                    <select id="fontSizePresets">
+                        <option value="8">8 pt</option>
+                        <option value="10">10 pt</option>
+                        <option value="12" selected>12 pt</option>
+                        <option value="14">14 pt</option>
+                        <option value="16">16 pt</option>
+                        <option value="18">18 pt</option>
+                        <option value="20">20 pt</option>
+                        <option value="24">24 pt</option>
+                        <option value="custom">Benutzerdefiniert</option>
+                    </select>
+                    <input type="number" id="fontSizeCustom" min="6" max="36" step="1" value="12"
+                           style="display:none; width:60px;" placeholder="pt">
+                </div>
                 <div id="liedblatt-content"></div>
             </div>
         </div>

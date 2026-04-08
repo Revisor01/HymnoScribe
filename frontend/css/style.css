@@ -1143,7 +1143,7 @@ form select {
     body {
         font-size: 12px;
     }
-    
+
     .logo-container {
         width: 40%;
         margin-left: 0px;
@@ -1152,4 +1152,57 @@ form select {
         width: 90%;
         padding: 10px;
     }
+}
+
+/* ============================================================
+   WYSIWYG Controls (Phase 03-01)
+   ============================================================ */
+
+/* Globale Schriftgröße-Steuerung in der Toolbar (WYSI-03) */
+.font-size-control-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0;
+    font-size: 13px;
+}
+
+.font-size-control-container label {
+    white-space: nowrap;
+}
+
+.font-size-control-container select,
+.font-size-control-container input[type="number"] {
+    padding: 3px 6px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 13px;
+}
+
+/* Per-Element Font-Size-Override im Seitenpanel (WYSI-03) */
+.font-size-override-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.font-size-override-input {
+    width: 40px;
+    padding: 2px 4px;
+    font-size: 11px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    text-align: right;
+}
+
+.font-size-override-input:focus {
+    border-color: #4a90e2;
+    outline: none;
+}
+
+.font-size-override-label {
+    font-size: 10px;
+    color: #888;
 }
