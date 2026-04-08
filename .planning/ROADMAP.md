@@ -45,7 +45,12 @@ Plans:
   2. Seitenumbruche in Vorschau und PDF liegen an denselben Stellen
   3. Es existiert eine einzige constants.js — divergierende Konstanten (STROPHE_SPACING, DEFAULT_OBJECT_SPACING etc.) sind zusammengefuhrt
   4. window.lastCalculatedBreakPositions wird nicht mehr als globale Variable genutzt
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 02-01-PLAN.md — constants.js + fontManager.js: Foundation mit Konstanten und Font-Abstraktion (LYOT-05)
+- [ ] 02-02-PLAN.md — engine.js: calculateLayout() als pure Funktion (LYOT-01)
+- [ ] 02-03-PLAN.md — pdfRenderer.js + domRenderer.js: Zwei Renderer auf einem LayoutResult (LYOT-02, LYOT-03)
+- [ ] 02-04-PLAN.md — Integration: generatePDF.js + previewPageBreaks.js als Thin-Wrapper + Checkpoint (LYOT-04, LYOT-06)
 **UI hint**: yes
 
 ### Phase 3: WYSIWYG Controls & Element-Reihenfolge
@@ -79,6 +84,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Security & Backend | 0/5 | Not started | - |
-| 2. Unified Layout Engine | 0/? | Not started | - |
+| 2. Unified Layout Engine | 0/4 | Not started | - |
 | 3. WYSIWYG Controls & Element-Reihenfolge | 0/? | Not started | - |
 | 4. Intra-Element-Umbruche | 0/? | Not started | - |
