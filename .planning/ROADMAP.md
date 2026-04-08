@@ -47,10 +47,10 @@ Plans:
   4. window.lastCalculatedBreakPositions wird nicht mehr als globale Variable genutzt
 **Plans**: 4 plans
 Plans:
-- [ ] 02-01-PLAN.md — constants.js + fontManager.js: Foundation mit Konstanten und Font-Abstraktion (LYOT-05)
-- [ ] 02-02-PLAN.md — engine.js: calculateLayout() als pure Funktion (LYOT-01)
-- [ ] 02-03-PLAN.md — pdfRenderer.js + domRenderer.js: Zwei Renderer auf einem LayoutResult (LYOT-02, LYOT-03)
-- [ ] 02-04-PLAN.md — Integration: generatePDF.js + previewPageBreaks.js als Thin-Wrapper + Checkpoint (LYOT-04, LYOT-06)
+- [x] 02-01-PLAN.md — constants.js + fontManager.js: Foundation mit Konstanten und Font-Abstraktion (LYOT-05)
+- [x] 02-02-PLAN.md — engine.js: calculateLayout() als pure Funktion (LYOT-01)
+- [x] 02-03-PLAN.md — pdfRenderer.js + domRenderer.js: Zwei Renderer auf einem LayoutResult (LYOT-02, LYOT-03)
+- [x] 02-04-PLAN.md — Integration: generatePDF.js + previewPageBreaks.js als Thin-Wrapper + Checkpoint (LYOT-04, LYOT-06)
 **UI hint**: yes
 
 ### Phase 3: WYSIWYG Controls & Element-Reihenfolge
