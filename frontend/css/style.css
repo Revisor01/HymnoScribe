@@ -1206,3 +1206,22 @@ form select {
     font-size: 10px;
     color: #888;
 }
+
+/* Drag-Handles fuer Spacing und Bild-Resize (WYSI-01, WYSI-02) */
+.spacing-handle:hover > div {
+    opacity: 1 !important;
+}
+
+.spacing-handle:hover {
+    background: rgba(52, 152, 219, 0.08) !important;
+}
+
+.image-resize-handle:hover {
+    opacity: 1 !important;
+    background: #2980b9 !important;
+}
+
+/* Verhindert Textauswahl waehrend Drag */
+.preview-page {
+    user-select: none;
+}

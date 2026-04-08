@@ -97,6 +97,8 @@ function _createBlockElement(block, config) {
         return _createIconElement(x, y, width, height, data);
     } else if (type === 'page-break-marker') {
         return _createPageBreakMarkerElement(x, y, width, data);
+    } else if (type === 'spacing-override-marker') {
+        return _createSpacingHandle(x, y, width, data);
     }
     // type='spacing' — kein DOM-Element nötig
     return null;
@@ -157,7 +159,8 @@ function _createImageElement(x, y, width, height, data) {
     el.style.top      = `${_ptToPx(y)}px`;
     el.style.width    = `${_ptToPx(width)}px`;
     el.style.height   = `${_ptToPx(height)}px`;
-    el.style.overflow = 'hidden';
+    el.style.overflow = 'visible'; // Handle ragt über Block-Kante heraus
+    el.dataset.overrideKey = data.overrideKey || '';
 
     if (data.src) {
         const img = document.createElement('img');
@@ -165,8 +168,31 @@ function _createImageElement(x, y, width, height, data) {
         img.style.width      = '100%';
         img.style.height     = '100%';
         img.style.objectFit  = 'contain';
+        img.style.overflow   = 'hidden';
         el.appendChild(img);
     }
+
+    // Bild-Resize-Handle an der Unterkante
+    const resizeHandle = document.createElement('div');
+    resizeHandle.className = 'image-resize-handle';
+    resizeHandle.dataset.overrideKey = data.overrideKey || '';
+    resizeHandle.dataset.naturalWidth = data.naturalWidth || 0;
+    resizeHandle.dataset.naturalHeight = data.naturalHeight || 0;
+    resizeHandle.dataset.currentWidthFraction = data.widthFraction || 1.0;
+    resizeHandle.dataset.blockWidthPt = width; // pt — fuer Umrechnung im Drag-Handler
+    resizeHandle.style.position = 'absolute';
+    resizeHandle.style.bottom = '-5px';
+    resizeHandle.style.left = '50%';
+    resizeHandle.style.width = '40px';
+    resizeHandle.style.height = '10px';
+    resizeHandle.style.transform = 'translateX(-50%)';
+    resizeHandle.style.cursor = 's-resize';
+    resizeHandle.style.background = '#3498db';
+    resizeHandle.style.borderRadius = '3px';
+    resizeHandle.style.opacity = '0.6';
+    resizeHandle.style.zIndex = '10';
+    resizeHandle.setAttribute('title', 'Bildgröße ziehen');
+    el.appendChild(resizeHandle);
 
     return el;
 }
@@ -221,6 +247,41 @@ function _createPageBreakMarkerElement(x, y, width, data) {
     const label = document.createElement('span');
     label.textContent = data.label || 'Seitenumbruch';
     el.appendChild(label);
+    return el;
+}
+
+/**
+ * Erstellt einen Spacing-Handle zwischen Bloecken (WYSI-02).
+ * Ziehbarer horizontaler Balken — Pointer-Events via Event-Delegation in previewPageBreaks.js.
+ */
+function _createSpacingHandle(x, y, width, data) {
+    const el = document.createElement('div');
+    el.className = 'spacing-handle';
+    el.dataset.overrideKey = data.overrideKey;
+    el.dataset.currentSpacing = data.afterPt || 0;
+    el.style.position = 'absolute';
+    el.style.left = `${_ptToPx(x)}px`;
+    el.style.top = `${_ptToPx(y)}px`;
+    el.style.width = `${_ptToPx(width)}px`;
+    el.style.height = '10px';
+    el.style.cursor = 'ns-resize';
+    el.style.background = 'transparent';
+    el.style.zIndex = '10';
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.setAttribute('title', 'Abstand ziehen');
+
+    // Visueller Balken in der Mitte
+    const bar = document.createElement('div');
+    bar.style.width = '40px';
+    bar.style.height = '3px';
+    bar.style.background = '#3498db';
+    bar.style.borderRadius = '2px';
+    bar.style.opacity = '0.5';
+    bar.style.pointerEvents = 'none';
+    el.appendChild(bar);
+
     return el;
 }
 

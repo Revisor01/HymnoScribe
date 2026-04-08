@@ -4,7 +4,7 @@ import { globalConfig } from './script.js';
 import { calculateLayout } from './layout/engine.js';
 import { renderToDOM } from './layout/domRenderer.js';
 import { loadFontArrayBuffers, embedFontsInDoc } from './layout/fontManager.js';
-import { getOverrides } from './layout/overrideState.js';
+import { getOverrides, setSpacingOverride, setImageSizeOverride } from './layout/overrideState.js';
 
 // Umrechnungskonstanten für Maßeinheiten
 const mmToPt = (mm) => mm * 2.83465;
@@ -86,6 +86,8 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
 
             // DOM-Renderer befüllt container komplett neu (seitenweise Blätter)
             renderToDOM(layoutResult, engineConfig, container);
+            // Drag-Handles registrieren (einmalig via Flag — ueberlebt Re-Render)
+            initDragHandles(container);
 
         } catch (error) {
             console.error("Fehler bei der Vorschau-Aktualisierung:", error);
@@ -94,6 +96,97 @@ export function updatePreviewWithPageBreaks(format = 'a5') {
         }
     }, 150); // war 300ms — per Entscheidung auf 150ms
 }
+
+// ---------------------------------------------------------------------------
+// Drag-Handle Event-Delegation (WYSI-01, WYSI-02)
+// ---------------------------------------------------------------------------
+
+let _dragState = null;
+const PX_TO_PT = 0.75; // 1px = 0.75pt (bei 96dpi-Annahme der Engine)
+
+/**
+ * Registriert Pointer-Event-Delegation auf dem Container fuer Spacing- und Bild-Handles.
+ * Wird nach jedem renderToDOM aufgerufen — Flag verhindert Doppel-Registration.
+ * Event-Delegation ueberlebt Re-Render, da der Container selbst nicht ersetzt wird.
+ * @param {HTMLElement} container
+ */
+export function initDragHandles(container) {
+    if (container._dragHandlesInitialized) return;
+    container._dragHandlesInitialized = true;
+
+    container.addEventListener('pointerdown', _onPointerDown);
+    container.addEventListener('pointermove', _onPointerMove);
+    container.addEventListener('pointerup', _onPointerUp);
+    container.addEventListener('pointercancel', _onPointerUp);
+}
+
+function _onPointerDown(e) {
+    const spacingHandle = e.target.closest('.spacing-handle');
+    const imageHandle = e.target.closest('.image-resize-handle');
+
+    if (spacingHandle) {
+        _dragState = {
+            type: 'spacing',
+            overrideKey: spacingHandle.dataset.overrideKey,
+            startY: e.clientY,
+            startSpacing: parseFloat(spacingHandle.dataset.currentSpacing) || 0
+        };
+        e.target.setPointerCapture(e.pointerId);
+        e.preventDefault();
+    } else if (imageHandle) {
+        _dragState = {
+            type: 'image',
+            overrideKey: imageHandle.dataset.overrideKey,
+            startY: e.clientY,
+            // Fallback auf 1 verhindert Division durch 0 (T-03-02-02)
+            naturalWidth: parseFloat(imageHandle.dataset.naturalWidth) || 1,
+            naturalHeight: parseFloat(imageHandle.dataset.naturalHeight) || 1,
+            blockWidthPt: parseFloat(imageHandle.dataset.blockWidthPt) || 100,
+            startWidthFraction: parseFloat(imageHandle.dataset.currentWidthFraction) || 1.0
+        };
+        e.target.setPointerCapture(e.pointerId);
+        e.preventDefault();
+    }
+}
+
+function _onPointerMove(e) {
+    if (!_dragState) return;
+
+    if (_dragState.type === 'spacing') {
+        const deltaYPx = e.clientY - _dragState.startY;
+        const deltaYPt = deltaYPx * PX_TO_PT;
+        const newSpacing = Math.max(0, _dragState.startSpacing + deltaYPt);
+        setSpacingOverride(_dragState.overrideKey, newSpacing);
+        _scheduleRelayout();
+    } else if (_dragState.type === 'image') {
+        const deltaYPx = e.clientY - _dragState.startY;
+        const deltaYPt = deltaYPx * PX_TO_PT;
+        // Seitenverhaeltnis beibehalten (D-02): deltaY erhoeht Hoehe → neue Breite aus Aspekt
+        const aspectRatio = _dragState.naturalHeight / _dragState.naturalWidth;
+        const startWidthPt = _dragState.startWidthFraction * _dragState.blockWidthPt;
+        const newHeightPt = startWidthPt * aspectRatio + deltaYPt;
+        const newWidthPt = Math.max(10, newHeightPt / aspectRatio);
+        const newWidthFraction = newWidthPt / _dragState.blockWidthPt;
+        setImageSizeOverride(_dragState.overrideKey, Math.min(1.0, newWidthFraction));
+        _scheduleRelayout();
+    }
+}
+
+function _onPointerUp() {
+    _dragState = null;
+}
+
+// 150ms Debounce verhindert zu viele Re-Layouts bei schnellem Drag (T-03-02-01)
+let _relayoutTimeout = null;
+function _scheduleRelayout() {
+    if (_relayoutTimeout) clearTimeout(_relayoutTimeout);
+    _relayoutTimeout = setTimeout(() => {
+        const formatSelect = document.getElementById('previewFormat');
+        const format = formatSelect ? formatSelect.value : 'a5';
+        updatePreviewWithPageBreaks(format);
+    }, 150);
+}
+
 /**
  * Berechnet präzise Seitenumbruchpositionen unter Berücksichtigung semantischer Regeln
  * @param {string} format - Das gewählte Papierformat
