@@ -439,6 +439,29 @@ export function updateLiedblatt() {
     selectedItems.forEach((selected, index) => {
         const objekt = JSON.parse(selected.getAttribute('data-object'));
         if (!objekt) return;
+
+        // elementOrder und elementConfig aus dem sortable-DOM lesen (NEU: Plan 03-03)
+        if (objekt.typ === 'Lied' || objekt.typ === 'Liturgie') {
+            const liedOptions = selected.querySelector('.lied-options');
+            if (liedOptions) {
+                const sortableContainer = liedOptions.querySelector('.element-order-list');
+                if (sortableContainer) {
+                    const sortableItems = Array.from(sortableContainer.querySelectorAll('.sortable-item'));
+                    objekt.elementOrder = sortableItems.map(item => item.dataset.key);
+                    objekt.elementConfig = {};
+                    sortableItems.forEach(item => {
+                        const key = item.dataset.key;
+                        if (item.dataset.type === 'strophe') {
+                            const checkbox = item.querySelector('.strophe-active-check');
+                            objekt.elementConfig[key] = { active: checkbox ? checkbox.checked : true };
+                        } else if (item.dataset.type === 'refrain') {
+                            const modeRadio = item.querySelector('input[type="radio"]:checked');
+                            objekt.elementConfig[key] = { mode: modeRadio ? modeRadio.value : 'full' };
+                        }
+                    });
+                }
+            }
+        }
         
         const content = document.createElement('div');
         const uniqueId = `liedblatt-item-${index}-${Date.now()}`;
@@ -558,7 +581,7 @@ export function updateLiedblatt() {
                 }
             }
             
-            const selectedStrophen = Array.from(selected.querySelectorAll('.strophen-container input:checked')).map(cb => parseInt(cb.value));
+            // Strophen parsen
             let strophen = objekt.strophen;
             if (typeof strophen === 'string') {
                 try {
@@ -570,59 +593,65 @@ export function updateLiedblatt() {
             if (!Array.isArray(strophen)) {
                 strophen = [strophen];
             }
-            
-            if (selectedStrophen.length > 0) {
-                selectedStrophen.forEach((index, arrayIndex) => {
-                    const stropheDiv = document.createElement('div');
-                    stropheDiv.classList.add('strophe');
-                    stropheDiv.style.marginBottom = `${globalConfig.fontSize * 0.5}px`;
-                    
-                    let strophenText = strophen[index].replace(/<p>/g, '').replace(/<\/p>/g, '<br>');
-                    let strophenTextArray = strophenText.split('<br>');
-                    
-                    const pElementWithNumber = document.createElement('p');
-                    pElementWithNumber.classList.add('strophe');
-                    pElementWithNumber.innerHTML = `<span class="strophenum">${index + 1}.</span> ${strophenTextArray[0]}`;
-                    stropheDiv.appendChild(pElementWithNumber);
-                    
-                    for (let i = 1; i < strophenTextArray.length; i++) {
-                        if (strophenTextArray[i].trim() !== '') {
-                            const pElement = document.createElement('p');
-                            pElement.textContent = strophenTextArray[i];
-                            stropheDiv.appendChild(pElement);
+
+            // NEUES RENDERING: elementOrder vorhanden (Plan 03-03)
+            if (objekt.elementOrder && objekt.elementOrder.length > 0) {
+                const elementConfig = objekt.elementConfig || {};
+
+                objekt.elementOrder.forEach(key => {
+                    if (key.startsWith('strophe-')) {
+                        const stropheIndex = parseInt(key.replace('strophe-', ''));
+                        const cfg = elementConfig[key] || {};
+                        // Nur rendern wenn aktiv (Checkbox gesetzt) — per D-07
+                        if (cfg.active === false) return;
+                        if (stropheIndex < 0 || stropheIndex >= strophen.length) return;
+
+                        const stropheDiv = document.createElement('div');
+                        stropheDiv.classList.add('strophe');
+                        stropheDiv.style.marginBottom = `${globalConfig.fontSize * 0.5}px`;
+
+                        let strophenText = strophen[stropheIndex].replace(/<p>/g, '').replace(/<\/p>/g, '<br>');
+                        let strophenTextArray = strophenText.split('<br>');
+
+                        const pElementWithNumber = document.createElement('p');
+                        pElementWithNumber.classList.add('strophe');
+                        pElementWithNumber.innerHTML = `<span class="strophenum">${stropheIndex + 1}.</span> ${strophenTextArray[0]}`;
+                        stropheDiv.appendChild(pElementWithNumber);
+
+                        for (let i = 1; i < strophenTextArray.length; i++) {
+                            if (strophenTextArray[i].trim() !== '') {
+                                const pElement = document.createElement('p');
+                                pElement.textContent = strophenTextArray[i];
+                                stropheDiv.appendChild(pElement);
+                            }
                         }
-                    }
-                    
-                    content.appendChild(stropheDiv);
-                    
-                    const refrainSelect = selected.querySelector(`select[id="refrain-${objekt.id}-${index}"]`);
-                    const refrainType = refrainSelect ? refrainSelect.value : 'none';
-                    
-                    if (refrainType !== 'none' && objekt.refrain) {
+                        content.appendChild(stropheDiv);
+
+                    } else if ((key === 'refrain' || key.startsWith('refrain-')) && objekt.refrain) {
+                        const cfg = elementConfig[key] || {};
+                        const refrainType = cfg.mode || 'full'; // 'full' oder 'short'
+
                         const refrainDiv = document.createElement('div');
                         refrainDiv.classList.add('refrain');
-                        
+
                         if (refrainType === 'full') {
                             const tempDiv = document.createElement('div');
                             tempDiv.innerHTML = objekt.refrain;
-                            
                             const firstP = document.createElement('p');
                             firstP.style.fontStyle = 'italic';
                             firstP.classList.add('refrain');
-                            
                             if (tempDiv.childNodes.length > 0) {
                                 if (tempDiv.firstChild.nodeType === Node.TEXT_NODE) {
-                                    firstP.textContent = "Refrain: " + tempDiv.firstChild.textContent.trim();
+                                    firstP.textContent = 'Refrain: ' + tempDiv.firstChild.textContent.trim();
                                     tempDiv.removeChild(tempDiv.firstChild);
                                 } else {
-                                    firstP.innerHTML = "Refrain: " + tempDiv.firstChild.innerHTML;
+                                    firstP.innerHTML = 'Refrain: ' + tempDiv.firstChild.innerHTML;
                                     tempDiv.removeChild(tempDiv.firstChild);
                                 }
                             } else {
-                                firstP.textContent = "Refrain:";
+                                firstP.textContent = 'Refrain:';
                             }
                             refrainDiv.appendChild(firstP);
-                            
                             Array.from(tempDiv.children).forEach(child => {
                                 const newP = document.createElement('p');
                                 newP.style.fontStyle = 'italic';
@@ -630,29 +659,101 @@ export function updateLiedblatt() {
                                 newP.innerHTML = child.innerHTML;
                                 refrainDiv.appendChild(newP);
                             });
-                            
-                            if (tempDiv.childNodes.length > 0) {
-                                const textContent = tempDiv.childNodes[0].textContent.trim();
-                                if (textContent) {
-                                    const newP = document.createElement('p');
-                                    newP.style.fontStyle = 'italic';
-                                    newP.textContent = textContent;
-                                    refrainDiv.appendChild(newP);
-                                }
-                            }
                         } else {
+                            // Kurz-Verweis (D-08)
                             const shortRefrain = document.createElement('p');
                             shortRefrain.style.fontStyle = 'italic';
                             shortRefrain.textContent = 'Refrain';
                             refrainDiv.appendChild(shortRefrain);
                         }
-                        
                         content.appendChild(refrainDiv);
                     }
                 });
-            }
-            else {
-                content.innerHTML += '';
+            } else {
+                // BACKWARD-COMPAT: altes selectedStrophen + refrainOptions Rendering
+                // Liest: '.strophen-container input:checked' — fuer Sessions ohne elementOrder
+                const selectedStrophen = Array.from(selected.querySelectorAll('.strophen-container input:checked')).map(cb => parseInt(cb.value));
+
+                if (selectedStrophen.length > 0) {
+                    selectedStrophen.forEach((stropheIdx) => {
+                        const stropheDiv = document.createElement('div');
+                        stropheDiv.classList.add('strophe');
+                        stropheDiv.style.marginBottom = `${globalConfig.fontSize * 0.5}px`;
+
+                        let strophenText = strophen[stropheIdx].replace(/<p>/g, '').replace(/<\/p>/g, '<br>');
+                        let strophenTextArray = strophenText.split('<br>');
+
+                        const pElementWithNumber = document.createElement('p');
+                        pElementWithNumber.classList.add('strophe');
+                        pElementWithNumber.innerHTML = `<span class="strophenum">${stropheIdx + 1}.</span> ${strophenTextArray[0]}`;
+                        stropheDiv.appendChild(pElementWithNumber);
+
+                        for (let i = 1; i < strophenTextArray.length; i++) {
+                            if (strophenTextArray[i].trim() !== '') {
+                                const pElement = document.createElement('p');
+                                pElement.textContent = strophenTextArray[i];
+                                stropheDiv.appendChild(pElement);
+                            }
+                        }
+
+                        content.appendChild(stropheDiv);
+
+                        const refrainSelect = selected.querySelector(`select[id="refrain-${objekt.id}-${stropheIdx}"]`);
+                        const refrainType = refrainSelect ? refrainSelect.value : 'none';
+
+                        if (refrainType !== 'none' && objekt.refrain) {
+                            const refrainDiv = document.createElement('div');
+                            refrainDiv.classList.add('refrain');
+
+                            if (refrainType === 'full') {
+                                const tempDiv = document.createElement('div');
+                                tempDiv.innerHTML = objekt.refrain;
+
+                                const firstP = document.createElement('p');
+                                firstP.style.fontStyle = 'italic';
+                                firstP.classList.add('refrain');
+
+                                if (tempDiv.childNodes.length > 0) {
+                                    if (tempDiv.firstChild.nodeType === Node.TEXT_NODE) {
+                                        firstP.textContent = "Refrain: " + tempDiv.firstChild.textContent.trim();
+                                        tempDiv.removeChild(tempDiv.firstChild);
+                                    } else {
+                                        firstP.innerHTML = "Refrain: " + tempDiv.firstChild.innerHTML;
+                                        tempDiv.removeChild(tempDiv.firstChild);
+                                    }
+                                } else {
+                                    firstP.textContent = "Refrain:";
+                                }
+                                refrainDiv.appendChild(firstP);
+
+                                Array.from(tempDiv.children).forEach(child => {
+                                    const newP = document.createElement('p');
+                                    newP.style.fontStyle = 'italic';
+                                    newP.classList.add('refrain');
+                                    newP.innerHTML = child.innerHTML;
+                                    refrainDiv.appendChild(newP);
+                                });
+
+                                if (tempDiv.childNodes.length > 0) {
+                                    const textContent = tempDiv.childNodes[0].textContent.trim();
+                                    if (textContent) {
+                                        const newP = document.createElement('p');
+                                        newP.style.fontStyle = 'italic';
+                                        newP.textContent = textContent;
+                                        refrainDiv.appendChild(newP);
+                                    }
+                                }
+                            } else {
+                                const shortRefrain = document.createElement('p');
+                                shortRefrain.style.fontStyle = 'italic';
+                                shortRefrain.textContent = 'Refrain';
+                                refrainDiv.appendChild(shortRefrain);
+                            }
+
+                            content.appendChild(refrainDiv);
+                        }
+                    });
+                }
             }
             
         } else if (objekt.typ === 'Titel' || objekt.typ === 'Freitext') {
