@@ -65,10 +65,10 @@ Plans:
   5. Ein Refrain kann als erstes Element eines Liedes gesetzt und die Reihenfolge aller Elemente verandert werden
 **Plans**: 4 plans
 Plans:
-- [ ] 03-01-PLAN.md — overrideState.js + engine.js Signatur + Font-Size-Presets + Format-Switch + Seitenumbruch-Marker (WYSI-03, WYSI-04, WYSI-05)
-- [ ] 03-02-PLAN.md — Drag-Handles: Spacing + Bild-Resize in domRenderer + Event-Delegation (WYSI-01, WYSI-02)
-- [ ] 03-03-PLAN.md — Element-Reihenfolge: SortableJS-Strophenliste + Refrain-Duplikation + Strophenauswahl (ELEM-01, ELEM-02)
-- [ ] 03-04-PLAN.md — Session-Serialisierung Overrides + PDF-Override-Übergabe + Checkpoint (WYSI-01, WYSI-02, WYSI-03, WYSI-04, WYSI-05, ELEM-01, ELEM-02)
+- [x] 03-01-PLAN.md — overrideState.js + engine.js Signatur + Font-Size-Presets + Format-Switch + Seitenumbruch-Marker (WYSI-03, WYSI-04, WYSI-05)
+- [x] 03-02-PLAN.md — Drag-Handles: Spacing + Bild-Resize in domRenderer + Event-Delegation (WYSI-01, WYSI-02)
+- [x] 03-03-PLAN.md — Element-Reihenfolge: SortableJS-Strophenliste + Refrain-Duplikation + Strophenauswahl (ELEM-01, ELEM-02)
+- [x] 03-04-PLAN.md — Session-Serialisierung Overrides + PDF-Override-Übergabe + Checkpoint (WYSI-01, WYSI-02, WYSI-03, WYSI-04, WYSI-05, ELEM-01, ELEM-02)
 **UI hint**: yes
 
 ### Phase 4: Intra-Element-Umbruche
