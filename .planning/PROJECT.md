@@ -2,7 +2,7 @@
 
 ## What This Is
 
-HymnoScribe ist eine Multi-Tenant Web-App zum Erstellen von Liedblättern (Songsheets) als PDF. Gemeinden und Institutionen verwalten eigene Bibliotheken mit Liedern, Liturgien, Gebeten und Lesungen und kombinieren diese per Drag-and-Drop zu druckfertigen Liedblättern in verschiedenen Formaten (A5, A4, A3, DIN-Lang). Die App ist live unter hymnoscribe.de und wird bereits von Testern genutzt.
+HymnoScribe ist eine Multi-Tenant Web-App zum Erstellen von Liedblättern (Songsheets) als PDF. Gemeinden und Institutionen verwalten eigene Bibliotheken mit Liedern, Liturgien, Gebeten und Lesungen und kombinieren diese per Drag-and-Drop zu druckfertigen Liedblättern in verschiedenen Formaten (A5, A4, A3, DIN-Lang). Die App ist live unter app.hymnoscribe.de. Das Backend ist modular strukturiert (Routes, Controller, Middleware, Services), die Vorschau ist eine seitenweise WYSIWYG-Darstellung die 1:1 dem PDF-Export entspricht.
 
 ## Core Value
 
@@ -26,69 +26,74 @@ Ein Liedblatt zusammenstellen und sofort sehen, wie es gedruckt aussieht — ohn
 - ✓ Institutions-Logos auf Liedblättern — existing
 - ✓ Docker-basiertes Deployment — existing
 - ✓ Datenbank-Migrations-System — existing
+- ✓ Security-Härtung (Rate Limiting, SQL-Injection-Fix, CORS, Helmet, Passwort-Regeln, Input-Validierung) — v1.0
+- ✓ Backend-Modularisierung (server.js → Routes, Controller, Middleware, Services) — v1.0
+- ✓ WYSIWYG-Vorschau mit einheitlicher Layout-Engine (Vorschau = PDF) — v1.0
+- ✓ Live-Feinsteuerung (Drag-Regler für Abstände, Bildgrößen) — v1.0
+- ✓ Freie Schriftgrößenwahl (Presets + per-Element Override) — v1.0
+- ✓ Flexible Element-Reihenfolge (SortableJS, Refrain duplizierbar, Strophenauswahl) — v1.0
+- ✓ Intra-Element-Umbrüche (Strophen splitten über Seitengrenzen) — v1.0
 
 ### Active
 
-- [ ] Security-Härtung: Rate Limiting, SQL-Injection-Fixes, Credential-Logging entfernen, CORS absichern, TLS-Validierung, Passwort-Regeln
-- [ ] WYSIWYG-Vorschau: Vorschau zeigt 1:1 das spätere PDF — eine einzige Layout-Engine für beides
-- [ ] Live-Feinsteuerung: Abstände zwischen Objekten, zwischen Text und Noten per Drag-Regler einstellbar
-- [ ] Freie Textformatierung: Über H1/H2/H3 hinaus — Schriftgröße, Stil frei wählbar
-- [ ] Bildgrößen frei einstellbar: Notenbilder nicht mehr automatisch auf volle Seitenbreite skaliert
-- [ ] Umbrüche innerhalb von Elementen: Strophen/Refrains können auf der nächsten Seite fortgesetzt werden
-- [ ] Flexible Element-Reihenfolge: Refrain kann auch als erstes Element eines Liedes gesetzt werden
-- [ ] Backend-Modularisierung: server.js in Routes, Controller, Middleware aufteilen
+(None — v1.0 shipped. Define next milestone with `/gsd-new-milestone`)
 
 ### Out of Scope
 
-- Mobile App — Web-first, responsive reicht für v1
-- OAuth/Social Login — E-Mail/Passwort funktioniert, Aufwand lohnt nicht jetzt
+- Mobile App — Web-first, responsive reicht
+- OAuth/Social Login — E-Mail/Passwort funktioniert
 - Echtzeit-Kollaboration — Einzelnutzer-Editing reicht
 - Audio/Video-Einbettung — Liedblätter sind Print-Produkte
 - Automatische Lied-Datenbank — jede Institution baut eigene Bibliothek (Copyright)
 
 ## Context
 
-- App ist live unter hymnoscribe.de, wird bereits von Testern genutzt
-- Backend: Express.js (monolithischer server.js mit 1.463 Zeilen), MySQL 9.0, Docker
-- Frontend: Vanilla JS (kein Framework), PDF-Generierung mit pdf-lib clientseitig
-- Größtes Problem: PDF-Vorschau und PDF-Export sind zwei getrennte Systeme mit unterschiedlichen Konstanten — Vorschau stimmt nicht mit Export überein
-- Kein einziger Test vorhanden
-- Mehrere Security-Schwachstellen dokumentiert (SQL-Injection, fehlende Rate Limits, Credential-Logging)
-- Codebase-Map unter `.planning/codebase/` mit detaillierter Analyse
+- App live unter app.hymnoscribe.de (beta Tag auf Loading-Optimization Branch)
+- Backend: Express.js modular (server.js 35 Zeilen Bootstrapper), MySQL 8.0, Docker
+- Frontend: Vanilla JS mit ES6 Modulen, pdf-lib clientseitig
+- Layout-Engine: `frontend/js/layout/` — engine.js, constants.js, fontManager.js, domRenderer.js, pdfRenderer.js, overrideState.js
+- SortableJS für Element-Reihenfolge, Custom Pointer-Events für Drag-Handles
+- Session-Format v1 mit Override-Persistenz (backward-compatible)
+- Keine Tests vorhanden (Testinfrastruktur wäre ein guter v1.1 Kandidat)
+- Dependabot meldet 31 Vulnerabilities auf master (19 high) — separate Aufgabe
 
 ## Constraints
 
-- **Tech Stack**: Express.js Backend bleibt — Neuschreiben nicht gerechtfertigt
-- **Frontend**: Vanilla JS bevorzugt — kein schweres Framework (React etc.) einführen
-- **PDF-Library**: pdf-lib bleibt (clientseitig, gut genug) — aber eine einzige Rendering-Engine für Vorschau und PDF
-- **Multi-Tenant**: Institution-Scoping muss in allen neuen Features berücksichtigt werden
-- **Deployment**: Docker-basiert, muss weiterhin funktionieren
-- **Nutzer**: Nicht-technisch — UI muss intuitiv bleiben, keine versteckten Power-Features
+- **Tech Stack**: Express.js Backend bleibt
+- **Frontend**: Vanilla JS bevorzugt — kein Framework
+- **PDF-Library**: pdf-lib bleibt, eine Layout-Engine für Vorschau und PDF
+- **Multi-Tenant**: Institution-Scoping in allen Features
+- **Deployment**: Docker-basiert
+- **Nutzer**: Nicht-technisch — UI muss intuitiv bleiben
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Weiterentwickeln statt Neuanfang | Architektur (Multi-Tenant, Datenmodell) ist solide, nur PDF-System und Security müssen modernisiert werden | — Pending |
-| Eine Layout-Engine für Vorschau + PDF | Zwei getrennte Systeme (generatePDF.js + previewPageBreaks.js) mit divergierenden Konstanten sind die Wurzel des Trial-and-Error-Problems | — Pending |
-| Vanilla JS beibehalten | Kein Framework-Overhead für eine App dieser Größe, Team-Vertrautheit | — Pending |
+| Weiterentwickeln statt Neuanfang | Architektur (Multi-Tenant, Datenmodell) ist solide | ✓ Good — v1.0 shipped |
+| Eine Layout-Engine für Vorschau + PDF | Zwei getrennte Systeme waren die Wurzel des Trial-and-Error-Problems | ✓ Good — engine.js + zwei Renderer |
+| Vanilla JS beibehalten | Kein Framework-Overhead, Team-Vertrautheit | ✓ Good — ES6 Module reichen |
+| pt als kanonische Einheit | pdf-lib arbeitet nativ in pt, DOM konvertiert pt→px | ✓ Good — keine Divergenz |
+| Inline-Refactoring statt parallele Dateien | Keine Code-Duplikation, direkter Umbau | ✓ Good — sauber umgesetzt |
+| PDF-Werte gewinnen bei Konstantendivergenz | Das gedruckte Ergebnis ist das Maß | ✓ Good — Vorschau passt sich an |
+| SortableJS für Element-Reihenfolge | Leichtgewichtig, gut gepflegt, CDN-verfügbar | ✓ Good |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
-**After each phase transition** (via `/gsd-transition`):
+**After each phase transition:**
 1. Requirements invalidated? → Move to Out of Scope with reason
 2. Requirements validated? → Move to Validated with phase reference
 3. New requirements emerged? → Add to Active
 4. Decisions to log? → Add to Key Decisions
 5. "What This Is" still accurate? → Update if drifted
 
-**After each milestone** (via `/gsd-complete-milestone`):
+**After each milestone:**
 1. Full review of all sections
 2. Core Value check — still the right priority?
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-07 after initialization*
+*Last updated: 2026-04-08 after v1.0 milestone*
