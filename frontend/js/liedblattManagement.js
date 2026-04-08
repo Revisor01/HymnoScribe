@@ -3,6 +3,7 @@ import { saveSessionToLocalStorage, debouncedSaveSession } from './sessionManage
 import { globalConfig, getImagePath, applyGlobalConfig } from './script.js';
 import { authenticatedFetch, customAlert, customConfirm, customPrompt } from './utils.js';
 import { updatePreviewWithPageBreaks } from './previewPageBreaks.js';
+import { setFontSizeOverride, clearOverride } from './layout/overrideState.js';
 
 export function getTrennerIconClass(type) {
     switch (type) {
@@ -95,6 +96,50 @@ export function addTrenner(type) {
         inhalt: type
     };
     addToSelected(trennerObject);
+}
+
+/**
+ * Erstellt ein per-Element-Font-Size-Override-Control fuer die Liedblatt-Liste.
+ * Placeholder "—" signalisiert: globaler Default gilt.
+ * Leeres Feld loescht den Override — globale Schriftgroesse gilt wieder.
+ * @param {string} itemKey - data-override-key des Elements (temporaer via Date.now())
+ * @returns {HTMLElement}
+ */
+function createFontSizeOverrideControl(itemKey) {
+    const wrapper = document.createElement('div');
+    wrapper.classList.add('font-size-override-control');
+    wrapper.title = 'Schriftgröße für dieses Element überschreiben (leer = global)';
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '6';
+    input.max = '36';
+    input.step = '1';
+    input.placeholder = '—';
+    input.classList.add('font-size-override-input');
+    input.dataset.overrideKey = itemKey;
+
+    const label = document.createElement('span');
+    label.textContent = 'pt';
+    label.classList.add('font-size-override-label');
+
+    input.addEventListener('change', () => {
+        const val = input.value.trim();
+        if (val === '' || isNaN(parseFloat(val))) {
+            // Override loeschen — globaler Default gilt
+            clearOverride(itemKey);
+            input.value = '';
+        } else {
+            setFontSizeOverride(itemKey, parseFloat(val));
+        }
+        // Re-Layout triggern
+        const currentFormat = document.getElementById('previewFormat')?.value || 'a5';
+        updatePreviewWithPageBreaks(currentFormat);
+    });
+
+    wrapper.appendChild(input);
+    wrapper.appendChild(label);
+    return wrapper;
 }
 
 export function addPageBreak() {
@@ -631,7 +676,14 @@ export function addToSelected(objekt) {
         scrollToTitle(objekt.id, uniqueId);
     });
     titleRow.appendChild(titleSpan);
-    
+
+    // Per-Element Font-Size-Override-Control (WYSI-03)
+    // Temporaerer Key — Plan 02 stabilisiert via data-override-key auf liedblatt-item
+    const overrideKey = `item-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+    newItem.setAttribute('data-override-key', overrideKey);
+    const fontSizeOverrideCtrl = createFontSizeOverrideControl(overrideKey);
+    titleRow.appendChild(fontSizeOverrideCtrl);
+
     // Erstellen der Buttons für Bewegung und Löschen
     const buttonsDiv = document.createElement('div');
     buttonsDiv.classList.add('buttons');
