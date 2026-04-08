@@ -81,7 +81,7 @@ Plans:
   3. Manuell gesetzte Umbruche innerhalb eines Elements bleiben beim PDF-Export erhalten
 **Plans**: 1 plan
 Plans:
-- [ ] 04-01-PLAN.md — pushTextBlock() Split-Logik in engine.js + MIN_LINES_BEFORE_SPLIT in constants.js (ELEM-03)
+- [x] 04-01-PLAN.md — pushTextBlock() Split-Logik in engine.js + MIN_LINES_BEFORE_SPLIT in constants.js (ELEM-03)
 
 ## Progress
 
