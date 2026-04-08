@@ -3,6 +3,7 @@
 import { authenticatedFetch, customAlert, customConfirm, customPrompt } from './utils.js';
 import { updateLiedblatt, addToSelected, quillInstances, resetQuillInstances } from './liedblattManagement.js';
 import { globalConfig, getImagePath } from './script.js';
+import { serializeOverrides, deserializeOverrides, clearOverrides } from './layout/overrideState.js';
 
 export async function saveSession(name) {
     if (!name) {
@@ -48,7 +49,14 @@ export async function saveSession(name) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ name, data: sessionData }),
+            body: JSON.stringify({
+                name,
+                data: {
+                    version: 1,
+                    items: sessionData,
+                    overrides: serializeOverrides()
+                }
+            }),
         });
         await customAlert('Session erfolgreich gespeichert mit ID: ' + result.id);
         await updateSessionSelect();
@@ -62,8 +70,21 @@ export async function saveSession(name) {
 export async function loadSession(id) {
     try {
         const session = await authenticatedFetch(`/api/sessions/${id}`);
-        if (session && session.data) {
-            applySessionData(session.data);
+        if (session && session.data !== undefined) {
+            const raw = session.data;
+            if (Array.isArray(raw)) {
+                // Backward-Compat: altes Format war ein reines Array
+                clearOverrides();
+                applySessionData(raw);
+            } else if (raw && raw.version === 1) {
+                // Neues Format mit overrides
+                if (raw.overrides) deserializeOverrides(raw.overrides);
+                applySessionData(raw.items || []);
+            } else {
+                // Unbekanntes Format — sicherer Fallback
+                clearOverrides();
+                applySessionData(Array.isArray(raw) ? raw : []);
+            }
             await customAlert('Session erfolgreich geladen');
         } else {
             throw new Error('Unerwartetes Datenformat in der Session');
@@ -186,14 +207,23 @@ export function saveSessionToLocalStorage() {
         });
         
         // Prüfen, ob sich die Daten geändert haben, um unnötige Speicherungen zu vermeiden
+        // Vergleich auf items-only (ohne overrides) — overrides haben eigenen Änderungs-Trigger
         const newDataString = JSON.stringify(sessionData);
         if (lastSavedData === newDataString) {
             return; // Keine Änderungen, nicht speichern
         }
-        
+
+        // Wrapper-Objekt mit overrides bauen (neues Format v1)
+        const sessionPayload = {
+            version: 1,
+            items: sessionData,
+            overrides: serializeOverrides()
+        };
+        const payloadString = JSON.stringify(sessionPayload);
+
         // In localStorage speichern
-        localStorage.setItem('lastSession', newDataString);
-        lastSavedData = newDataString;
+        localStorage.setItem('lastSession', payloadString);
+        lastSavedData = newDataString; // weiterhin items-only für Change-Detection
         
         // Reduzierte Konsolenausgabe: nur noch einmalig pro tatsächlicher Änderung
         console.log('Session saved');
@@ -211,8 +241,18 @@ export function loadLastSession() {
     const lastSession = localStorage.getItem('lastSession');
     if (lastSession) {
         try {
-            const sessionData = JSON.parse(lastSession);
-            applySessionData(sessionData);
+            const raw = JSON.parse(lastSession);
+            // Backward-Compat: altes Format war ein reines Array
+            if (Array.isArray(raw)) {
+                clearOverrides();
+                applySessionData(raw);
+            } else if (raw && raw.version === 1) {
+                // Neues Format mit overrides
+                if (raw.overrides) {
+                    deserializeOverrides(raw.overrides);
+                }
+                applySessionData(raw.items || []);
+            }
         } catch (error) {
             console.error('Fehler beim Laden der letzten Session:', error);
         }
@@ -333,8 +373,21 @@ export async function saveVorlage(name) {
 export async function loadVorlage(id) {
     try {
         const vorlage = await authenticatedFetch(`/api/vorlagen/${id}`);
-        if (vorlage && vorlage.data) {
-            applySessionData(vorlage.data);
+        if (vorlage && vorlage.data !== undefined) {
+            const raw = vorlage.data;
+            if (Array.isArray(raw)) {
+                // Backward-Compat: altes Format war ein reines Array
+                clearOverrides();
+                applySessionData(raw);
+            } else if (raw && raw.version === 1) {
+                // Neues Format mit overrides
+                if (raw.overrides) deserializeOverrides(raw.overrides);
+                applySessionData(raw.items || []);
+            } else {
+                // Unbekanntes Format — sicherer Fallback
+                clearOverrides();
+                applySessionData(Array.isArray(raw) ? raw : []);
+            }
             await customAlert('Vorlage erfolgreich geladen');
         } else {
             throw new Error('Unerwartetes Datenformat in der Vorlage');

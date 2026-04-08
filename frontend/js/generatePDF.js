@@ -4,6 +4,7 @@ import { globalConfig } from './script.js';
 import { calculateLayout } from './layout/engine.js';
 import { renderToPDF } from './layout/pdfRenderer.js';
 import { loadFontArrayBuffers, embedFontsInDoc } from './layout/fontManager.js';
+import { getOverrides } from './layout/overrideState.js';
 const { PDFDocument, rgb } = PDFLib;
 
 window.generatePDF = generatePDF;
@@ -876,7 +877,7 @@ async function generatePDF(format) {
 
     showProgress(30, "Berechne Layout");
     const items = Array.from(document.getElementById('liedblatt-content').children);
-    const layoutResult = await calculateLayout(items, engineConfig, fonts);
+    const layoutResult = await calculateLayout(items, engineConfig, fonts, getOverrides());
 
     showProgress(60, "Rendere PDF");
 
