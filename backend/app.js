@@ -30,9 +30,13 @@ app.use(helmet({
         directives: {
             defaultSrc: ["'self'"],
             scriptSrc: ["'self'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "unpkg.com"],
-            styleSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com"],
+            // Inline-Event-Handler (onclick= in dashboard/bibliothek.html) brauchen
+            // script-src-attr; ohne dies sind alle Buttons tot. Übergangslösung bis
+            // die Handler auf addEventListener umgebaut sind.
+            scriptSrcAttr: ["'unsafe-inline'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "fonts.googleapis.com"],
             imgSrc: ["'self'", "data:", "blob:"],
-            fontSrc: ["'self'", "unpkg.com", "cdnjs.cloudflare.com"],
+            fontSrc: ["'self'", "unpkg.com", "cdnjs.cloudflare.com", "fonts.gstatic.com"],
             connectSrc: ["'self'"]
         }
     }
