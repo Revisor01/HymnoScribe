@@ -9,6 +9,7 @@
     <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
     <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.7/Sortable.min.js"></script>
     <title>HymnoScribe - Der Liedblatt Generator</title>
     <link rel="stylesheet" href="./css/style.css">
 </head>
@@ -192,6 +193,32 @@
             </div>
             <div class="right-panel">
                 <h2>Liedblatt</h2>
+                <div class="preview-format-container">
+                    <label for="previewFormat">Vorschau-Format:</label>
+                    <select id="previewFormat">
+                        <option value="a5">Din A5</option>
+                        <option value="dl">DIN Lang</option>
+                        <option value="a4-schmal">DIN A4 schmal</option>
+                        <option value="a3-schmal">DIN A3 schmal</option>
+                    </select>
+                    <div class="preview-info">Zeigt automatische Seitenumbrüche in der Vorschau an.</div>
+                </div>
+                <div class="font-size-control-container">
+                    <label for="fontSizePresets">Schriftgröße:</label>
+                    <select id="fontSizePresets">
+                        <option value="8">8 pt</option>
+                        <option value="10">10 pt</option>
+                        <option value="12" selected>12 pt</option>
+                        <option value="14">14 pt</option>
+                        <option value="16">16 pt</option>
+                        <option value="18">18 pt</option>
+                        <option value="20">20 pt</option>
+                        <option value="24">24 pt</option>
+                        <option value="custom">Benutzerdefiniert</option>
+                    </select>
+                    <input type="number" id="fontSizeCustom" min="6" max="36" step="1" value="12"
+                           style="display:none; width:60px;" placeholder="pt">
+                </div>
                 <div id="liedblatt-content"></div>
             </div>
         </div>

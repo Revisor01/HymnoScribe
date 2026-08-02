@@ -20,7 +20,8 @@ import {
     updateSessionsList,
     updateVorlagenList,
     saveCurrentSessionAsVorlage,
-    showSessionsAndVorlagen
+    showSessionsAndVorlagen,
+    debouncedSaveSession
 } from './sessionManagement.js';
 
 import {
@@ -46,6 +47,8 @@ import {
     addToSelected,
     quillInstances
 } from './liedblattManagement.js';
+
+import { initPreviewFormatSelector, updatePreviewWithPageBreaks } from './previewPageBreaks.js';
 
 import {
     initializeDragAndDrop,
@@ -88,6 +91,13 @@ async function initializeApp() {
         await loadVorlagenList();
         updateUIBasedOnUserRole();
         applyGlobalConfig(document.getElementById('liedblatt-content'));
+        
+        // NEU: Initialisierung der Vorschau-Format-Auswahl
+        // Diese Zeile fügen Sie hinzu:
+        setTimeout(() => {
+            initPreviewFormatSelector();
+        }, 500);
+        
         updateLiedblatt();
         
         // Rufen Sie loadObjekte alle 5 Minuten auf
@@ -303,8 +313,18 @@ function updateLiedblattStyle() {
 }
 
 function saveConfigToLocalStorage() {
-    localStorage.setItem('liedblattConfig', JSON.stringify(globalConfig));
-    console.log("Config saved to localStorage:", globalConfig);
+    // NEU: Sicherstellen, dass das Vorschauformat gespeichert wird
+    const configToSave = {
+        fontFamily: globalConfig.fontFamily,
+        fontSize: globalConfig.fontSize,
+        textAlign: globalConfig.textAlign,
+        lineHeight: globalConfig.lineHeight,
+        churchLogo: globalConfig.churchLogo,
+        previewFormat: globalConfig.previewFormat || 'a5' // Default-Wert hinzufügen
+    };
+    
+    localStorage.setItem('liedblattConfig', JSON.stringify(configToSave));
+    console.log("Config saved to localStorage:", configToSave);
 }
 
 export function showConfigModal() {
@@ -511,6 +531,22 @@ function setupEventListeners() {
             updateGlobalConfig(newConfig);
         }
     });
+    
+    const previewFormatSelect = document.getElementById('previewFormat');
+    if (previewFormatSelect) {
+        previewFormatSelect.addEventListener('change', function(e) {
+            const selectedFormat = e.target.value;
+            
+            // Speichere das ausgewählte Format in der globalen Konfiguration
+            if (selectedFormat) {
+                globalConfig.previewFormat = selectedFormat;
+                saveConfigToLocalStorage();
+                
+                // Aktualisiere die Vorschau mit den Seitenumbrüchen
+                updatePreviewWithPageBreaks(selectedFormat);
+            }
+        });
+    }
     
     const poolSearch = document.getElementById('poolSearch');
     const deleteLogoBtn = document.getElementById('deleteLogo');

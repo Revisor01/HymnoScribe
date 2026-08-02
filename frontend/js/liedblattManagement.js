@@ -1,7 +1,9 @@
 // liedblattManagement.js
-import { saveSessionToLocalStorage } from './sessionManagement.js';
+import { saveSessionToLocalStorage, debouncedSaveSession } from './sessionManagement.js';
 import { globalConfig, getImagePath, applyGlobalConfig } from './script.js';
 import { authenticatedFetch, customAlert, customConfirm, customPrompt } from './utils.js';
+import { updatePreviewWithPageBreaks } from './previewPageBreaks.js';
+import { setFontSizeOverride, clearOverride } from './layout/overrideState.js';
 
 export function getTrennerIconClass(type) {
     switch (type) {
@@ -96,14 +98,72 @@ export function addTrenner(type) {
     addToSelected(trennerObject);
 }
 
+/**
+ * Erstellt ein per-Element-Font-Size-Override-Control fuer die Liedblatt-Liste.
+ * Placeholder "—" signalisiert: globaler Default gilt.
+ * Leeres Feld loescht den Override — globale Schriftgroesse gilt wieder.
+ * @param {string} itemKey - data-override-key des Elements (temporaer via Date.now())
+ * @returns {HTMLElement}
+ */
+function createFontSizeOverrideControl(itemKey) {
+    const wrapper = document.createElement('div');
+    wrapper.classList.add('font-size-override-control');
+    wrapper.title = 'Schriftgröße für dieses Element überschreiben (leer = global)';
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '6';
+    input.max = '36';
+    input.step = '1';
+    input.placeholder = '—';
+    input.classList.add('font-size-override-input');
+    input.dataset.overrideKey = itemKey;
+
+    const label = document.createElement('span');
+    label.textContent = 'pt';
+    label.classList.add('font-size-override-label');
+
+    input.addEventListener('change', () => {
+        const val = input.value.trim();
+        if (val === '' || isNaN(parseFloat(val))) {
+            // Override loeschen — globaler Default gilt
+            clearOverride(itemKey);
+            input.value = '';
+        } else {
+            setFontSizeOverride(itemKey, parseFloat(val));
+        }
+        // Re-Layout triggern
+        const currentFormat = document.getElementById('previewFormat')?.value || 'a5';
+        updatePreviewWithPageBreaks(currentFormat);
+    });
+
+    wrapper.appendChild(input);
+    wrapper.appendChild(label);
+    return wrapper;
+}
+
 export function addPageBreak() {
     const pageBreakObject = {
         id: Date.now(),
         typ: 'Seitenumbruch',
-        titel: 'Seitenumbruch',
+        titel: 'Manueller Seitenumbruch',
         inhalt: 'pagebreak'
     };
     addToSelected(pageBreakObject);
+    
+    // Nach dem Hinzufügen eines manuellen Umbruchs die Vorschau aktualisieren
+    requestAnimationFrame(() => {
+        setTimeout(() => {
+            const previewFormatSelect = document.getElementById('previewFormat');
+            if (previewFormatSelect) {
+                const selectedFormat = previewFormatSelect.value;
+                // Dynamischer Import zur Vermeidung von Zirkelabhängigkeiten
+                import('./previewPageBreaks.js').then(module => {
+                    module.updatePreviewWithPageBreaks(selectedFormat);
+                }).catch(err => console.error('Fehler bei Aktualisierung der Seitenumbrüche:', err));
+            }
+        }, 300);
+    });
 }
 
 function addImageWithLazyLoading(content, imgSrc, altText) {
@@ -134,17 +194,19 @@ function initLazyLoading() {
 export function createLiedOptions(lied) {
     const liedOptions = document.createElement('div');
     liedOptions.classList.add('lied-options');
-    
+
+    // Toggle-Button
     const toggleButton = document.createElement('button');
     toggleButton.textContent = 'Optionen anzeigen/ausblenden';
     toggleButton.classList.add('toggle-options');
     liedOptions.appendChild(toggleButton);
-    
+
     const optionsContent = document.createElement('div');
     optionsContent.classList.add('options-content');
     optionsContent.style.display = 'none';
     liedOptions.appendChild(optionsContent);
-    
+
+    // --- Noten-Option (wie bisher) ---
     const showNotesDiv = document.createElement('div');
     const showNotesCheckbox = document.createElement('input');
     showNotesCheckbox.type = 'checkbox';
@@ -155,7 +217,7 @@ export function createLiedOptions(lied) {
     showNotesDiv.appendChild(showNotesCheckbox);
     showNotesDiv.appendChild(showNotesLabel);
     optionsContent.appendChild(showNotesDiv);
-    
+
     const noteTypeDiv = document.createElement('div');
     noteTypeDiv.style.display = 'none';
     const noteTypeRadio1 = document.createElement('input');
@@ -168,7 +230,6 @@ export function createLiedOptions(lied) {
     noteTypeLabel1.textContent = 'Noten ohne Text';
     noteTypeDiv.appendChild(noteTypeRadio1);
     noteTypeDiv.appendChild(noteTypeLabel1);
-    
     const noteTypeRadio2 = document.createElement('input');
     noteTypeRadio2.type = 'radio';
     noteTypeRadio2.name = `noteType-${lied.id}`;
@@ -179,75 +240,191 @@ export function createLiedOptions(lied) {
     noteTypeLabel2.textContent = 'Noten mit Text';
     noteTypeDiv.appendChild(noteTypeRadio2);
     noteTypeDiv.appendChild(noteTypeLabel2);
-    
     optionsContent.appendChild(noteTypeDiv);
-    
+
     showNotesCheckbox.addEventListener('change', function() {
         noteTypeDiv.style.display = this.checked ? 'block' : 'none';
-        if (!this.checked) {
-            noteTypeRadio1.checked = false;
-            noteTypeRadio2.checked = false;
-        }
+        if (!this.checked) { noteTypeRadio1.checked = false; noteTypeRadio2.checked = false; }
+        updateLiedblatt();
     });
-    
-    const strophenContainer = document.createElement('div');
-    strophenContainer.classList.add('strophen-container');
-    optionsContent.appendChild(strophenContainer);
-    
+    [noteTypeRadio1, noteTypeRadio2].forEach(r => r.addEventListener('change', updateLiedblatt));
+
+    // --- Sortierbare Element-Liste (NEU: D-05, D-06, D-07, D-08) ---
+    const sortableContainer = document.createElement('div');
+    sortableContainer.classList.add('element-order-list');
+    sortableContainer.id = `elementOrder-${lied.id}`;
+    optionsContent.appendChild(sortableContainer);
+
+    // Strophen parsen
     let strophen = lied.strophen;
     if (typeof strophen === 'string') {
-        try {
-            strophen = JSON.parse(strophen);
-        } catch (e) {
-            strophen = strophen.split('\n').filter(s => s.trim() !== '');
+        try { strophen = JSON.parse(strophen); }
+        catch (e) { strophen = strophen.split('\n').filter(s => s.trim() !== ''); }
+    }
+    if (!Array.isArray(strophen)) strophen = [strophen];
+
+    // elementOrder aus gespeichertem Zustand ODER Default aufbauen
+    // Default: [strophe-0, refrain(falls vorhanden), strophe-1, refrain, ...]
+    let elementOrder = lied.elementOrder || null;
+    let elementConfig = lied.elementConfig || {};
+
+    if (!elementOrder) {
+        elementOrder = [];
+        strophen.forEach((_, i) => {
+            elementOrder.push(`strophe-${i}`);
+            if (lied.refrain) elementOrder.push('refrain');
+        });
+    }
+
+    // Duplikate von 'refrain' eindeutig machen mit counter-Suffix: refrain, refrain-2, refrain-3 ...
+    const refrainCounts = {};
+    const normalizedOrder = elementOrder.map(key => {
+        if (key === 'refrain' || key.startsWith('refrain-')) {
+            const base = 'refrain';
+            refrainCounts[base] = (refrainCounts[base] || 0) + 1;
+            return refrainCounts[base] === 1 ? base : `${base}-${refrainCounts[base]}`;
         }
-    }
-    if (!Array.isArray(strophen)) {
-        strophen = [strophen];
-    }
-    
-    strophen.forEach((strophe, index) => {
-        const stropheDiv = document.createElement('div');
-        stropheDiv.classList.add('strophe-option');
-        
+        return key;
+    });
+
+    // Globaler Counter fuer neue Refrain-Duplikate (counter-basiert, statt Date.now())
+    let refrainCounter = (refrainCounts['refrain'] || 1);
+
+    // Sortierbare Items erstellen
+    function createStropheItem(stropheIndex, key) {
+        const item = document.createElement('div');
+        item.classList.add('sortable-item', 'strophe-item');
+        item.dataset.key = key;
+        item.dataset.type = 'strophe';
+        item.dataset.stropheIndex = stropheIndex;
+
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
-        checkbox.id = `strophe-${lied.id}-${index}`;
-        checkbox.value = index;
-        
-        const label = document.createElement('label');
-        label.htmlFor = checkbox.id;
-        label.textContent = `Strophe ${index + 1}`;
-        
-        const refrainSelect = document.createElement('select');
-        refrainSelect.id = `refrain-${lied.id}-${index}`;
-        refrainSelect.innerHTML = `
-            <option value="none">Kein Refrain</option>
-            <option value="full">Vollständiger Refrain</option>
-            <option value="short">Verweis Refrain</option>
-        `;
-        refrainSelect.style.display = lied.refrain ? 'inline-block' : 'none';
-        
-        // Setze den gespeicherten Refrain-Wert, falls vorhanden
-        if (lied.refrainOptions && lied.refrainOptions[index]) {
-            refrainSelect.value = lied.refrainOptions[index];
+        checkbox.classList.add('strophe-active-check');
+        checkbox.checked = elementConfig[key]?.active !== false; // default: aktiv
+        checkbox.addEventListener('change', updateLiedblatt);
+
+        const label = document.createElement('span');
+        // Ersten 30 Zeichen des Strophen-Texts als Preview
+        const stropheText = typeof strophen[stropheIndex] === 'string'
+            ? strophen[stropheIndex].replace(/<[^>]+>/g, '').trim().slice(0, 30)
+            : `Strophe ${stropheIndex + 1}`;
+        label.textContent = `${stropheIndex + 1}. ${stropheText}${stropheText.length >= 30 ? '\u2026' : ''}`;
+        label.classList.add('strophe-label');
+
+        const handle = document.createElement('span');
+        handle.classList.add('drag-handle');
+        handle.textContent = '\u28FF';
+        handle.title = 'Ziehen zum Sortieren';
+
+        item.appendChild(handle);
+        item.appendChild(checkbox);
+        item.appendChild(label);
+        return item;
+    }
+
+    function createRefrainItem(key, mode) {
+        const item = document.createElement('div');
+        item.classList.add('sortable-item', 'refrain-item');
+        item.dataset.key = key;
+        item.dataset.type = 'refrain';
+
+        const handle = document.createElement('span');
+        handle.classList.add('drag-handle');
+        handle.textContent = '\u28FF';
+        handle.title = 'Ziehen zum Sortieren';
+
+        const labelSpan = document.createElement('span');
+        labelSpan.textContent = 'Refrain';
+        labelSpan.classList.add('refrain-label');
+
+        // Toggle Vollständig / Nur Verweis (D-08)
+        const toggleFull = document.createElement('input');
+        toggleFull.type = 'radio';
+        toggleFull.name = `refrainMode-${lied.id}-${key}`;
+        toggleFull.value = 'full';
+        toggleFull.checked = (mode !== 'short');
+        const toggleFullLabel = document.createElement('label');
+        toggleFullLabel.textContent = 'Vollständig';
+
+        const toggleShort = document.createElement('input');
+        toggleShort.type = 'radio';
+        toggleShort.name = `refrainMode-${lied.id}-${key}`;
+        toggleShort.value = 'short';
+        toggleShort.checked = (mode === 'short');
+        const toggleShortLabel = document.createElement('label');
+        toggleShortLabel.textContent = 'Verweis';
+
+        // Refrain duplizieren (D-06) — counter-basierter Key
+        const dupButton = document.createElement('button');
+        dupButton.textContent = '+';
+        dupButton.title = 'Refrain duplizieren';
+        dupButton.classList.add('refrain-dup-btn');
+        dupButton.type = 'button';
+        dupButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Max. 10 Refrain-Items pro Lied (DoS-Schutz, T-03-03-03)
+            if (sortableContainer.querySelectorAll('.refrain-item').length >= 10) return;
+            refrainCounter += 1;
+            const newKey = `refrain-${refrainCounter}`;
+            const newItem = createRefrainItem(newKey, 'full');
+            item.insertAdjacentElement('afterend', newItem);
+            updateLiedblatt();
+        });
+
+        // Remove-Button (fuer Duplikate)
+        const removeButton = document.createElement('button');
+        removeButton.textContent = '\xD7';
+        removeButton.title = 'Refrain entfernen';
+        removeButton.classList.add('refrain-remove-btn');
+        removeButton.type = 'button';
+        removeButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            item.remove();
+            updateLiedblatt();
+        });
+
+        [toggleFull, toggleShort].forEach(r => r.addEventListener('change', updateLiedblatt));
+
+        item.appendChild(handle);
+        item.appendChild(labelSpan);
+        item.appendChild(toggleFull);
+        item.appendChild(toggleFullLabel);
+        item.appendChild(toggleShort);
+        item.appendChild(toggleShortLabel);
+        item.appendChild(dupButton);
+        item.appendChild(removeButton);
+        return item;
+    }
+
+    // Items aus normalizedOrder erstellen
+    normalizedOrder.forEach(key => {
+        if (key.startsWith('strophe-')) {
+            const idx = parseInt(key.replace('strophe-', ''));
+            if (idx >= 0 && idx < strophen.length) {
+                sortableContainer.appendChild(createStropheItem(idx, key));
+            }
+        } else if ((key === 'refrain' || key.startsWith('refrain-')) && lied.refrain) {
+            const cfg = elementConfig[key] || {};
+            sortableContainer.appendChild(createRefrainItem(key, cfg.mode || 'full'));
         }
-        
-        stropheDiv.appendChild(checkbox);
-        stropheDiv.appendChild(label);
-        stropheDiv.appendChild(refrainSelect);
-        strophenContainer.appendChild(stropheDiv);
     });
-    
-    [showNotesCheckbox, noteTypeRadio1, noteTypeRadio2, ...strophenContainer.querySelectorAll('input, select')].forEach(el => {
-        el.addEventListener('change', updateLiedblatt);
-    });
-    
+
+    // SortableJS initialisieren (D-05)
+    if (typeof Sortable !== 'undefined') {
+        Sortable.create(sortableContainer, {
+            handle: '.drag-handle',
+            animation: 150,
+            onEnd: updateLiedblatt
+        });
+    }
+
+    // Toggle-Button Event
     toggleButton.addEventListener('click', function(e) {
         e.preventDefault();
         optionsContent.style.display = optionsContent.style.display === 'none' ? 'block' : 'none';
     });
-    
+
     return liedOptions;
 }
 
@@ -262,13 +439,43 @@ export function updateLiedblatt() {
     selectedItems.forEach((selected, index) => {
         const objekt = JSON.parse(selected.getAttribute('data-object'));
         if (!objekt) return;
+
+        // elementOrder und elementConfig aus dem sortable-DOM lesen (NEU: Plan 03-03)
+        if (objekt.typ === 'Lied' || objekt.typ === 'Liturgie') {
+            const liedOptions = selected.querySelector('.lied-options');
+            if (liedOptions) {
+                const sortableContainer = liedOptions.querySelector('.element-order-list');
+                if (sortableContainer) {
+                    const sortableItems = Array.from(sortableContainer.querySelectorAll('.sortable-item'));
+                    objekt.elementOrder = sortableItems.map(item => item.dataset.key);
+                    objekt.elementConfig = {};
+                    sortableItems.forEach(item => {
+                        const key = item.dataset.key;
+                        if (item.dataset.type === 'strophe') {
+                            const checkbox = item.querySelector('.strophe-active-check');
+                            objekt.elementConfig[key] = { active: checkbox ? checkbox.checked : true };
+                        } else if (item.dataset.type === 'refrain') {
+                            const modeRadio = item.querySelector('input[type="radio"]:checked');
+                            objekt.elementConfig[key] = { mode: modeRadio ? modeRadio.value : 'full' };
+                        }
+                    });
+                }
+            }
+        }
         
         const content = document.createElement('div');
-        const uniqueId = `liedblatt-item-${index}-${Date.now()}`; 
+        const uniqueId = `liedblatt-item-${index}-${Date.now()}`;
         content.setAttribute('data-liedblatt-id', uniqueId);
         content.setAttribute('data-original-id', objekt.id);
         content.classList.add('liedblatt-item'); // Add this class to all items
         selected.setAttribute('data-unique-id', uniqueId);
+
+        // Stabiler Override-Key: objekt.id + Positions-Index
+        // Format: '{objekt.id}:{index}' — stabil solange Reihenfolge gleich
+        const overrideKey = `${objekt.id}:${index}`;
+        content.setAttribute('data-override-key', overrideKey);
+        // Auch am selected-item fuer spaetere Deserialisierung (Plan 04)
+        selected.setAttribute('data-override-key', overrideKey);
         
         const showTitleCheckbox = selected.querySelector('input[id^="showTitle"]');
         const showTitle = showTitleCheckbox ? showTitleCheckbox.checked : true;
@@ -284,8 +491,31 @@ export function updateLiedblatt() {
         if (objekt.typ === 'Seitenumbruch') {
             const pageBreak = document.createElement('div');
             pageBreak.classList.add('page-break');
-            pageBreak.style.borderTop = '2px dashed #888';
-            pageBreak.style.margin = '20px 0';
+            // ÄNDERUNG: Stil anpassen, um dem automatischen Umbruch ähnlicher zu sein
+            pageBreak.style.borderTop = '2px dashed #e53935'; // Gestrichelte Linie wie bei auto
+            pageBreak.style.margin = '15px 0';
+            pageBreak.style.position = 'relative';
+            pageBreak.style.padding = '8px 0';
+            pageBreak.style.textAlign = 'center';
+            pageBreak.style.fontSize = '12px';
+            pageBreak.style.color = '#e53935';
+            pageBreak.style.backgroundColor = 'rgba(229, 57, 53, 0.1)';
+            pageBreak.style.borderRadius = '4px';
+            pageBreak.style.fontWeight = 'bold';
+            
+            // Deutlicheres Label für manuellen Umbruch
+            pageBreak.textContent = 'MANUELLER SEITENUMBRUCH';
+            
+            // Schere-Symbol hinzufügen (ähnlich wie bei automatischen Umbrüchen)
+            const pageBreakIcon = document.createElement('span');
+            pageBreakIcon.innerHTML = '✂️';
+            pageBreakIcon.style.position = 'absolute';
+            pageBreakIcon.style.left = '10px';
+            pageBreakIcon.style.top = '50%';
+            pageBreakIcon.style.transform = 'translateY(-50%)';
+            pageBreakIcon.style.fontSize = '16px';
+            
+            pageBreak.appendChild(pageBreakIcon);
             liedblattContent.appendChild(pageBreak);
             return;
         }
@@ -335,8 +565,8 @@ export function updateLiedblatt() {
                 
                 content.appendChild(copyrightElement);
             }
-        
-        
+            
+            
             const showNotes = selected.querySelector('input[type="checkbox"]').checked;
             const noteType = selected.querySelector('input[name^="noteType"]:checked')?.value;
             if (showNotes && noteType) {
@@ -351,7 +581,7 @@ export function updateLiedblatt() {
                 }
             }
             
-            const selectedStrophen = Array.from(selected.querySelectorAll('.strophen-container input:checked')).map(cb => parseInt(cb.value));
+            // Strophen parsen
             let strophen = objekt.strophen;
             if (typeof strophen === 'string') {
                 try {
@@ -363,59 +593,65 @@ export function updateLiedblatt() {
             if (!Array.isArray(strophen)) {
                 strophen = [strophen];
             }
-            
-            if (selectedStrophen.length > 0) {
-                selectedStrophen.forEach((index, arrayIndex) => {
-                    const stropheDiv = document.createElement('div');
-                    stropheDiv.classList.add('strophe');
-                    stropheDiv.style.marginBottom = `${globalConfig.fontSize * 0.5}px`;
-                    
-                    let strophenText = strophen[index].replace(/<p>/g, '').replace(/<\/p>/g, '<br>');
-                    let strophenTextArray = strophenText.split('<br>');
-                    
-                    const pElementWithNumber = document.createElement('p');
-                    pElementWithNumber.classList.add('strophe');
-                    pElementWithNumber.innerHTML = `<span class="strophenum">${index + 1}.</span> ${strophenTextArray[0]}`;
-                    stropheDiv.appendChild(pElementWithNumber);
-                    
-                    for (let i = 1; i < strophenTextArray.length; i++) {
-                        if (strophenTextArray[i].trim() !== '') {
-                            const pElement = document.createElement('p');
-                            pElement.textContent = strophenTextArray[i];
-                            stropheDiv.appendChild(pElement);
+
+            // NEUES RENDERING: elementOrder vorhanden (Plan 03-03)
+            if (objekt.elementOrder && objekt.elementOrder.length > 0) {
+                const elementConfig = objekt.elementConfig || {};
+
+                objekt.elementOrder.forEach(key => {
+                    if (key.startsWith('strophe-')) {
+                        const stropheIndex = parseInt(key.replace('strophe-', ''));
+                        const cfg = elementConfig[key] || {};
+                        // Nur rendern wenn aktiv (Checkbox gesetzt) — per D-07
+                        if (cfg.active === false) return;
+                        if (stropheIndex < 0 || stropheIndex >= strophen.length) return;
+
+                        const stropheDiv = document.createElement('div');
+                        stropheDiv.classList.add('strophe');
+                        stropheDiv.style.marginBottom = `${globalConfig.fontSize * 0.5}px`;
+
+                        let strophenText = strophen[stropheIndex].replace(/<p>/g, '').replace(/<\/p>/g, '<br>');
+                        let strophenTextArray = strophenText.split('<br>');
+
+                        const pElementWithNumber = document.createElement('p');
+                        pElementWithNumber.classList.add('strophe');
+                        pElementWithNumber.innerHTML = `<span class="strophenum">${stropheIndex + 1}.</span> ${strophenTextArray[0]}`;
+                        stropheDiv.appendChild(pElementWithNumber);
+
+                        for (let i = 1; i < strophenTextArray.length; i++) {
+                            if (strophenTextArray[i].trim() !== '') {
+                                const pElement = document.createElement('p');
+                                pElement.textContent = strophenTextArray[i];
+                                stropheDiv.appendChild(pElement);
+                            }
                         }
-                    }
-                    
-                    content.appendChild(stropheDiv);
-                    
-                    const refrainSelect = selected.querySelector(`select[id="refrain-${objekt.id}-${index}"]`);
-                    const refrainType = refrainSelect ? refrainSelect.value : 'none';
-                    
-                    if (refrainType !== 'none' && objekt.refrain) {
+                        content.appendChild(stropheDiv);
+
+                    } else if ((key === 'refrain' || key.startsWith('refrain-')) && objekt.refrain) {
+                        const cfg = elementConfig[key] || {};
+                        const refrainType = cfg.mode || 'full'; // 'full' oder 'short'
+
                         const refrainDiv = document.createElement('div');
                         refrainDiv.classList.add('refrain');
-                        
+
                         if (refrainType === 'full') {
                             const tempDiv = document.createElement('div');
                             tempDiv.innerHTML = objekt.refrain;
-                            
                             const firstP = document.createElement('p');
                             firstP.style.fontStyle = 'italic';
                             firstP.classList.add('refrain');
-                            
                             if (tempDiv.childNodes.length > 0) {
                                 if (tempDiv.firstChild.nodeType === Node.TEXT_NODE) {
-                                    firstP.textContent = "Refrain: " + tempDiv.firstChild.textContent.trim();
+                                    firstP.textContent = 'Refrain: ' + tempDiv.firstChild.textContent.trim();
                                     tempDiv.removeChild(tempDiv.firstChild);
                                 } else {
-                                    firstP.innerHTML = "Refrain: " + tempDiv.firstChild.innerHTML;
+                                    firstP.innerHTML = 'Refrain: ' + tempDiv.firstChild.innerHTML;
                                     tempDiv.removeChild(tempDiv.firstChild);
                                 }
                             } else {
-                                firstP.textContent = "Refrain:";
+                                firstP.textContent = 'Refrain:';
                             }
                             refrainDiv.appendChild(firstP);
-                            
                             Array.from(tempDiv.children).forEach(child => {
                                 const newP = document.createElement('p');
                                 newP.style.fontStyle = 'italic';
@@ -423,29 +659,101 @@ export function updateLiedblatt() {
                                 newP.innerHTML = child.innerHTML;
                                 refrainDiv.appendChild(newP);
                             });
-                            
-                            if (tempDiv.childNodes.length > 0) {
-                                const textContent = tempDiv.childNodes[0].textContent.trim();
-                                if (textContent) {
-                                    const newP = document.createElement('p');
-                                    newP.style.fontStyle = 'italic';
-                                    newP.textContent = textContent;
-                                    refrainDiv.appendChild(newP);
-                                }
-                            }
                         } else {
+                            // Kurz-Verweis (D-08)
                             const shortRefrain = document.createElement('p');
                             shortRefrain.style.fontStyle = 'italic';
                             shortRefrain.textContent = 'Refrain';
                             refrainDiv.appendChild(shortRefrain);
                         }
-                        
                         content.appendChild(refrainDiv);
                     }
                 });
-            }
-            else {
-                content.innerHTML += '';
+            } else {
+                // BACKWARD-COMPAT: altes selectedStrophen + refrainOptions Rendering
+                // Liest: '.strophen-container input:checked' — fuer Sessions ohne elementOrder
+                const selectedStrophen = Array.from(selected.querySelectorAll('.strophen-container input:checked')).map(cb => parseInt(cb.value));
+
+                if (selectedStrophen.length > 0) {
+                    selectedStrophen.forEach((stropheIdx) => {
+                        const stropheDiv = document.createElement('div');
+                        stropheDiv.classList.add('strophe');
+                        stropheDiv.style.marginBottom = `${globalConfig.fontSize * 0.5}px`;
+
+                        let strophenText = strophen[stropheIdx].replace(/<p>/g, '').replace(/<\/p>/g, '<br>');
+                        let strophenTextArray = strophenText.split('<br>');
+
+                        const pElementWithNumber = document.createElement('p');
+                        pElementWithNumber.classList.add('strophe');
+                        pElementWithNumber.innerHTML = `<span class="strophenum">${stropheIdx + 1}.</span> ${strophenTextArray[0]}`;
+                        stropheDiv.appendChild(pElementWithNumber);
+
+                        for (let i = 1; i < strophenTextArray.length; i++) {
+                            if (strophenTextArray[i].trim() !== '') {
+                                const pElement = document.createElement('p');
+                                pElement.textContent = strophenTextArray[i];
+                                stropheDiv.appendChild(pElement);
+                            }
+                        }
+
+                        content.appendChild(stropheDiv);
+
+                        const refrainSelect = selected.querySelector(`select[id="refrain-${objekt.id}-${stropheIdx}"]`);
+                        const refrainType = refrainSelect ? refrainSelect.value : 'none';
+
+                        if (refrainType !== 'none' && objekt.refrain) {
+                            const refrainDiv = document.createElement('div');
+                            refrainDiv.classList.add('refrain');
+
+                            if (refrainType === 'full') {
+                                const tempDiv = document.createElement('div');
+                                tempDiv.innerHTML = objekt.refrain;
+
+                                const firstP = document.createElement('p');
+                                firstP.style.fontStyle = 'italic';
+                                firstP.classList.add('refrain');
+
+                                if (tempDiv.childNodes.length > 0) {
+                                    if (tempDiv.firstChild.nodeType === Node.TEXT_NODE) {
+                                        firstP.textContent = "Refrain: " + tempDiv.firstChild.textContent.trim();
+                                        tempDiv.removeChild(tempDiv.firstChild);
+                                    } else {
+                                        firstP.innerHTML = "Refrain: " + tempDiv.firstChild.innerHTML;
+                                        tempDiv.removeChild(tempDiv.firstChild);
+                                    }
+                                } else {
+                                    firstP.textContent = "Refrain:";
+                                }
+                                refrainDiv.appendChild(firstP);
+
+                                Array.from(tempDiv.children).forEach(child => {
+                                    const newP = document.createElement('p');
+                                    newP.style.fontStyle = 'italic';
+                                    newP.classList.add('refrain');
+                                    newP.innerHTML = child.innerHTML;
+                                    refrainDiv.appendChild(newP);
+                                });
+
+                                if (tempDiv.childNodes.length > 0) {
+                                    const textContent = tempDiv.childNodes[0].textContent.trim();
+                                    if (textContent) {
+                                        const newP = document.createElement('p');
+                                        newP.style.fontStyle = 'italic';
+                                        newP.textContent = textContent;
+                                        refrainDiv.appendChild(newP);
+                                    }
+                                }
+                            } else {
+                                const shortRefrain = document.createElement('p');
+                                shortRefrain.style.fontStyle = 'italic';
+                                shortRefrain.textContent = 'Refrain';
+                                refrainDiv.appendChild(shortRefrain);
+                            }
+
+                            content.appendChild(refrainDiv);
+                        }
+                    });
+                }
             }
             
         } else if (objekt.typ === 'Titel' || objekt.typ === 'Freitext') {
@@ -489,10 +797,25 @@ export function updateLiedblatt() {
         
         liedblattContent.appendChild(content);
     });
-    saveSessionToLocalStorage();
-    initLazyLoading();
-}
     
+    // Statt direktem Speichern verwenden wir ein Debouncing
+    debouncedSaveSession(500);
+    
+    // Bild-Lazy-Loading initialisieren
+    initLazyLoading();
+    
+    requestAnimationFrame(() => {
+        setTimeout(() => {
+            // Hole das aktuell ausgewählte Format aus dem Dropdown
+            const previewFormatSelect = document.getElementById('previewFormat');
+            if (previewFormatSelect) {
+                const selectedFormat = previewFormatSelect.value;
+                updatePreviewWithPageBreaks(selectedFormat);
+            }
+        }, 300); // Verzögerung für DOM-Rendering und Bildladen
+    });
+}
+
 export function formatQuillHTML(htmlContent) {
     // Ersetze <strong> durch <span style="font-weight: bold;">
     htmlContent = htmlContent.replace(/<strong>/g, '<p style="font-weight: bold;">')
@@ -578,7 +901,14 @@ export function addToSelected(objekt) {
         scrollToTitle(objekt.id, uniqueId);
     });
     titleRow.appendChild(titleSpan);
-    
+
+    // Per-Element Font-Size-Override-Control (WYSI-03)
+    // Temporaerer Key — Plan 02 stabilisiert via data-override-key auf liedblatt-item
+    const overrideKey = `item-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+    newItem.setAttribute('data-override-key', overrideKey);
+    const fontSizeOverrideCtrl = createFontSizeOverrideControl(overrideKey);
+    titleRow.appendChild(fontSizeOverrideCtrl);
+
     // Erstellen der Buttons für Bewegung und Löschen
     const buttonsDiv = document.createElement('div');
     buttonsDiv.classList.add('buttons');

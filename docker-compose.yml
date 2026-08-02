@@ -8,7 +8,7 @@ services:
       - NODE_ENV=${NODE_ENV:-production}
       - DB_HOST=${DB_HOST:-db}
       - DB_USER=${DB_USER:-hymnoscribe}
-      - DB_PASSWORD=${DB_PASSWORD:-hymnoscribe9715}
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD muss in .env gesetzt sein}
       - DB_NAME=${DB_NAME:-hymnoscribe}
       - URL=${URL:-https://hymnoscribe.godsapp.de}
       - SUPER_PASSWORD=${SUPER_PASSWORD}
@@ -32,10 +32,10 @@ services:
       - ./hymnoscribe_db:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-hymnoscribe9715}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD muss in .env gesetzt sein}
       MYSQL_DATABASE: ${DB_NAME:-hymnoscribe}
       MYSQL_USER: ${DB_USER:-hymnoscribe}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-hymnoscribe9715}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD muss in .env gesetzt sein}
     
 volumes:
   hymnoscribe_db:

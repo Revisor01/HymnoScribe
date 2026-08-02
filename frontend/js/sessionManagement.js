@@ -3,6 +3,7 @@
 import { authenticatedFetch, customAlert, customConfirm, customPrompt } from './utils.js';
 import { updateLiedblatt, addToSelected, quillInstances, resetQuillInstances } from './liedblattManagement.js';
 import { globalConfig, getImagePath } from './script.js';
+import { serializeOverrides, deserializeOverrides, clearOverrides } from './layout/overrideState.js';
 
 export async function saveSession(name) {
     if (!name) {
@@ -48,7 +49,14 @@ export async function saveSession(name) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ name, data: sessionData }),
+            body: JSON.stringify({
+                name,
+                data: {
+                    version: 1,
+                    items: sessionData,
+                    overrides: serializeOverrides()
+                }
+            }),
         });
         await customAlert('Session erfolgreich gespeichert mit ID: ' + result.id);
         await updateSessionSelect();
@@ -62,8 +70,21 @@ export async function saveSession(name) {
 export async function loadSession(id) {
     try {
         const session = await authenticatedFetch(`/api/sessions/${id}`);
-        if (session && session.data) {
-            applySessionData(session.data);
+        if (session && session.data !== undefined) {
+            const raw = session.data;
+            if (Array.isArray(raw)) {
+                // Backward-Compat: altes Format war ein reines Array
+                clearOverrides();
+                applySessionData(raw);
+            } else if (raw && raw.version === 1) {
+                // Neues Format mit overrides
+                if (raw.overrides) deserializeOverrides(raw.overrides);
+                applySessionData(raw.items || []);
+            } else {
+                // Unbekanntes Format — sicherer Fallback
+                clearOverrides();
+                applySessionData(Array.isArray(raw) ? raw : []);
+            }
             await customAlert('Session erfolgreich geladen');
         } else {
             throw new Error('Unerwartetes Datenformat in der Session');
@@ -75,18 +96,54 @@ export async function loadSession(id) {
 }
 
 export function loadConfigFromLocalStorage() {
-    const savedConfig = localStorage.getItem('liedblattConfig');
-    if (savedConfig) {
-        try {
+    try {
+        const savedConfig = localStorage.getItem('liedblattConfig');
+        if (savedConfig) {
             const parsedConfig = JSON.parse(savedConfig);
-            Object.assign(globalConfig, parsedConfig);
-            console.log("Loaded config from localStorage:", globalConfig);
-        } catch (error) {
-            console.error("Error parsing saved config:", error);
+            
+            // Übernehme gespeicherte Werte
+            globalConfig.fontFamily = parsedConfig.fontFamily || 'Jost';
+            globalConfig.fontSize = parsedConfig.fontSize || 12;
+            globalConfig.textAlign = parsedConfig.textAlign || 'center';
+            globalConfig.lineHeight = parsedConfig.lineHeight || 1.5;
+            globalConfig.churchLogo = parsedConfig.churchLogo || null;
+            
+            // NEU: Vorschauformat hinzufügen
+            globalConfig.previewFormat = parsedConfig.previewFormat || 'a5';
+            
+            // Setze das Format in der Auswahlbox, wenn sie existiert
+            const previewFormatSelect = document.getElementById('previewFormat');
+            if (previewFormatSelect && globalConfig.previewFormat) {
+                previewFormatSelect.value = globalConfig.previewFormat;
+            }
+            
+            console.log("Konfiguration aus localStorage geladen:", globalConfig);
         }
-    } else {
-        console.log("No saved config found in localStorage");
+    } catch (error) {
+        console.error("Fehler beim Laden der Konfiguration:", error);
     }
+}
+
+// Hilfsvariablen für das Debouncing
+let saveSessionTimeout = null;
+let isSavingSession = false;
+let lastSavedData = null;
+
+/**
+* Speichert die Session mit Verzögerung, um mehrfache Aufrufe zu vermeiden
+* @param {number} delay - Verzögerung in Millisekunden
+*/
+export function debouncedSaveSession(delay = 300) {
+    // Vorherigen Timeout abbrechen, falls vorhanden
+    if (saveSessionTimeout) {
+        clearTimeout(saveSessionTimeout);
+    }
+    
+    // Neuen Timeout starten
+    saveSessionTimeout = setTimeout(() => {
+        // Wir verwenden hier kein Flag, das könnte die Umbruchberechnung beeinflussen
+        saveSessionToLocalStorage();
+    }, delay);
 }
 
 export async function deleteSession(id) {
@@ -105,51 +162,97 @@ export async function deleteSession(id) {
 }
 
 export function saveSessionToLocalStorage() {
-    const selectedItems = document.querySelectorAll('.selected-item');
-    const sessionData = Array.from(selectedItems).map(item => {
-        const objekt = JSON.parse(item.getAttribute('data-object'));
-        const uniqueId = item.getAttribute('data-unique-id');
-        
-        const showTitleCheckbox = item.querySelector('input[id^="showTitle"]');
-        objekt.showTitle = showTitleCheckbox ? showTitleCheckbox.checked : true;
-        
-        if (objekt.typ === 'Titel' || objekt.typ === 'Freitext') {
-            const quillInstance = quillInstances[objekt.id];
-            if (quillInstance) {
-                objekt.inhalt = quillInstance.root.innerHTML;
+    // Wenn bereits ein Speichervorgang läuft oder Seitenumbrüche aktualisiert werden, abbrechen
+    if (isSavingSession || window.isUpdatingPageBreaks) {
+        return;
+    }
+    
+    isSavingSession = true;
+    
+    try {
+        const selectedItems = document.querySelectorAll('.selected-item');
+        const sessionData = Array.from(selectedItems).map(item => {
+            const objekt = JSON.parse(item.getAttribute('data-object'));
+            const uniqueId = item.getAttribute('data-unique-id');
+            
+            const showTitleCheckbox = item.querySelector('input[id^="showTitle"]');
+            objekt.showTitle = showTitleCheckbox ? showTitleCheckbox.checked : true;
+            
+            if (objekt.typ === 'Titel' || objekt.typ === 'Freitext') {
+                const quillInstance = quillInstances[objekt.id];
+                if (quillInstance) {
+                    objekt.inhalt = quillInstance.root.innerHTML;
+                }
+            } else if (objekt.typ === 'Lied' || objekt.typ === 'Liturgie') {
+                const liedOptions = item.querySelector('.lied-options');
+                if (liedOptions) {
+                    const showNotesCheckbox = liedOptions.querySelector('input[type="checkbox"]');
+                    objekt.showNotes = showNotesCheckbox ? showNotesCheckbox.checked : false;
+                    const noteTypeRadio = liedOptions.querySelector('input[name^="noteType"]:checked');
+                    objekt.noteType = noteTypeRadio ? noteTypeRadio.value : null;
+                    objekt.selectedStrophen = Array.from(liedOptions.querySelectorAll('.strophen-container input:checked'))
+                    .map(cb => parseInt(cb.value));
+                    objekt.refrainOptions = Array.from(liedOptions.querySelectorAll('.strophe-option'))
+                    .map(stropheOption => {
+                        const refrainSelect = stropheOption.querySelector('select');
+                        return refrainSelect ? refrainSelect.value : 'none';
+                    });
+                }
             }
-        } else if (objekt.typ === 'Lied' || objekt.typ === 'Liturgie') {
-            const liedOptions = item.querySelector('.lied-options');
-            if (liedOptions) {
-                const showNotesCheckbox = liedOptions.querySelector('input[type="checkbox"]');
-                objekt.showNotes = showNotesCheckbox ? showNotesCheckbox.checked : false;
-                const noteTypeRadio = liedOptions.querySelector('input[name^="noteType"]:checked');
-                objekt.noteType = noteTypeRadio ? noteTypeRadio.value : null;
-                objekt.selectedStrophen = Array.from(liedOptions.querySelectorAll('.strophen-container input:checked'))
-                .map(cb => parseInt(cb.value));
-                objekt.refrainOptions = Array.from(liedOptions.querySelectorAll('.strophe-option'))
-                .map(stropheOption => {
-                    const refrainSelect = stropheOption.querySelector('select');
-                    return refrainSelect ? refrainSelect.value : 'none';
-                });
-            }
+            
+            const altTitleInput = item.querySelector('.alternative-title-input');
+            objekt.alternativePrefix = altTitleInput ? altTitleInput.value : '';
+            
+            return { uniqueId, objekt };
+        });
+        
+        // Prüfen, ob sich die Daten geändert haben, um unnötige Speicherungen zu vermeiden
+        // Vergleich auf items-only (ohne overrides) — overrides haben eigenen Änderungs-Trigger
+        const newDataString = JSON.stringify(sessionData);
+        if (lastSavedData === newDataString) {
+            return; // Keine Änderungen, nicht speichern
         }
+
+        // Wrapper-Objekt mit overrides bauen (neues Format v1)
+        const sessionPayload = {
+            version: 1,
+            items: sessionData,
+            overrides: serializeOverrides()
+        };
+        const payloadString = JSON.stringify(sessionPayload);
+
+        // In localStorage speichern
+        localStorage.setItem('lastSession', payloadString);
+        lastSavedData = newDataString; // weiterhin items-only für Change-Detection
         
-        const altTitleInput = item.querySelector('.alternative-title-input');
-        objekt.alternativePrefix = altTitleInput ? altTitleInput.value : '';
-        
-        return { uniqueId, objekt };
-    });
-    localStorage.setItem('lastSession', JSON.stringify(sessionData));
-    console.log('Session saved:', sessionData);
+        // Reduzierte Konsolenausgabe: nur noch einmalig pro tatsächlicher Änderung
+        console.log('Session saved');
+    } catch (error) {
+        console.error('Fehler beim Speichern der Session:', error);
+    } finally {
+        // Flag zurücksetzen mit leichter Verzögerung, um Bounce-Effekte zu vermeiden
+        setTimeout(() => {
+            isSavingSession = false;
+        }, 50);
+    }
 }
 
 export function loadLastSession() {
     const lastSession = localStorage.getItem('lastSession');
     if (lastSession) {
         try {
-            const sessionData = JSON.parse(lastSession);
-            applySessionData(sessionData);
+            const raw = JSON.parse(lastSession);
+            // Backward-Compat: altes Format war ein reines Array
+            if (Array.isArray(raw)) {
+                clearOverrides();
+                applySessionData(raw);
+            } else if (raw && raw.version === 1) {
+                // Neues Format mit overrides
+                if (raw.overrides) {
+                    deserializeOverrides(raw.overrides);
+                }
+                applySessionData(raw.items || []);
+            }
         } catch (error) {
             console.error('Fehler beim Laden der letzten Session:', error);
         }
@@ -270,8 +373,21 @@ export async function saveVorlage(name) {
 export async function loadVorlage(id) {
     try {
         const vorlage = await authenticatedFetch(`/api/vorlagen/${id}`);
-        if (vorlage && vorlage.data) {
-            applySessionData(vorlage.data);
+        if (vorlage && vorlage.data !== undefined) {
+            const raw = vorlage.data;
+            if (Array.isArray(raw)) {
+                // Backward-Compat: altes Format war ein reines Array
+                clearOverrides();
+                applySessionData(raw);
+            } else if (raw && raw.version === 1) {
+                // Neues Format mit overrides
+                if (raw.overrides) deserializeOverrides(raw.overrides);
+                applySessionData(raw.items || []);
+            } else {
+                // Unbekanntes Format — sicherer Fallback
+                clearOverrides();
+                applySessionData(Array.isArray(raw) ? raw : []);
+            }
             await customAlert('Vorlage erfolgreich geladen');
         } else {
             throw new Error('Unerwartetes Datenformat in der Vorlage');

@@ -1,6 +1,10 @@
 // generatePDF.js
 
 import { globalConfig } from './script.js';
+import { calculateLayout } from './layout/engine.js';
+import { renderToPDF } from './layout/pdfRenderer.js';
+import { loadFontArrayBuffers, embedFontsInDoc } from './layout/fontManager.js';
+import { getOverrides } from './layout/overrideState.js';
 const { PDFDocument, rgb } = PDFLib;
 
 window.generatePDF = generatePDF;
@@ -18,6 +22,11 @@ const IMAGE_MARGIN_TOP = -10; // Abstand vor Bildern in Punkten
 const IMAGE_MARGIN_BOTTOM = 15; // Abstand nach Bildern in Punkten
 const STROPHE_SPACING = 8; // Abstand nach Strophen in Punkten
 
+// Konstanten für semantische Umbruchregeln
+const MAX_STROPHES_BEFORE_BREAK = 3;      // Maximale Anzahl Strophen vor einem Umbruch
+const MAX_PSALM_LINES_BEFORE_BREAK = 4;   // Maximale Anzahl Zeilen in Psalmen/Gebeten vor Umbruch
+const MIN_SPACE_FOR_NEXT_GROUP = 50;      // Minimaler Platz für nächste Gruppe
+
 // Neue Konstanten für Quill-Überschriften
 const QUILL_H1_MARGIN_TOP = 0;
 const QUILL_H1_MARGIN_BOTTOM = 12;
@@ -27,6 +36,429 @@ const QUILL_H3_MARGIN_TOP = 5;
 const QUILL_H3_MARGIN_BOTTOM = 5;
 const COPYRIGHT_MARGIN_TOP = -5;
 const COPYRIGHT_MARGIN_BOTTOM = -5;
+
+
+/**
+* Fügt eine neue Seite hinzu und aktualisiert den Kontext
+* @param {PDFContext} context - Der PDF-Kontext
+* @returns {PDFContext} Der aktualisierte Kontext
+*/
+function addNewPage(context) {
+    console.log("Füge neue Seite hinzu");
+    
+    // Erstelle neue Seite direkt im übergebenen Kontext
+    context.page = context.doc.addPage([context.width, context.height]);
+    
+    // Füge Logo hinzu, falls vorhanden
+    if (context.logoImage) {
+        const logoHeight = 30;
+        const aspectRatio = context.logoImage.width / context.logoImage.height;
+        const logoWidth = logoHeight * aspectRatio;
+        
+        context.page.drawImage(context.logoImage, {
+            x: context.width - logoWidth - 20,
+            y: context.height - logoHeight - 20,
+            width: logoWidth,
+            height: logoHeight,
+            opacity: 0.3
+        });
+    }
+    
+    // Setze Y-Position zurück zum Anfang der Seite
+    context.y = context.height - context.margin.top;
+    console.log(`Neue Seite hinzugefügt. Y-Position: ${context.y}`);
+    
+    // Wichtig: Rückgabe des direkt modifizierten Kontext-Objekts
+    return context;
+}
+
+/**
+* Zeichnet Text auf die aktuelle Seite
+* @param {PDFContext} context - Der PDF-Kontext
+* @param {string} text - Der zu zeichnende Text
+* @param {number} x - X-Position
+* @param {number} y - Y-Position
+* @param {number} fontSize - Schriftgröße
+* @param {number} maxWidth - Maximale Breite
+* @param {Object} options - Weitere Optionen
+* @returns {number} Die Höhe des gezeichneten Texts
+*/
+async function drawText(context, text, x, y, fontSize, maxWidth, options = {}) {
+    const { 
+        bold, italic, underline, alignment, indent, isCopyright, isRefrain, isStrophe, 
+        isLastElement, isHeading, isQuillHeading, afterIcon, isFirstOnPage,
+        preventPageBreak = true
+    } = options;
+    
+    // Font auswählen basierend auf Formatierungsoptionen
+    let font;
+    if (bold && italic) {
+        font = context.fonts.boldItalic;
+    } else if (bold) {
+        font = context.fonts.bold;
+    } else if (italic) {
+        font = context.fonts.italic;
+    } else {
+        font = context.fonts.regular; 
+    }
+    
+    if (!font) {
+        console.error(`Required font style not found for ${globalConfig.fontFamily}`);
+        font = context.fonts.regular || Object.values(context.fonts)[0];
+    }
+    
+    console.log("Drawing text:", { 
+        text: text.substring(0, 20) + "...", 
+        x, y, fontSize, bold, italic, underline, alignment, indent, 
+        isCopyright, isRefrain, isStrophe, isHeading 
+    });
+    
+    const lineHeight = (isRefrain || isStrophe) 
+    ? globalConfig.lineHeight * 1
+    : globalConfig.lineHeight;
+    
+    const lines = await splitTextToLines(text, font, fontSize, maxWidth - indent);
+    let currentY = y;
+    
+    // Speichere Ausgangspunkt zur Höhenberechnung
+    const startY = y;
+    
+    // Zeichne den Text zeilenweise
+    for (const line of lines) {
+        // Dynamische X-Position basierend auf Textausrichtung
+        let xPos = x + indent;
+        
+        // Textausrichtung anwenden
+        if (alignment === 'center') {
+            const lineWidth = await font.widthOfTextAtSize(line, fontSize);
+            xPos = x + (maxWidth - lineWidth) / 2;
+        } else if (alignment === 'right') {
+            const lineWidth = await font.widthOfTextAtSize(line, fontSize);
+            xPos = x + maxWidth - lineWidth;
+        } else if (alignment === 'justify' && line !== lines[lines.length - 1]) {
+            await drawJustifiedText(context, line, x + indent, currentY, fontSize, maxWidth - indent, { bold, italic, underline });
+            currentY -= fontSize * lineHeight;
+            continue;
+        }
+        
+        context.page.drawText(line, {
+            x: xPos,
+            y: currentY,
+            size: fontSize,
+            font: font,
+            lineHeight: lineHeight,
+            maxWidth: maxWidth - indent
+        });
+        
+        if (underline) {
+            const lineWidth = await font.widthOfTextAtSize(line, fontSize);
+            context.page.drawLine({
+                start: { x: xPos, y: currentY - 2 },
+                end: { x: xPos + lineWidth, y: currentY - 2 },
+                thickness: 0.5
+            });
+        }
+        
+        currentY -= fontSize * lineHeight;
+    }
+    
+    // Abstand nach Überschrift
+    if (isHeading) {
+        const headingSpacing = fontSize * 0.5;
+        console.log("Adding spacing after heading:", headingSpacing);
+        currentY -= headingSpacing;
+    }
+    
+    // Abstand für Strophen und Refrains
+    if (isStrophe || isRefrain) {
+        currentY -= STROPHE_SPACING;
+    }
+    
+    // Gib die tatsächlich verwendete Texthöhe zurück
+    return startY - currentY;
+}
+
+/**
+* Zeichnet ausgerichteten Text
+* @param {PDFContext} context - Der PDF-Kontext
+* @param {string} line - Die zu zeichnende Textzeile
+* @param {number} x - X-Position
+* @param {number} y - Y-Position
+* @param {number} fontSize - Schriftgröße
+* @param {number} maxWidth - Maximale Breite
+* @param {Object} options - Weitere Optionen
+* @returns {void}
+*/
+async function drawJustifiedText(context, line, x, y, fontSize, maxWidth, options = {}) {
+    const { bold, italic, underline } = options;
+    
+    // Font auswählen
+    let font;
+    if (bold && italic) {
+        font = context.fonts.boldItalic;
+    } else if (bold) {
+        font = context.fonts.bold;
+    } else if (italic) {
+        font = context.fonts.italic;
+    } else {
+        font = context.fonts.regular; 
+    }
+    
+    // Wortabstände berechnen
+    const words = line.split(' ');
+    const totalWordsWidth = await words.reduce(async (accPromise, word) => {
+        const acc = await accPromise;
+        const wordWidth = await font.widthOfTextAtSize(word, fontSize);
+        return acc + wordWidth;
+    }, Promise.resolve(0));
+    
+    const spaceCount = words.length - 1;
+    if (spaceCount <= 0) {
+        // Einzelnes Wort kann nicht ausgerichtet werden
+        context.page.drawText(line, { x, y, size: fontSize, font });
+        return;
+    }
+    
+    const extraSpace = maxWidth - totalWordsWidth;
+    const spaceWidth = extraSpace / spaceCount;
+    
+    let currentX = x;
+    for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        context.page.drawText(word, { x: currentX, y, size: fontSize, font });
+        
+        const wordWidth = await font.widthOfTextAtSize(word, fontSize);
+        currentX += wordWidth;
+        
+        // Nach jedem Wort außer dem letzten einen Abstand hinzufügen
+        if (i < words.length - 1) {
+            currentX += spaceWidth;
+        }
+    }
+    
+    if (underline) {
+        context.page.drawLine({
+            start: { x, y: y - 2 },
+            end: { x: x + maxWidth, y: y - 2 },
+            thickness: 0.5
+        });
+    }
+}
+
+/**
+* Zeichnet ein Bild auf die aktuelle Seite
+* @param {PDFContext} context - Der PDF-Kontext
+* @param {string} imgSrc - Die Bild-URL
+* @param {number} x - X-Position
+* @param {number} y - Y-Position
+* @param {number} imgWidth - Bildbreite
+* @returns {number} Die Höhe des gezeichneten Bildes
+*/
+async function drawImage(context, imgSrc, x, y, imgWidth) {
+    console.log("Drawing image:", { imgSrc, x, y, imgWidth });
+    try {
+        const response = await fetch(imgSrc);
+        const imgArrayBuffer = await response.arrayBuffer();
+        const imgType = getImageType(imgArrayBuffer);
+        
+        let img;
+        if (imgType === 'png') {
+            img = await context.doc.embedPng(imgArrayBuffer);
+        } else if (imgType === 'jpeg') {
+            img = await context.doc.embedJpg(imgArrayBuffer);
+        } else {
+            throw new Error('Unsupported image type');
+        }
+        
+        const scaledDims = img.scale(imgWidth / img.width);
+        
+        // Überprüfe, ob das Bild auf die aktuelle Seite passt
+        if (y - scaledDims.height < context.margin.bottom) {
+            // Nur seitenumbrüche aus der Vorschau verwenden - keine automatischen hinzufügen
+            // Die Überprüfung bleibt hier, falls wir später automatische Umbrüche wieder aktivieren wollen
+        }
+        
+        // Berücksichtige den oberen Abstand
+        const adjustedY = y - scaleValue(IMAGE_MARGIN_TOP, globalConfig.fontSize);
+        
+        context.page.drawImage(img, {
+            x,
+            y: adjustedY - scaledDims.height,
+            width: scaledDims.width,
+            height: scaledDims.height
+        });
+        
+        // Berechne die Gesamthöhe inklusive Abständen
+        return scaledDims.height + 
+        scaleValue(IMAGE_MARGIN_TOP, globalConfig.fontSize) + 
+        scaleValue(IMAGE_MARGIN_BOTTOM, globalConfig.fontSize);
+    } catch (error) {
+        console.error("Error embedding image:", error);
+        return scaleValue(IMAGE_MARGIN_TOP, globalConfig.fontSize) + 
+        scaleValue(IMAGE_MARGIN_BOTTOM, globalConfig.fontSize);
+    }
+}
+
+/**
+* Zeichnet ein Icon auf die aktuelle Seite
+* @param {PDFContext} context - Der PDF-Kontext
+* @param {string} iconName - Der Name des Icons
+* @param {number} x - X-Position
+* @param {number} y - Y-Position
+* @param {number} size - Icon-Größe
+* @returns {number} Die Höhe des gezeichneten Icons
+*/
+async function drawIcon(context, iconName, x, y, size) {
+    console.log("Drawing icon:", { iconName, x, y, size });
+    const iconPaths = {
+        'star': '/api/icons/star.png',
+        'herz': '/api/icons/herz.png',
+        'cross': '/api/icons/cross.png',
+        'dove': '/api/icons/dove.png',
+        'default': '/api/icons/default.png'
+    };
+    
+    const iconPath = iconPaths[iconName] || iconPaths['default'];
+    
+    try {
+        const response = await fetch(iconPath);
+        const imgArrayBuffer = await response.arrayBuffer();
+        const img = await context.doc.embedPng(imgArrayBuffer);
+        
+        let iconWidth, iconHeight;
+        
+        if (iconName === 'default') {
+            iconWidth = 150;
+            iconHeight = (iconWidth / img.width) * img.height;
+        } else {
+            const scaledSize = Math.min(size, context.contentWidth);
+            const scaledDims = img.scale(scaledSize / img.width);
+            iconWidth = scaledDims.width;
+            iconHeight = scaledDims.height;
+        }
+        
+        const xCentered = x + (context.contentWidth - iconWidth) / 2;
+        
+        context.page.drawImage(img, {
+            x: xCentered,
+            y: y - iconHeight,
+            width: iconWidth,
+            height: iconHeight
+        });
+        
+        return iconHeight;
+    } catch (error) {
+        console.error("Error drawing icon:", error);
+        return 0;
+    }
+}
+
+
+/**
+* Bestimmt, ob ein Element ein Titel ist - erweiterte Version
+* @param {HTMLElement} element - Das zu prüfende Element
+* @returns {boolean} - True, wenn es sich um einen Titel handelt
+*/
+function isTitle(element) {
+    // Prüft auf verschiedene Titel-Indikatoren
+    return element.querySelector('.item-title') !== null || 
+    element.querySelector('h1, h2, h3') !== null ||
+    element.classList.contains('title') || 
+    element.tagName === 'H1' || 
+    element.tagName === 'H2' || 
+    element.tagName === 'H3';
+}
+
+/**
+* Bestimmt, ob ein Element eine Strophe oder ein Refrain ist - robuste Version
+* @param {HTMLElement} element - Das zu prüfende Element
+* @returns {boolean} - True, wenn es sich um eine Strophe oder Refrain handelt
+*/
+function isStropheOrRefrain(element) {
+    return (
+        element.querySelector('.strophe') !== null || 
+        element.querySelector('.refrain') !== null ||
+        element.classList.contains('strophe') || 
+        element.classList.contains('refrain')
+    );
+}
+
+/**
+* Prüft, ob ein Element ein Gebet oder Psalm ist
+* @param {HTMLElement} element - Das zu prüfende Element
+* @returns {boolean} True, wenn es ein Gebet oder Psalm ist
+*/
+function isPsalmOrPrayer(element) {
+    // Direkte Klassen prüfen
+    if (element.classList.contains('psalm') || 
+        element.classList.contains('prayer') ||
+        element.classList.contains('gebet')) return true;
+    
+    // Klassen in untergeordneten Elementen prüfen
+    if (element.querySelector('.psalm') || 
+        element.querySelector('.prayer') ||
+        element.querySelector('.gebet')) return true;
+    
+    // Titel prüfen, die auf Gebet oder Psalm hindeuten
+    const titleEl = element.querySelector('.item-title, h1, h2, h3');
+    if (titleEl) {
+        const title = titleEl.textContent.toLowerCase();
+        if (title.includes('psalm') || 
+            title.includes('gebet') || 
+            title.includes('vater unser') ||
+            title.includes('prayer')) {
+                return true;
+            }
+    }
+    
+    // Prüfe auf charakteristische Formationen in Absätzen
+    const paragraphs = element.querySelectorAll('p');
+    if (paragraphs.length >= 3) {
+        // Typisches Muster für Psalmen ist, dass jeder Absatz kurz ist
+        let shortParagraphCount = 0;
+        paragraphs.forEach(p => {
+            if (p.textContent.length < 100) shortParagraphCount++;
+        });
+        if (shortParagraphCount >= paragraphs.length * 0.7) return true;
+    }
+    
+    return false;
+}
+
+/**
+* Prüft, ob ein Seitenumbruch an einer bestimmten Stelle vermieden werden sollte
+* @param {Array} elements - Alle Elemente des Dokuments
+* @param {number} currentIndex - Der aktuelle Index
+* @returns {boolean} - True, wenn der Umbruch vermieden werden sollte
+*/
+function shouldAvoidPageBreak(elements, currentIndex) {
+    if (currentIndex <= 0 || currentIndex >= elements.length) return false;
+    
+    const currentElement = elements[currentIndex];
+    const nextElement = elements[currentIndex + 1];
+    const prevElement = elements[currentIndex - 1];
+    
+    // Fall 1: Aktuelles Element ist ein Titel und das nächste eine Strophe/Refrain
+    if (isTitle(currentElement) && nextElement && isStropheOrRefrain(nextElement)) {
+        return true;
+    }
+    
+    // Fall 2: Vorheriges Element ist eine Strophe und aktuelles auch
+    if (prevElement && isStropheOrRefrain(prevElement) && isStropheOrRefrain(currentElement)) {
+        return true;
+    }
+    
+    // Fall 3: Psalm/Gebet mit weniger als MAX_PSALM_LINES_BEFORE_BREAK Zeilen
+    if (isPsalmOrPrayer(currentElement)) {
+        const textContent = currentElement.textContent || '';
+        const lineCount = (textContent.match(/\n/g) || []).length + 1;
+        if (lineCount < MAX_PSALM_LINES_BEFORE_BREAK) {
+            return true;
+        }
+    }
+    
+    return false;
+}
 
 // Funktion zum Skalieren der Werte basierend auf der globalen Schriftgröße
 function scaleValue(value, globalFontSize) {
@@ -52,566 +484,653 @@ const headingStyles = {
     bodyText: { fontSize: BASE_FONT_SIZE, lineHeight: 1.2, spacingBefore: 10, spacingAfter: 10 }
 };
 
-async function generatePDF(format) {
-    const progressContainer = document.getElementById('pdf-progress-container');
-    const progressBar = document.getElementById('pdf-progress-bar');
-    const progressText = document.getElementById('pdf-progress-text');
-    progressContainer.style.display = 'block';
-    showProgress(0, "Initialisiere PDF-Erstellung");
-    console.log("Starting PDF generation for format:", format);
-    const { PDFDocument } = window.PDFLib;
-    const fontkit = window.fontkit;
+/**
+* Schätzt die Höhe eines Elements für die PDF-Darstellung
+* @param {HTMLElement} element - Das zu messende Element
+* @param {Object} config - Die globale Konfiguration
+* @returns {number} - Die geschätzte Höhe in PT
+*/
+function estimatePDFElementHeight(element, config) {
+    // Grundlegende Elementgröße ermitteln
+    const computedStyle = window.getComputedStyle(element);
     
-    const doc = await PDFDocument.create();
-    doc.registerFontkit(fontkit);
+    // Ausgangshöhe aus DOM
+    let baseHeight = element.offsetHeight;
     
-    console.log("Loading fonts...");
-    showProgress(10, "Lade Schriftarten");
+    // Skalierungsfaktoren und Konfiguration
+    const fontSize = parseFloat(config.fontSize || 10.5);
+    const lineHeight = parseFloat(config.lineHeight || 1.2);
     
-    let config;
-    try {
-        const savedConfig = localStorage.getItem('liedblattConfig');
-        if (savedConfig) {
-            config = JSON.parse(savedConfig);
-            console.log("Loaded config from localStorage:", config);
+    // Spezialbehandlung für verschiedene Elementtypen
+    if (element.querySelector('.item-title')) {
+        // Titel haben größere Schrift
+        baseHeight *= HEADING_3_SCALE;
+    }
+    
+    // Strophen und Refrains
+    if (element.querySelector('.strophe') || element.querySelector('.refrain')) {
+        // Zeilenanzahl schätzen basierend auf Text
+        const textContent = element.textContent || '';
+        const totalChars = textContent.length;
+        const charsPerLine = 50; // Durchschnittliche Zeichen pro Zeile
+        const estimatedLines = Math.max(1, Math.ceil(totalChars / charsPerLine));
+        
+        // Höhe basierend auf Zeilenanzahl, Schriftgröße und Zeilenabstand
+        const lineHeightPx = fontSize * lineHeight;
+        baseHeight = estimatedLines * lineHeightPx;
+        
+        // Zusätzlicher Abstand für Strophen
+        baseHeight += STROPHE_SPACING;
+    }
+    
+    // Bilder direkt messen
+    if (element.querySelector('img')) {
+        const img = element.querySelector('img');
+        if (img.offsetHeight) {
+            baseHeight = img.offsetHeight;
         } else {
-            throw new Error("No saved config found in localStorage");
-        }
-    } catch (error) {
-        console.error("Error loading config from localStorage:", error);
-        config = {
-            fontFamily: 'Jost',
-            fontSize: 12,
-            lineHeight: 1.2,
-            textAlign: 'center',
-            format: 'a5',
-            churchLogo: null
-        };
-    }
-    
-    const globalConfig = {
-        fontFamily: config.fontFamily || 'Jost',
-        fontSize: pxToPt(parseFloat(config.fontSize || 12)),
-        lineHeight: parseFloat(config.lineHeight || 1.5),
-        textAlign: config.textAlign || 'left',
-        format: config.format || 'a5',
-        churchLogo: config.churchLogo
-    };
-    
-    const scaledFontSize = globalConfig.fontSize;
-    const scaledIconSize = scaleValue(ICON_SIZE, scaledFontSize);
-    const scaledIconMargin = scaleValue(ICON_MARGIN, scaledFontSize);
-    const scaledDefaultObjectSpacing = scaleValue(DEFAULT_OBJECT_SPACING, scaledFontSize);
-    const scaledStropheSpacing = scaleValue(STROPHE_SPACING, scaledFontSize);
-    
-    console.log("Global config for PDF generation:", globalConfig);
-    
-    console.log("Loading selected font...");
-    showProgress(10, "Lade ausgewählte Schriftart");
-    const fonts = await fetchAndEmbedFont(doc, config.fontFamily);
-    console.log("Font loaded:", config.fontFamily);
-    
-    const { width, height } = pageSizes[format];
-    const margin = { top: 30, right: 20, bottom: 20, left: 20 };
-    const contentWidth = width - margin.left - margin.right;
-    
-    let page = doc.addPage([width, height]);
-    let y = height - margin.top;
-    
-    console.log("Page size:", { width, height, contentWidth });
-    
-    console.log("Current global config:", JSON.stringify(globalConfig));
-    
-    let logoImage = null;
-    if (globalConfig.churchLogo) {
-        showProgress(30, "Lade Logo");
-        console.log("Fetching church logo from:", globalConfig.churchLogo);
-        try {
-            const logoUrl = `${globalConfig.churchLogo}`;
-            console.log("Full logo URL:", logoUrl);
-            const logoResponse = await fetch(logoUrl);
-            if (!logoResponse.ok) throw new Error(`HTTP error! Status: ${logoResponse.status}`);
-            const logoArrayBuffer = await logoResponse.arrayBuffer();
-            
-            const logoType = getImageType(logoArrayBuffer);
-            
-            if (logoType === 'png') {
-                logoImage = await doc.embedPng(logoArrayBuffer);
-            } else if (logoType === 'jpeg') {
-                logoImage = await doc.embedJpg(logoArrayBuffer);
-            } else {
-                throw new Error('Unsupported logo image type');
-            }
-            
-            console.log("Church logo embedded successfully");
-        } catch (error) {
-            console.error("Error embedding church logo:", error);
-        }
-    } else {
-        console.log("No church logo path found in global config");
-    }
-    
-    function getImageType(arrayBuffer) {
-        const uint8Array = new Uint8Array(arrayBuffer);
-        const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
-        const jpegSignature = [255, 216, 255];
-        
-        if (pngSignature.every((byte, index) => uint8Array[index] === byte)) {
-            return 'png';
-        } else if (jpegSignature.every((byte, index) => uint8Array[index] === byte)) {
-            return 'jpeg';
-        } else {
-            return 'unknown';
+            // Fallback wenn Bildhöhe nicht verfügbar
+            baseHeight = 150; // Standardhöhe für Bilder
         }
     }
     
-    function addLogoToPage(page) {
-        if (logoImage) {
-            const { width, height } = page.getSize();
-            const logoHeight = 30; // Fixed height of 30px
-            const aspectRatio = logoImage.width / logoImage.height;
-            const logoWidth = logoHeight * aspectRatio;
-            
-            page.drawImage(logoImage, {
-                x: width - logoWidth - 20,
-                y: height - logoHeight - 20,
-                width: logoWidth,
-                height: logoHeight,
-                opacity: 0.3
-            });
-        }
-    }   
+    // Ränder hinzufügen
+    const marginTop = parseFloat(computedStyle.marginTop) || 0;
+    const marginBottom = parseFloat(computedStyle.marginBottom) || 0;
+    baseHeight += marginTop + marginBottom;
     
-    // Add logo to the first page
-    addLogoToPage(page);
+    // In PT umrechnen für PDF-Kompatibilität
+    return baseHeight * PX_TO_PT_RATIO;
+}
+
+/**
+* Verbesserte Schätzung der Höhe einer Elementgruppe
+* @param {Array} group - Gruppe von Elementen
+* @returns {number} - Geschätzte Höhe der Gruppe in PT
+*/
+function estimateGroupHeight(group) {
+    let totalHeight = 0;
     
-    function addPage() {
-        console.log("Adding new page");
-        page = doc.addPage([width, height]);
-        addLogoToPage(page); // Add logo to the new page
-        y = height - margin.top;
-        return { page, y };
+    // Debug-Information
+    console.log("Schätze Gruppenhöhe für", group.length, "Elemente");
+    
+    // Titel oder Strophen in der Gruppe?
+    const hasTitle = group.some(el => isTitle(el));
+    const hasStrophe = group.some(el => isStropheOrRefrain(el));
+    
+    // Zusätzlicher Puffer für Gruppen mit Titel und Strophen
+    const groupBuffer = (hasTitle && hasStrophe) ? 20 : 0;
+    
+    // Element für Element verarbeiten
+    for (const element of group) {
+        const height = estimatePDFElementHeight(element, globalConfig);
+        totalHeight += height;
+        
+        // Debugging für jedes Element
+        console.log(` - Element (${element.tagName}): ${height}pt`);
+        
+        // Standard-Abstand zwischen Elementen
+        totalHeight += scaleValue(DEFAULT_OBJECT_SPACING, globalConfig.fontSize) * PX_TO_PT_RATIO;
     }
     
-    async function drawText(text, x, y, fontSize, maxWidth, options = {}) {
-        const { 
-            bold, italic, underline, alignment, indent, isCopyright, isRefrain, isStrophe, 
-            isLastElement, isHeading, isQuillHeading, afterIcon, isFirstOnPage 
-        } = options;
-        
-        let font;
-        if (bold && italic) {
-            font = fonts.boldItalic;
-        } else if (bold) {
-            font = fonts.bold;
-        } else if (italic) {
-            font = fonts.italic;
-        } else {
-            font = fonts.regular; 
-        }
-        if (!font) {
-            console.error(`Required font style not found for ${globalConfig.fontFamily}`);
-            font = fonts.regular || Object.values(fonts)[0];
-        }
-        
-        console.log("Drawing text:", { text: text.substring(0, 20) + "...", x, y, fontSize, bold, italic, underline, alignment, indent, isCopyright, isRefrain, isStrophe, isHeading, isQuillHeading });
-        
-        const actualFontSize = bold ? fontSize * 1 : fontSize;
-        
-        const lineHeight = (isRefrain || isStrophe) 
-        ? globalConfig.lineHeight * 1
-        : globalConfig.lineHeight;
-        
-        console.log("Element-Typ:", { isStrophe, isRefrain });
-        console.log("Verwendete lineHeight:", lineHeight);  
-                
-        const lines = await splitTextToLines(text, font, fontSize, maxWidth - indent);
-        let currentY = y;
-        
-        for (const line of lines) {
-            if (currentY - fontSize < margin.bottom) {
-                ({ page, y } = addPage());
-                currentY = y;
-            }
-            
-            let xPos = x + indent;
-            if (alignment === 'center') {
-                xPos = x + (maxWidth - await font.widthOfTextAtSize(line, fontSize)) / 2;
-            } else if (alignment === 'right') {
-                xPos = x + maxWidth - await font.widthOfTextAtSize(line, fontSize);
-            } else if (alignment === 'justify' && line !== lines[lines.length - 1]) {
-                await drawJustifiedText(line, x + indent, currentY, fontSize, maxWidth - indent, { bold, italic, underline });
-                currentY -= fontSize * lineHeight;
-                continue;
-            }
-            
-            page.drawText(line, {
-                x: xPos,
-                y: currentY,
-                size: fontSize,
-                font: font,
-                lineHeight: lineHeight,
-                maxWidth: maxWidth - indent
-            });
-            
-            if (underline) {
-                const lineWidth = await font.widthOfTextAtSize(line, fontSize);
-                page.drawLine({
-                    start: { x: xPos, y: currentY - 2 },
-                    end: { x: xPos + lineWidth, y: currentY - 2 },
-                    thickness: 0.5
-                });
-            }
-            
-            currentY -= fontSize * lineHeight;
-        }
-        
-        // Anwenden des Abstands nach der Überschrift
-        if (isHeading) {
-            console.log("Current spacing after heading:", currentSpacing.after);
-            currentY -= currentSpacing.after;
-        }
-        
-        // Füge Abstand für Strophen und Refrains hinzu
-        if (isStrophe || isRefrain) {
-            currentY -= STROPHE_SPACING;
-        }
-        if (isLastElement) {
-            currentY -= 0;
-        } else {
-            y -= fontSize * 0; // Standardabstand zwischen Absätzen
-        }
-        
-        return y - currentY;
-    }
+    // Gruppenbuffer für komplexere Gruppen hinzufügen
+    totalHeight += groupBuffer * PX_TO_PT_RATIO;
     
-    async function drawJustifiedText(text, x, y, fontSize, maxWidth, options = {}) {
-        const { bold, italic, underline } = options;
-        const font = fonts[globalConfig.fontFamily];
-        const words = text.split(' ');
-        const spaceWidth = await font.widthOfTextAtSize(' ', fontSize);
-        const wordWidths = await Promise.all(words.map(word => font.widthOfTextAtSize(word, fontSize)));
-        const totalWordWidth = wordWidths.reduce((sum, width) => sum + width, 0);
-        const totalSpaces = words.length - 1;
-        const extraSpace = maxWidth - totalWordWidth;
-        const extraSpacePerWord = extraSpace / totalSpaces;
-        
-        let currentX = x;
-        for (let i = 0; i < words.length; i++) {
-            page.drawText(words[i], {
-                x: currentX,
-                y,
-                size: fontSize,
-                font: font
-            });
-            
-            if (underline) {
-                const wordWidth = wordWidths[i];
-                page.drawLine({
-                    start: { x: currentX, y: y - 2 },
-                    end: { x: currentX + wordWidth, y: y - 2 },
-                    thickness: 0.5,
-                });
-            }
-            
-            if (i < words.length - 1) {
-                currentX += wordWidths[i] + spaceWidth + extraSpacePerWord;
-            }
-        }
-    }
-    async function drawImage(imgSrc, x, y, imgWidth) {
-        console.log("Drawing image:", { imgSrc, x, y, imgWidth });
-        try {
-            const response = await fetch(imgSrc);
-            const imgArrayBuffer = await response.arrayBuffer();
-            const imgType = getImageType(imgArrayBuffer);
-            
-            let img;
-            if (imgType === 'png') {
-                img = await doc.embedPng(imgArrayBuffer);
-            } else if (imgType === 'jpeg') {
-                img = await doc.embedJpg(imgArrayBuffer);
-            } else {
-                throw new Error('Unsupported image type');
-            }
-            
-            const scaledDims = img.scale(imgWidth / img.width);
-            
-            // Überprüfe, ob das Bild auf die aktuelle Seite passt
-            if (y - scaledDims.height < margin.bottom) {
-                // Wenn nicht, füge eine neue Seite hinzu
-                ({ page, y } = addPage());
-            }
-            
-            // Berücksichtigen Sie den oberen Abstand
-            y -= scaleValue(IMAGE_MARGIN_TOP, scaledFontSize);
-            
-            page.drawImage(img, {
-                x,
-                y: y - scaledDims.height,
-                width: scaledDims.width,
-                height: scaledDims.height
-            });
-            
-            // Aktualisiere die Y-Position für den nächsten Inhalt
-            y = y - scaledDims.height - scaleValue(IMAGE_MARGIN_BOTTOM, scaledFontSize);
-            
-            return scaledDims.height + scaleValue(IMAGE_MARGIN_TOP, scaledFontSize) + scaleValue(IMAGE_MARGIN_BOTTOM, scaledFontSize);
-        } catch (error) {
-            console.error("Error embedding image:", error);
-            return scaleValue(IMAGE_MARGIN_TOP, scaledFontSize) + scaleValue(IMAGE_MARGIN_BOTTOM, scaledFontSize);
-        }
-    }
+    console.log(`Geschätzte Gruppenhöhe: ${totalHeight}pt (mit Buffer: ${groupBuffer})`);
+    return totalHeight;
+}
+
+/**
+* Identifiziert zusammengehörige Elementgruppen, die nicht getrennt werden sollten
+* @param {Array} items - Alle Elemente im Dokument
+* @returns {Array} - Array von Element-Gruppen
+*/
+function identifyElementGroups(items) {
+    // Debug-Ausgabe für bessere Nachvollziehbarkeit
+    console.log("Starte Gruppenerkennung mit", items.length, "Elementen");
     
-    function getImageType(arrayBuffer) {
-        const uint8Array = new Uint8Array(arrayBuffer);
-        const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
-        const jpegSignature = [255, 216, 255];
-        
-        if (pngSignature.every((byte, index) => uint8Array[index] === byte)) {
-            return 'png';
-        } else if (jpegSignature.every((byte, index) => uint8Array[index] === byte)) {
-            return 'jpeg';
-        } else {
-            return 'unknown';
-        }
-    }
+    const groups = [];
+    let currentGroup = [];
+    let inStropheGroup = false;
+    let inTitleGroup = false;
     
-    async function drawIcon(iconName, x, y, size) {
-        console.log("Drawing icon:", { iconName, x, y, size });
-        const iconPaths = {
-            'star': '/api/icons/star.png',
-            'herz': '/api/icons/herz.png',
-            'cross': '/api/icons/cross.png',
-            'dove': '/api/icons/dove.png',
-            'default': '/api/icons/default.png'
-        };
-        
-        const iconPath = iconPaths[iconName] || iconPaths['default'];
-        
-        try {
-            const response = await fetch(iconPath);
-            const imgArrayBuffer = await response.arrayBuffer();
-            const img = await doc.embedPng(imgArrayBuffer);
-            
-            let iconWidth, iconHeight;
-            
-            if (iconName === 'default') {
-                iconWidth = 150;
-                iconHeight = (iconWidth / img.width) * img.height;
-            } else {
-                const scaledSize = Math.min(size, contentWidth);
-                const scaledDims = img.scale(scaledSize / img.width);
-                iconWidth = scaledDims.width;
-                iconHeight = scaledDims.height;
-            }
-            
-            const xCentered = x + (contentWidth - iconWidth) / 2;
-            
-            page.drawImage(img, {
-                x: xCentered,
-                y: y - iconHeight,
-                width: iconWidth,
-                height: iconHeight
-            });
-            
-            return iconHeight;
-        } catch (error) {
-            console.error("Error drawing icon:", error);
-            return 0;
-        }
-    }
-    
-    function showProgress(percent, message = '') {
-        const progressBar = document.getElementById('pdf-progress-bar');
-        const progressText = document.getElementById('pdf-progress-text');
-        if (progressBar && progressText) {
-            progressBar.style.width = `${percent}%`;
-            progressText.textContent = `${Math.round(percent)}% ${message}`;
-        }
-        console.log(`Progress: ${percent}% ${message}`);
-    }
-    
-    function addPage() {
-        console.log("Adding new page");
-        page = doc.addPage([width, height]);
-        addLogoToPage(page);
-        y = height - margin.top;
-        return { page, y };
-    }
-    
-    const liedblattContent = document.getElementById('liedblatt-content');
-    const items = liedblattContent.children;
-    
-    console.log("Processing liedblatt content...");
-    
-    let lastItemType = null;
-    
-    showProgress(40, "Verarbeite Inhalte");
     for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        console.log("Processing item:", item.tagName, item.className);
         
+        // Detaillierte Debug-Informationen
+        console.log(`Verarbeite Element #${i}:`, {
+            isTitle: isTitle(item),
+            isStrophe: isStropheOrRefrain(item),
+            isPsalm: isPsalmOrPrayer(item),
+            hasClass: Array.from(item.classList)
+        });
+        
+        // Seitenumbruch beendet Gruppe
         if (item.classList.contains('page-break')) {
-            console.log("Page break detected");
-            ({ page, y } = addPage());
+            if (currentGroup.length > 0) {
+                groups.push([...currentGroup]);
+                console.log("Gruppe beendet wegen Seitenumbruch:", currentGroup.length, "Elemente");
+                currentGroup = [];
+            }
+            inStropheGroup = false;
+            inTitleGroup = false;
+            // Füge den Seitenumbruch als separate Gruppe hinzu
+            groups.push([item]);
             continue;
         }
         
-        const isFirstOnPage = y === height - margin.top;
-        const afterIcon = items[i - 1] && items[i - 1].querySelector('.fas, .trenner-default-img');
+        // Element-Eigenschaften prüfen
+        const isItemTitle = isTitle(item);
+        const isItemStropheOrRefrain = isStropheOrRefrain(item);
+        const isItemPsalm = isPsalmOrPrayer(item);
         
-        if (item.querySelector('.fas, .trenner-default-img')) {
-            let iconType = 'default';
-            const iconElement = item.querySelector('.fas, .trenner-default-img');
-            if (iconElement.classList.contains('fa-heart')) iconType = 'herz';
-            if (iconElement.classList.contains('fa-star')) iconType = 'star';
-            if (iconElement.classList.contains('fa-cross')) iconType = 'cross';
-            if (iconElement.classList.contains('fa-dove')) iconType = 'dove';
+        // Titelgruppe beginnen
+        if (isItemTitle) {
+            if (currentGroup.length > 0 && !inTitleGroup) {
+                groups.push([...currentGroup]);
+                console.log("Neue Titelgruppe - vorherige Gruppe abgeschlossen:", currentGroup.length, "Elemente");
+                currentGroup = [];
+            }
             
-            const iconHeight = await drawIcon(iconType, margin.left, y, scaledIconSize);
-            y -= iconHeight + scaledIconMargin;
-        } else {
-            const elements = item.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
-            
-            for (let j = 0; j < elements.length; j++) {
-                const element = elements[j];
+            currentGroup.push(item);
+            inTitleGroup = true;
+            inStropheGroup = false; // Reset Strophen-Gruppierung
+            continue;
+        }
+        
+        // Strophe nach Titel
+        if (isItemStropheOrRefrain && inTitleGroup) {
+            currentGroup.push(item);
+            console.log("Strophe zu Titelgruppe hinzugefügt");
+            continue;
+        }
+        
+        // Psalm/Gebet nach Titel
+        if (isItemPsalm && inTitleGroup) {
+            currentGroup.push(item);
+            console.log("Psalm/Gebet zu Titelgruppe hinzugefügt");
+            continue;
+        }
+        
+        // Strophengruppe
+        if (isItemStropheOrRefrain) {
+            if (currentGroup.length === 0) {
+                currentGroup.push(item);
+                inStropheGroup = true;
+                inTitleGroup = false;
+                console.log("Neue Strophengruppe begonnen");
+            } 
+            else if (inStropheGroup) {
+                // Prüfen, ob wir die maximale Anzahl von Strophen in einer Gruppe erreicht haben
+                let stropheCount = currentGroup.filter(el => isStropheOrRefrain(el)).length;
                 
-                if (element.tagName === 'STRONG' && /^\d+\.$/.test(element.textContent.trim())) {
-                    continue;
-                }
-                
-                if (element.tagName === 'IMG') {
-                    const imgHeight = await drawImage(element.src, margin.left, y, contentWidth);
-                    y -= imgHeight;
+                if (stropheCount >= MAX_STROPHES_BEFORE_BREAK) {
+                    // Nach X Strophen eine neue Gruppe beginnen
+                    groups.push([...currentGroup]);
+                    console.log(`Neue Gruppe nach ${stropheCount} Strophen gestartet`);
+                    currentGroup = [item];
                 } else {
-                    let fontSize = scaledFontSize;
-                    let marginTop = 0;
-                    let marginBottom = 0;
-                    let isHeading = false;
-                    let isQuillHeading = false;
-                    const isCopyright = element.classList.contains('copyright-info');
-                    const isRefrain = element.classList.contains('refrain');
-                    
-                    if (element.tagName === 'H1') {
-                        fontSize = scaledFontSize * HEADING_1_SCALE;
-                        if (element.classList.contains('isQuillHeading')) {
-                            marginTop = scaleValue(QUILL_H1_MARGIN_TOP, scaledFontSize);
-                            marginBottom = scaleValue(QUILL_H1_MARGIN_BOTTOM, scaledFontSize);
-                        }
-                    } else if (element.tagName === 'H2') {
-                        fontSize = scaledFontSize * HEADING_2_SCALE;
-                        if (element.classList.contains('isQuillHeading')) {
-                            marginTop = scaleValue(QUILL_H2_MARGIN_TOP, scaledFontSize);
-                            marginBottom = scaleValue(QUILL_H2_MARGIN_BOTTOM, scaledFontSize);
-                        }
-                    } else if (element.tagName === 'H3') {
-                        fontSize = scaledFontSize * HEADING_3_SCALE;
-                        if (element.classList.contains('isQuillHeading')) {
-                            marginTop = scaleValue(QUILL_H3_MARGIN_TOP, scaledFontSize);
-                            marginBottom = scaleValue(QUILL_H3_MARGIN_BOTTOM, scaledFontSize);
-                        }
-                    }
-                    
-                    if (isCopyright) { 
-                        fontSize = scaleValue(COPYRIGHT_FONT_SIZE, scaledFontSize);
-                        marginTop = scaleValue(COPYRIGHT_MARGIN_TOP, scaledFontSize);
-                        marginBottom = scaleValue(COPYRIGHT_MARGIN_BOTTOM, scaledFontSize);
-                    }
-                    const nextElement = elements[j + 1];
-                    const isNextCopyright = nextElement && nextElement.classList.contains('copyright-info');
-                    
-                    if (isHeading && isNextCopyright) {
-                        marginBottom = 1;
-                    }
-                    
-                    if (j !== 0 || !isFirstOnPage) {
-                        y -= marginTop;
-                    }
-                    
-                    let options = {
-                        bold: element.tagName === 'STRONG' || window.getComputedStyle(element).fontWeight === 'bold' || parseInt(window.getComputedStyle(element).fontWeight) >= 700,
-                        italic: isRefrain || element.tagName === 'EM' || window.getComputedStyle(element).fontStyle === 'italic',
-                        underline: element.tagName === 'U' || window.getComputedStyle(element).textDecoration.includes('underline'),
-                        alignment: window.getComputedStyle(element).textAlign || globalConfig.textAlign,
-                        indent: parseFloat(window.getComputedStyle(element).paddingLeft) || 0,
-                        isCopyright: isCopyright,
-                        isRefrain: isRefrain,
-                        isStrophe: element.classList.contains('strophe'),
-                        isLastElement: j === elements.length - 1,
-                        isHeading: isHeading,
-                        isQuillHeading: isQuillHeading,
-                        afterIcon: afterIcon,
-                        isFirstOnPage: isFirstOnPage
-                    };
-                    
-                    console.log('isQuillHeading:', options.isQuillHeading, 'Item:', item);
-                    
-                    let textContent = element.innerText;
-                    const textHeight = await drawText(textContent, margin.left, y, fontSize, contentWidth, options);
-                    y -= textHeight;
-                    y += marginBottom;
+                    currentGroup.push(item);
+                    console.log("Strophe zu Strophengruppe hinzugefügt");
                 }
-                
-                if (y < margin.bottom) {
-                    ({ page, y } = addPage());
+            } 
+            else {
+                groups.push([...currentGroup]);
+                console.log("Neue Strophengruppe - vorherige Gruppe abgeschlossen:", currentGroup.length, "Elemente");
+                currentGroup = [item];
+                inStropheGroup = true;
+                inTitleGroup = false;
+            }
+            continue;
+        }
+        
+        // Psalm/Gebet-Gruppe
+        if (isItemPsalm) {
+            if (currentGroup.length === 0) {
+                currentGroup.push(item);
+                inStropheGroup = false;
+                inTitleGroup = false;
+                console.log("Neue Psalm/Gebet-Gruppe begonnen");
+            } else {
+                groups.push([...currentGroup]);
+                console.log("Neue Psalm/Gebet-Gruppe - vorherige Gruppe abgeschlossen:", currentGroup.length, "Elemente");
+                currentGroup = [item];
+                inStropheGroup = false;
+                inTitleGroup = false;
+            }
+            continue;
+        }
+        
+        // Für alle anderen Elemente
+        if (currentGroup.length > 0) {
+            groups.push([...currentGroup]);
+            console.log("Gruppe mit normalen Elementen abgeschlossen:", currentGroup.length, "Elemente");
+        }
+        
+        currentGroup = [item];
+        inStropheGroup = false;
+        inTitleGroup = false;
+    }
+    
+    // Letzte Gruppe hinzufügen
+    if (currentGroup.length > 0) {
+        groups.push(currentGroup);
+        console.log("Letzte Gruppe hinzugefügt:", currentGroup.length, "Elemente");
+    }
+    
+    console.log("Gruppenerkennung abgeschlossen:", groups.length, "Gruppen identifiziert");
+    return groups;
+}
+
+/**
+* Extrahiert Seitenumbruchmarker präzise aus der Vorschauansicht
+* @returns {Object} Informationen über Seitenumbruchmarker
+*/
+function extractPageBreaksFromPreview() {
+    const liedblattContent = document.getElementById('liedblatt-content');
+    if (!liedblattContent) return { elementIds: [], manualBreakElements: [], breakInfo: [] };
+    
+    const allElements = Array.from(liedblattContent.children);
+    
+    // Sammle alle Element-IDs für Umbrüche
+    const elementIds = [];
+    const manualBreakElements = [];
+    const breakInfo = []; // Detaillierte Informationen zu jedem Umbruch
+    let pageCounter = 1;
+    
+    // Erster Durchlauf: Identifiziere manuelle Umbrüche
+    for (let i = 0; i < allElements.length; i++) {
+        const element = allElements[i];
+        
+        // Manuellen Seitenumbruch erfassen
+        if (element.classList.contains('page-break')) {
+            manualBreakElements.push(element);
+            pageCounter++;
+            
+            // Finde das Element vor dem Umbruch für die PDF-Generierung
+            if (i > 0) {
+                const prevElementId = allElements[i-1].getAttribute('data-original-id') || 
+                allElements[i-1].getAttribute('data-liedblatt-id');
+                if (prevElementId) {
+                    breakInfo.push({
+                        elementId: prevElementId,
+                        type: 'manual',
+                        element: allElements[i-1],
+                        afterIndex: i-1,
+                        pageNumber: pageCounter - 1
+                    });
                 }
             }
         }
-        
-        // Füge den fixen Abstand nach jedem Objekt hinzu
-        y -= scaledDefaultObjectSpacing;
-
-        // Überprüfe, ob genug Platz für das nächste Element vorhanden ist
-        if (y < margin.bottom) {
-            ({ page, y } = addPage());
-        }
-        
-        showProgress(40 + (i / items.length) * 50, "Generiere PDF-Inhalt");
     }
     
-    ensureEvenPageCount(doc);
-    
-    console.log("PDF generation complete. Saving...");
-    showProgress(90, "Finalisiere PDF");
-    const pdfBytes = await doc.save();
-    console.log("PDF saved. Checking if brochure is needed...");
-    
-    try {
-        console.log("PDF generation complete. Saving...");
-        let pdfBytes = await doc.save();
-        console.log(`Generated PDF size: ${pdfBytes.length} bytes`);
+    // Zweiter Durchlauf: Identifiziere automatische Umbrüche aus der Vorschau
+    for (let i = 0; i < allElements.length; i++) {
+        const element = allElements[i];
         
-        const createBrochureChecked = document.getElementById('createBrochure').checked;
-        if (createBrochureChecked) {
-            console.log("Creating brochure...");
-            showProgress(95, "Erstelle Broschüre");
+        // Automatischen Vorschau-Seitenumbruch finden
+        if (element.classList.contains('preview-page-break')) {
+            // Hole das Element, nach dem der Umbruch erfolgt
+            const afterElementId = element.getAttribute('data-after-element-id');
+            const breakType = element.getAttribute('data-break-type') || 'auto';
+            const pageText = element.textContent || '';
+            const pageMatch = pageText.match(/Seite (\d+)/);
+            let pageNumber = pageMatch ? parseInt(pageMatch[1]) : null;
             
-            const tempDoc = await PDFDocument.load(pdfBytes);
-            let pageCount = tempDoc.getPageCount();
-            console.log(`Original page count: ${pageCount}`);
-            
-            console.log(`Final page count: ${pageCount}`);
-            pdfBytes = await tempDoc.save();
-            
-            const brochurePdfBytes = await createBrochure(pdfBytes, format);
-            console.log(`Generated brochure PDF size: ${brochurePdfBytes.length} bytes`);
-            console.log("Brochure created. Downloading...");
-            downloadPDF(brochurePdfBytes, `liedblatt_brochure_${format}.pdf`);
-        } else {
-            console.log("Downloading standard PDF...");
-            downloadPDF(pdfBytes, `liedblatt_${format}.pdf`);
+            if (afterElementId) {
+                // Prüfe, ob der Umbruch nicht mit einem manuellen kollidiert
+                const isNearManual = manualBreakElements.some(manualBreak => {
+                    const manualIndex = allElements.indexOf(manualBreak);
+                    // Ignoriere automatische Umbrüche, die zu nahe an manuellen sind (±2 Elemente)
+                    return Math.abs(i - manualIndex) <= 2;
+                });
+                
+                if (!isNearManual) {
+                    elementIds.push(afterElementId);
+                    
+                    // Finde das Element für die Detailinformation
+                    const afterElement = Array.from(allElements).find(el => 
+                        (el.getAttribute('data-original-id') === afterElementId || 
+                            el.getAttribute('data-liedblatt-id') === afterElementId));
+                    
+                    if (afterElement) {
+                        breakInfo.push({
+                            elementId: afterElementId,
+                            type: breakType,
+                            element: afterElement,
+                            afterIndex: Array.from(allElements).indexOf(afterElement),
+                            pageNumber: pageNumber
+                        });
+                    }
+                }
+            }
         }
-        
+    }
+    
+    // Sortiere die Umbrüche nach ihrer Position im Dokument
+    breakInfo.sort((a, b) => a.afterIndex - b.afterIndex);
+    
+    // Entferne doppelte Umbrüche (wenn mehrere direkt hintereinander folgen)
+    const uniqueBreakInfo = breakInfo.filter((info, index, array) => {
+        if (index === 0) return true;
+        const prevInfo = array[index - 1];
+        // Wenn der vorherige Umbruch direkt vor diesem Element ist, ignoriere diesen
+        return info.afterIndex - prevInfo.afterIndex > 1;
+    });
+    
+    console.log("Extrahierte Seitenumbrüche:", uniqueBreakInfo);
+    
+    return {
+        elementIds: uniqueBreakInfo.map(info => info.elementId),
+        manualBreakElements,
+        breakInfo: uniqueBreakInfo
+    };
+}
+
+// Diese Funktion muss vor ihrer Verwendung definiert werden
+function showProgress(percent, message = '') {
+    const progressBar = document.getElementById('pdf-progress-bar');
+    const progressText = document.getElementById('pdf-progress-text');
+    if (progressBar && progressText) {
+        progressBar.style.width = `${percent}%`;
+        progressText.textContent = `${Math.round(percent)}% ${message}`;
+    }
+    console.log(`Progress: ${percent}% ${message}`);
+}
+
+async function generatePDF(format) {
+    const progressContainer = document.getElementById('pdf-progress-container');
+    progressContainer.style.display = 'block';
+
+    showProgress(0, "Initialisiere PDF-Erstellung");
+
+    // Config aus localStorage laden
+    let config;
+    try {
+        const saved = localStorage.getItem('liedblattConfig');
+        config = saved ? JSON.parse(saved) : {};
+    } catch (e) {
+        config = {};
+    }
+    config.format = format || config.format || 'a5';
+
+    // fontSize: script.js speichert px-Werte, Engine erwartet pt
+    const fontSizePt = (parseFloat(config.fontSize) || 12) * 0.75;
+
+    const engineConfig = {
+        format: config.format,
+        fontSize: fontSizePt,
+        lineHeight: parseFloat(config.lineHeight) || 1.5,
+        textAlign: config.textAlign || 'left',
+        fontFamily: config.fontFamily || 'Jost',
+    };
+
+    showProgress(10, "Lade Schriftarten");
+    const arrayBuffers = await loadFontArrayBuffers(engineConfig.fontFamily);
+
+    // Temporäres PDFDocument für font.widthOfTextAtSize (Engine braucht PDFFont-Objekte)
+    const { PDFDocument } = window.PDFLib;
+    const fontkit = window.fontkit;
+    const tempDoc = await PDFDocument.create();
+    tempDoc.registerFontkit(fontkit);
+    const fonts = await embedFontsInDoc(tempDoc, arrayBuffers);
+
+    showProgress(30, "Berechne Layout");
+    const items = Array.from(document.getElementById('liedblatt-content').children);
+    const layoutResult = await calculateLayout(items, engineConfig, fonts, getOverrides());
+
+    showProgress(60, "Rendere PDF");
+
+    // Logo-ArrayBuffer laden falls vorhanden
+    let logoArrayBuffer = null;
+    if (config.churchLogo) {
+        try {
+            const token = localStorage.getItem('token');
+            const logoRes = await fetch(config.churchLogo, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (logoRes.ok) logoArrayBuffer = await logoRes.arrayBuffer();
+        } catch (e) {
+            console.warn('generatePDF: Logo nicht ladbar:', e.message);
+        }
+    }
+
+    const pdfDoc = await renderToPDF(layoutResult, engineConfig, arrayBuffers, logoArrayBuffer);
+
+    showProgress(90, "Finalisiere PDF");
+    const pdfBytes = await pdfDoc.save();
+
+    // Broschüren-Option bleibt erhalten
+    const brochureCheckbox = document.getElementById('createBrochure');
+    const makeBrochure = brochureCheckbox && brochureCheckbox.checked;
+
+    try {
+        if (makeBrochure) {
+            showProgress(95, "Erstelle Broschüre");
+            const brochurePdfBytes = await createBrochure(pdfBytes, config.format);
+            downloadPDF(brochurePdfBytes, `liedblatt_brochure_${config.format}.pdf`);
+        } else {
+            downloadPDF(pdfBytes, `liedblatt_${config.format}.pdf`);
+        }
         showProgress(100, "PDF-Erstellung abgeschlossen");
     } catch (error) {
-        console.error("Error during PDF generation or brochure creation:", error);
+        console.error("Fehler bei der PDF-Erstellung:", error);
         await customAlert(`Fehler bei der PDF-Erstellung: ${error.message}`);
     } finally {
         progressContainer.style.display = 'none';
     }
 }
 
+/**
+* Verarbeitet alle Elementgruppen unter strenger Einhaltung der Vorschauumbrüche
+* @param {Array} elementGroups - Alle identifizierten Elementgruppen
+* @param {Object} pageBreakInfo - Aus der Vorschau extrahierte Umbruchinformationen
+* @param {PDFContext} context - Der PDF-Kontext
+* @returns {PDFContext} Der aktualisierte Kontext
+*/
+async function processElementGroups(elementGroups, pageBreakInfo, context) {
+    // Erstelle eine Map für schnellen Zugriff auf Umbruchinformationen
+    const breakInfoMap = {};
+    if (pageBreakInfo.breakInfo && Array.isArray(pageBreakInfo.breakInfo)) {
+        pageBreakInfo.breakInfo.forEach(info => {
+            breakInfoMap[info.elementId] = info;
+        });
+    }
+    
+    console.log("Verarbeite Elementgruppen mit Umbruchinformationen:", 
+        Object.keys(breakInfoMap).length ? "Gefunden" : "Keine Umbrüche gefunden");
+    
+    let processedElements = 0;
+    
+    // Verarbeite alle Gruppen
+    for (let groupIndex = 0; groupIndex < elementGroups.length; groupIndex++) {
+        const group = elementGroups[groupIndex];
+        showProgress(40 + (groupIndex / elementGroups.length) * 50, "Generiere PDF-Inhalt");
+        
+        // Verarbeite alle Elemente der Gruppe
+        for (let elementIndex = 0; elementIndex < group.length; elementIndex++) {
+            const element = group[elementIndex];
+            
+            // Spezieller Fall: Preview-Page-Break-Element überspringen
+            if (element.classList.contains('preview-page-break')) {
+                console.log("Vorschau-Seitenumbruch übersprungen - wird separat verarbeitet");
+                continue;
+            }
+            
+            // Manueller Seitenumbruch wird direkt verarbeitet
+            if (element.classList.contains('page-break')) {
+                console.log("Manueller Seitenumbruch verarbeitet");
+                // Der Kontext wird direkt modifiziert, keine Neuzuweisung erforderlich
+                addNewPage(context);
+                continue;
+            }
+            
+            // Element-ID für Umbrucherkennung extrahieren
+            const elementId = element.getAttribute('data-original-id') || 
+            element.getAttribute('data-liedblatt-id');
+            
+            // Prüfe, ob das vorherige Element ein Icon hatte
+            const afterIcon = (elementIndex > 0 && group[elementIndex-1]) ? 
+            group[elementIndex-1].querySelector('.fas, .trenner-default-img') : null;
+            
+            // Verarbeite verschiedene Elementtypen
+            if (element.querySelector('.fas, .trenner-default-img')) {
+                // Zeichne Icon-Elemente
+                let iconType = 'default';
+                const iconElement = element.querySelector('.fas, .trenner-default-img');
+                
+                // Ermittle den Icon-Typ
+                if (iconElement.classList.contains('fa-heart')) iconType = 'herz';
+                if (iconElement.classList.contains('fa-star')) iconType = 'star';
+                if (iconElement.classList.contains('fa-cross')) iconType = 'cross';
+                if (iconElement.classList.contains('fa-dove')) iconType = 'dove';
+                
+                // Zeichne das Icon und aktualisiere die Y-Position
+                const iconHeight = await drawIcon(context, iconType, context.margin.left, context.y, context.scaledIconSize);
+                context.y -= iconHeight + context.scaledIconMargin;
+            } else {
+                // Standardelemente (Text, Bilder, etc.)
+                const elements = element.querySelectorAll('h1, h2, h3, p, img, em, u, strong, .copyright-info');
+                
+                // Verarbeite jedes Unterelement
+                for (let j = 0; j < elements.length; j++) {
+                    const subElement = elements[j];
+                    
+                    // Nummerierungen überspringen
+                    if (subElement.tagName === 'STRONG' && /^\d+\.$/.test(subElement.textContent.trim())) {
+                        continue;
+                    }
+                    
+                    // Bilder
+                    if (subElement.tagName === 'IMG') {
+                        const imgHeight = await drawImage(context, subElement.src, context.margin.left, context.y, context.contentWidth);
+                        context.y -= imgHeight;
+                    } else {
+                        // Textelemente
+                        let fontSize = context.scaledFontSize;
+                        let marginTop = 0;
+                        let marginBottom = 0;
+                        let isHeading = false;
+                        let isQuillHeading = false;
+                        const isCopyright = subElement.classList.contains('copyright-info');
+                        const isRefrain = subElement.classList.contains('refrain');
+                        const isStrophe = subElement.classList.contains('strophe');
+                        
+                        // Schriftgröße und Abstände bestimmen
+                        if (subElement.tagName === 'H1') {
+                            fontSize = context.scaledFontSize * HEADING_1_SCALE;
+                            isHeading = true;
+                            if (subElement.classList.contains('isQuillHeading')) {
+                                isQuillHeading = true;
+                                marginTop = scaleValue(QUILL_H1_MARGIN_TOP, context.scaledFontSize);
+                                marginBottom = scaleValue(QUILL_H1_MARGIN_BOTTOM, context.scaledFontSize);
+                            }
+                        } else if (subElement.tagName === 'H2') {
+                            fontSize = context.scaledFontSize * HEADING_2_SCALE;
+                            isHeading = true;
+                            if (subElement.classList.contains('isQuillHeading')) {
+                                isQuillHeading = true;
+                                marginTop = scaleValue(QUILL_H2_MARGIN_TOP, context.scaledFontSize);
+                                marginBottom = scaleValue(QUILL_H2_MARGIN_BOTTOM, context.scaledFontSize);
+                            }
+                        } else if (subElement.tagName === 'H3') {
+                            fontSize = context.scaledFontSize * HEADING_3_SCALE;
+                            isHeading = true;
+                            if (subElement.classList.contains('isQuillHeading')) {
+                                isQuillHeading = true;
+                                marginTop = scaleValue(QUILL_H3_MARGIN_TOP, context.scaledFontSize);
+                                marginBottom = scaleValue(QUILL_H3_MARGIN_BOTTOM, context.scaledFontSize);
+                            }
+                        }
+                        
+                        if (isCopyright) { 
+                            fontSize = scaleValue(COPYRIGHT_FONT_SIZE, context.scaledFontSize);
+                            marginTop = scaleValue(COPYRIGHT_MARGIN_TOP, context.scaledFontSize);
+                            marginBottom = scaleValue(COPYRIGHT_MARGIN_BOTTOM, context.scaledFontSize);
+                        }
+                        
+                        const nextElement = elements[j + 1];
+                        const isNextCopyright = nextElement && nextElement.classList.contains('copyright-info');
+                        
+                        if (isHeading && isNextCopyright) {
+                            marginBottom = 1;
+                        }
+                        
+                        // Oberen Abstand anwenden
+                        const isFirstOnPage = context.y === context.height - context.margin.top;
+                        if (j !== 0 || !isFirstOnPage) {
+                            context.y -= marginTop;
+                        }
+                        
+                        // CSS-Eigenschaften auslesen
+                        const textProperties = {
+                            fontWeight: window.getComputedStyle(subElement).fontWeight,
+                            fontStyle: window.getComputedStyle(subElement).fontStyle,
+                            textDecoration: window.getComputedStyle(subElement).textDecoration,
+                            textAlign: window.getComputedStyle(subElement).textAlign,
+                            paddingLeft: window.getComputedStyle(subElement).paddingLeft
+                        };
+                        
+                        // Textformatierung bestimmen
+                        const isBold = subElement.tagName === 'STRONG' || 
+                        textProperties.fontWeight === 'bold' || 
+                        parseInt(textProperties.fontWeight) >= 700;
+                        
+                        const isItalic = isRefrain || 
+                        subElement.tagName === 'EM' || 
+                        textProperties.fontStyle === 'italic';
+                        
+                        const isUnderlined = subElement.tagName === 'U' || 
+                        textProperties.textDecoration.includes('underline');
+                        
+                        // Optionen für drawText
+                        const options = {
+                            bold: isBold,
+                            italic: isItalic,
+                            underline: isUnderlined,
+                            alignment: textProperties.textAlign || globalConfig.textAlign,
+                            indent: parseFloat(textProperties.paddingLeft) || 0,
+                            isCopyright: isCopyright,
+                            isRefrain: isRefrain,
+                            isStrophe: isStrophe,
+                            isLastElement: j === elements.length - 1,
+                            isHeading: isHeading,
+                            isQuillHeading: isQuillHeading,
+                            afterIcon: afterIcon,
+                            isFirstOnPage: isFirstOnPage,
+                            preventPageBreak: true // Keine automatischen Seitenumbrüche
+                        };
+                        
+                        // Text zeichnen
+                        const textContent = subElement.innerText;
+                        const textHeight = await drawText(context, textContent, context.margin.left, context.y, fontSize, context.contentWidth, options);
+                        context.y -= textHeight;
+                        context.y += marginBottom; // Unteren Abstand berücksichtigen
+                    }
+                }
+            }
+            
+            // Standard-Abstand nach jedem Element
+            context.y -= context.scaledDefaultObjectSpacing;
+            processedElements++;
+            
+            // WICHTIG: Hier erfolgt der Seitenumbruch gemäß der Vorschau
+            if (elementId && breakInfoMap[elementId]) {
+                const breakInfo = breakInfoMap[elementId];
+                console.log(`Seitenumbruch nach Element mit ID ${elementId} (Typ: ${breakInfo.type})`);
+                // Der Kontext wird direkt modifiziert, keine Neuzuweisung erforderlich
+                addNewPage(context);
+            }
+        }
+    }
+    
+    return { ...context, processedElements };
+}
+
+/**
+* Stellt sicher, dass die PDF-Datei eine gerade Seitenzahl hat
+* @param {PDFDocument} doc - Das PDF-Dokument
+*/
 function ensureEvenPageCount(doc) {
     const pageCount = doc.getPageCount();
     if (pageCount % 2 !== 0) {
@@ -622,6 +1141,10 @@ function ensureEvenPageCount(doc) {
     }
 }
 
+/**
+* Fügt minimalen Inhalt zu einer Seite hinzu, um leere Seiten zu vermeiden
+* @param {PDFPage} page - Die Seite, zu der Inhalt hinzugefügt werden soll
+*/
 function addMinimalContent(page) {
     page.drawCircle({
         x: 1,
@@ -630,6 +1153,12 @@ function addMinimalContent(page) {
         color: PDFLib.rgb(0.95, 0.95, 0.95)
     });
 }
+
+/**
+* Sucht nach einem Seitenumbruch in einem Element und seinen Kindelementen
+* @param {HTMLElement} element - Das zu durchsuchende Element
+* @returns {HTMLElement|null} - Das gefundene Seitenumbruch-Element oder null
+*/
 function findPageBreak(element) {
     if (element.classList && element.classList.contains('page-break')) {
         return element;
@@ -645,10 +1174,21 @@ function findPageBreak(element) {
     return null;
 }
 
+/**
+* Bereinigt den Schriftfamiliennamen für den Font-Ladevorgang
+* @param {string} fontFamily - Der zu bereinigende Schriftfamilienname
+* @returns {string} - Der bereinigte Schriftfamilienname
+*/
 function getCleanFontFamily(fontFamily) {
     return fontFamily.split('-')[0].trim();
 }
 
+/**
+* Lädt und bettet eine Schriftart in ein PDF-Dokument ein
+* @param {PDFDocument} doc - Das PDF-Dokument
+* @param {string} fontFamily - Der Name der Schriftfamilie
+* @returns {Object} - Die eingebetteten Schriftarten
+*/
 async function fetchAndEmbedFont(doc, fontFamily) {
     fontFamily = getCleanFontFamily(fontFamily);
     console.log("Fetching font family:", fontFamily);
@@ -721,6 +1261,15 @@ async function fetchAndEmbedFont(doc, fontFamily) {
     
     return loadedFonts;
 }
+
+/**
+* Teilt einen Text in Zeilen auf, die in eine bestimmte Breite passen
+* @param {string} text - Der zu teilende Text
+* @param {PDFFont} font - Die verwendete Schriftart
+* @param {number} fontSize - Die Schriftgröße
+* @param {number} maxWidth - Die maximale Breite
+* @returns {string[]} - Die aufgeteilten Textzeilen
+*/
 async function splitTextToLines(text, font, fontSize, maxWidth) {
     const words = text.split(' ');
     const lines = [];
@@ -749,6 +1298,11 @@ async function splitTextToLines(text, font, fontSize, maxWidth) {
     return lines;
 }
 
+/**
+* Lädt eine PDF-Datei herunter
+* @param {Uint8Array} pdfBytes - Die Bytes der PDF-Datei
+* @param {string} fileName - Der Name der Datei
+*/
 function downloadPDF(pdfBytes, fileName) {
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
     const link = document.createElement('a');
@@ -764,6 +1318,12 @@ document.getElementById('pdf-form').addEventListener('submit', (event) => {
     generatePDF(format);
 });
 
+/**
+* Erstellt eine Broschüre aus einer PDF-Datei
+* @param {Uint8Array} inputPdfBytes - Die Bytes der Eingabe-PDF
+* @param {string} format - Das gewählte Format
+* @returns {Promise<Uint8Array>} - Die Bytes der Broschüre-PDF
+*/
 async function createBrochure(inputPdfBytes, format) {
     const { PDFDocument, PageSizes } = PDFLib;
     console.log("PDF-Lib verfügbar:", !!PDFLib);
@@ -804,6 +1364,16 @@ async function createBrochure(inputPdfBytes, format) {
     return await outputPdf.save();
 }
 
+/**
+* Erstellt eine DIN Lang-Broschüre
+* @param {PDFDocument} inputPdf - Die Eingabe-PDF
+* @param {PDFDocument} outputPdf - Die Ausgabe-PDF
+* @param {number} pageCount - Die Anzahl der Seiten
+* @param {number} targetWidth - Die Zielbreite
+* @param {number} targetHeight - Die Zielhöhe
+* @param {[number, number]} outputPageSize - Die Größe der Ausgabeseite
+* @returns {Promise<void>}
+*/
 async function createDinLangBrochure(inputPdf, outputPdf, pageCount, targetWidth, targetHeight, outputPageSize) {
     const pagesPerSheet = 3;
     
@@ -853,6 +1423,17 @@ async function createDinLangBrochure(inputPdf, outputPdf, pageCount, targetWidth
     }
 }
 
+/**
+* Erstellt eine A5- oder A4-Schmal-Broschüre
+* @param {PDFDocument} inputPdf - Die Eingabe-PDF
+* @param {PDFDocument} outputPdf - Die Ausgabe-PDF
+* @param {number} pageCount - Die Anzahl der Seiten
+* @param {string} format - Das gewählte Format
+* @param {number} targetWidth - Die Zielbreite
+* @param {number} targetHeight - Die Zielhöhe
+* @param {[number, number]} outputPageSize - Die Größe der Ausgabeseite
+* @returns {Promise<void>}
+*/
 async function createA5orA4SchmalBrochure(inputPdf, outputPdf, pageCount, format, targetWidth, targetHeight, outputPageSize) {
     const pagesPerSheet = 2;
     let sheetsNeeded = Math.ceil(pageCount / pagesPerSheet);
@@ -938,11 +1519,90 @@ async function createA5orA4SchmalBrochure(inputPdf, outputPdf, pageCount, format
             await drawPageOnSheetForA5AndA4Schmal(inputPdf, outputPdf, fourthPage, 3, 0, targetWidth, targetHeight, format);
             await drawPageOnSheetForA5AndA4Schmal(inputPdf, outputPdf, fourthPage, 4, 1, targetWidth, targetHeight, format);
         }
+    } else {
+        // Implementierung für mehr als 8 Seiten
+        // Bei mehr als 8 Seiten brauchen wir eine komplexere Broschürenreihenfolge
+        const pageOrder = calculateBookletPageOrder(pageCount);
+        
+        // Seiten-Paare erstellen und auf Blätter verteilen
+        for (let i = 0; i < pageOrder.length; i += 2) {
+            const newPage = outputPdf.addPage(outputPageSize);
+            
+            // Linke Seite (Rückseite)
+            if (pageOrder[i] < pageCount) {
+                await drawPageOnSheetForA5AndA4Schmal(
+                    inputPdf, outputPdf, newPage, 
+                    pageOrder[i], 0, targetWidth, targetHeight, format
+                );
+            } else {
+                // Leere Seite für Auffüllung
+                await drawPageOnSheetForA5AndA4Schmal(
+                    inputPdf, outputPdf, newPage, 
+                    -1, 0, targetWidth, targetHeight, format
+                );
+            }
+            
+            // Rechte Seite (Vorderseite)
+            if (i + 1 < pageOrder.length && pageOrder[i + 1] < pageCount) {
+                await drawPageOnSheetForA5AndA4Schmal(
+                    inputPdf, outputPdf, newPage, 
+                    pageOrder[i + 1], 1, targetWidth, targetHeight, format
+                );
+            } else {
+                // Leere Seite für Auffüllung
+                await drawPageOnSheetForA5AndA4Schmal(
+                    inputPdf, outputPdf, newPage, 
+                    -1, 1, targetWidth, targetHeight, format
+                );
+            }
+        }
     }
 }
-async function drawPageOnSheetForA5AndA4Schmal(inputPdf, outputPdf, newPage, pageIndex, position, targetWidth, targetHeight) {
+
+/**
+* Berechnet die Seitenreihenfolge für eine Broschüre
+* @param {number} pageCount - Anzahl der Seiten
+* @returns {number[]} - Array mit der Reihenfolge der Seiten für den Druck
+*/
+function calculateBookletPageOrder(pageCount) {
+    // Auf eine durch 4 teilbare Seitenzahl auffüllen
+    const totalPages = Math.ceil(pageCount / 4) * 4;
+    const order = [];
+    
+    for (let i = 0; i < totalPages / 2; i += 2) {
+        // Rückseite (links, rechts)
+        order.push(totalPages - 1 - i);
+        order.push(i);
+        
+        // Vorderseite (links, rechts)
+        order.push(i + 1);
+        order.push(totalPages - 2 - i);
+    }
+    
+    return order;
+}
+
+/**
+* Zeichnet eine Seite für A5 und A4-Schmal auf ein Blatt
+* @param {PDFDocument} inputPdf - Die Eingabe-PDF
+* @param {PDFDocument} outputPdf - Die Ausgabe-PDF
+* @param {PDFPage} newPage - Die neue Seite
+* @param {number} pageIndex - Der Index der zu zeichnenden Seite
+* @param {number} position - Die Position auf dem Blatt
+* @param {number} targetWidth - Die Zielbreite
+* @param {number} targetHeight - Die Zielhöhe
+* @param {string} format - Das gewählte Format
+* @returns {Promise<void>}
+*/
+async function drawPageOnSheetForA5AndA4Schmal(inputPdf, outputPdf, newPage, pageIndex, position, targetWidth, targetHeight, format) {
     console.log(`Verarbeite Seite ${pageIndex + 1} für Position ${position + 1}`);
     try {
+        // Falls pageIndex -1 ist, dann handelt es sich um eine leere Seite
+        if (pageIndex === -1) {
+            console.log(`Leere Seite für Position ${position + 1}`);
+            return;
+        }
+        
         const [embeddedPage] = await outputPdf.embedPages([inputPdf.getPage(pageIndex)]);
         
         if (!embeddedPage) {
@@ -972,6 +1632,17 @@ async function drawPageOnSheetForA5AndA4Schmal(inputPdf, outputPdf, newPage, pag
     }
 }
 
+/**
+* Zeichnet eine Seite für DIN Lang auf ein Blatt
+* @param {PDFDocument} inputPdf - Die Eingabe-PDF
+* @param {PDFDocument} outputPdf - Die Ausgabe-PDF
+* @param {PDFPage} newPage - Die neue Seite
+* @param {number} pageIndex - Der Index der zu zeichnenden Seite
+* @param {number} position - Die Position auf dem Blatt
+* @param {number} targetWidth - Die Zielbreite
+* @param {number} targetHeight - Die Zielhöhe
+* @returns {Promise<void>}
+*/
 async function drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, pageIndex, position, targetWidth, targetHeight) {
     console.log(`Verarbeite Seite ${pageIndex + 1} für Position ${position + 1}`);
     try {
@@ -1004,6 +1675,16 @@ async function drawPageOnSheetForDinLang(inputPdf, outputPdf, newPage, pageIndex
     }
 }
 
+/**
+* Berechnet die Position einer Seite auf einem Blatt
+* @param {number} position - Die Position auf dem Blatt
+* @param {number} targetWidth - Die Zielbreite
+* @param {number} targetHeight - Die Zielhöhe
+* @param {number} sheetWidth - Die Blattbreite
+* @param {number} sheetHeight - Die Blatthöhe
+* @param {string} format - Das gewählte Format
+* @returns {{x: number, y: number}} - Die berechnete Position
+*/
 function getPositionOnSheet(position, targetWidth, targetHeight, sheetWidth, sheetHeight, format) {
     const columnWidth = sheetWidth / (format === 'dl' ? 3 : 2); // Drei Spalten für DIN Lang, zwei für andere Formate
     const rowHeight = sheetHeight; // Ganze Höhe des Blattes wird verwendet
@@ -1024,8 +1705,19 @@ function getPositionOnSheet(position, targetWidth, targetHeight, sheetWidth, she
             y: 0 // Immer oben auf der Y-Achse
         };
     }
+    
+    // Fallback für unbekannte Formate
+    return {
+        x: position * (sheetWidth / 2),
+        y: 0
+    };
 }
 
+/**
+* Ermittelt die Seitendimensionen für ein bestimmtes Format
+* @param {string} format - Das gewählte Format
+* @returns {{width: number, height: number}} - Die Seitendimensionen
+*/
 function getPageDimensionsForFormat(format) {
     const dimensions = {
         'a5': { width: 420, height: 595 },
@@ -1041,6 +1733,11 @@ function getPageDimensionsForFormat(format) {
     return dimensions;
 }
 
+/**
+* Ermittelt die Ausgabeseitengröße für ein bestimmtes Format
+* @param {string} format - Das gewählte Format
+* @returns {[number, number]} - Die Seitengröße
+*/
 function getOutputPageSize(format) {
     switch (format) {
         case 'a5':
@@ -1056,10 +1753,16 @@ function getOutputPageSize(format) {
     }
 }
 
+/**
+* Ermittelt die Anzahl der Seiten pro Blatt für ein bestimmtes Format
+* @param {string} format - Das gewählte Format
+* @returns {number} - Die Anzahl der Seiten pro Blatt
+*/
 function getPagesPerSheet(format) {
     return {
         'a5': 2,
         'dl': 3,
-        'a4-schmal': 2
+        'a4-schmal': 2,
+        'a3-schmal': 2
     }[format] || 2;
 }

@@ -30,3 +30,8 @@ uploads/
 
 # Docker
 hymnoscribe_db/
+
+# Design-Quelldateien (lokal, nicht versioniert)
+design-quellen/
+# Playwright-Testartefakte
+.playwright-mcp/
