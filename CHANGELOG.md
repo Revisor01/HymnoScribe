@@ -7,7 +7,7 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
-Geplant als **1.5.0** beim Merge von `Loading-Optimization` nach `master`.
+## [1.5.0] – 2026-08-02
 
 ### Added
 - **WYSIWYG-Liedblatt-Editor**: Eine einzige Rendering-Engine (`engine.js`) für
@@ -30,14 +30,18 @@ Geplant als **1.5.0** beim Merge von `Loading-Optimization` nach `master`.
 ### Changed
 - Backend modularisiert: monolithisches `server.js` aufgeteilt in `app.js`,
   `routes/`, `services/` und `db/pool.js`
-- Docker-CI baut zusätzlich das Image `revisoren/hymnoscribe:beta` aus dem
-  Branch `Loading-Optimization`
 
 ### Fixed
 - Alle 53 offenen Dependabot-Alerts behoben (u. a. kritische `tar`-Kette):
   `bcrypt` 5→6, `uuid` 10→11, `node-cron` 3→4, `nodemailer` 6→9,
   `multer` 1.4→2.0 sowie transitive Updates via `npm audit fix`;
   Platzhalter-Paket `fs` entfernt — `npm audit`: 0 Vulnerabilities
+- CSP erlaubt Inline-Event-Handler (`script-src-attr`) und Google Fonts —
+  ohne diesen Fix wären alle Buttons in dashboard/bibliothek blockiert gewesen
+
+### Security
+- Fallback-Passwörter aus `docker-compose.yml` entfernt — Passwörter müssen
+  explizit in `.env` gesetzt sein
 
 ## [1.4.2] – 2024-08-08
 ### Fixed
@@ -107,7 +111,8 @@ Geplant als **1.5.0** beim Merge von `Loading-Optimization` nach `master`.
   PDF-Generierung (pdf-lib), Bibliothek für Lieder/Liturgien/Gebete/Lesungen,
   Multi-Tenant-Verwaltung mit Institutionen
 
-[Unreleased]: https://github.com/Revisor01/HymnoScribe/compare/1.4.2...Loading-Optimization
+[Unreleased]: https://github.com/Revisor01/HymnoScribe/compare/1.5.0...HEAD
+[1.5.0]: https://github.com/Revisor01/HymnoScribe/compare/1.4.2...1.5.0
 [1.4.2]: https://github.com/Revisor01/HymnoScribe/compare/1.4.1...1.4.2
 [1.4.1]: https://github.com/Revisor01/HymnoScribe/compare/1.4.0...1.4.1
 [1.4.0]: https://github.com/Revisor01/HymnoScribe/compare/1.3.2...1.4.0
